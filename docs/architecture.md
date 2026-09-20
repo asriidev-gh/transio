@@ -23,7 +23,7 @@ Mobile app
       → PostgreSQL (sessions, transcripts, summaries)
 ```
 
-Phase 5 adds private Supabase Storage (`session-audio`), authenticated multipart upload, signed playback URLs, and mobile upload progress with retry.
+Phase 6 adds a replaceable `TranscriptionProvider`, async transcription jobs, `transcripts` table with RLS, transcript/status API endpoints, and a mobile transcript screen with polling + retry.
 
 ## Design principles
 

@@ -202,8 +202,23 @@ export default function SessionDetailsScreen() {
 
         <ActionRow
           label="📄 Transcript"
-          hint="Available after transcription (Phase 6)"
-          disabled
+          hint={
+            session.audioPath
+              ? session.status === 'transcribed' || session.status === 'completed'
+                ? 'View the full transcript'
+                : session.status === 'transcribing'
+                  ? 'Transcription in progress'
+                  : session.status === 'failed'
+                    ? 'Transcription failed — tap to retry'
+                    : 'Generate a transcript from the uploaded audio'
+              : 'Upload audio before transcription'
+          }
+          disabled={!session.audioPath}
+          onPress={
+            session.audioPath
+              ? () => router.push(`/session/${session.id}/transcript`)
+              : undefined
+          }
         />
         <ActionRow
           label="✨ AI Summary"

@@ -2,7 +2,7 @@
 
 AI-powered seminar and group discussion recorder. Record audio, transcribe speech, and generate structured summaries — with a mobile-first Expo client and a Node.js API.
 
-> **Phase status:** Phase 5 (Cloud Audio Storage) is complete. Transcription and AI summary are intentionally not implemented yet.
+> **Phase status:** Phase 6 (Speech-to-Text) is complete. Claude AI summary is intentionally not implemented yet.
 
 ## Architecture
 
@@ -87,7 +87,8 @@ npx supabase db push
 ```
 
 Phase 3 migration: `202609200001_create_sessions.sql`  
-Phase 5 migration: `202609200002_session_audio_bucket.sql` (private `session-audio` bucket + storage RLS)
+Phase 5 migration: `202609200002_session_audio_bucket.sql` (private `session-audio` bucket + storage RLS)  
+Phase 6 migration: `202609200003_create_transcripts.sql`
 
 ## Running the API
 
@@ -150,6 +151,7 @@ Documented for later phases. Claude runs **only** on the API using `ANTHROPIC_AP
 | Sign-in disabled / config warning on login | Same as above — auth requires a real Supabase project |
 | Stuck after register | Confirm email in inbox, or disable Confirm email in Supabase Auth settings |
 | `GET /me` returns 401 | Send `Authorization: Bearer <access_token>` from a signed-in session |
+| Transcription returns 503 | Set `TRANSCRIPTION_API_KEY` in `apps/api/.env` (Whisper-compatible) |
 | Workspace type errors | Run `npm install` at repo root, then `npm run build --workspace=@sessionai/shared` |
 
 ## Documentation
@@ -167,8 +169,8 @@ Documented for later phases. Claude runs **only** on the API using `ANTHROPIC_AP
 2. Authentication
 3. Database & sessions
 4. Audio recording
-5. **Cloud audio storage** ← current
-6. Speech-to-text
+5. Cloud audio storage
+6. **Speech-to-text** ← current
 7. Claude AI summary
 8. End-to-end processing
 9. Reliability & UX

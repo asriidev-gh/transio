@@ -6,11 +6,22 @@ import { errorHandler } from './middleware/error-handler.js';
 import { healthRouter } from './routes/health.js';
 import { meRouter } from './routes/me.js';
 import type { AudioStorageFactory } from './routes/audio.js';
-import { createSessionsRouter, type SessionRepoFactory } from './routes/sessions.js';
+import {
+  createSessionsRouter,
+  type SessionRepoFactory,
+} from './routes/sessions.js';
+import type {
+  JobRunner,
+  TranscriptRepoFactory,
+  TranscriptionProviderFactory,
+} from './routes/transcription.js';
 
 export interface AppDeps {
   createSessionRepository?: SessionRepoFactory;
   createAudioStorage?: AudioStorageFactory;
+  createTranscriptRepository?: TranscriptRepoFactory;
+  createTranscriptionProvider?: TranscriptionProviderFactory;
+  runTranscriptionJob?: JobRunner;
   authenticate?: RequestHandler;
 }
 
@@ -32,6 +43,9 @@ export function createApp(deps: AppDeps = {}) {
     createSessionsRouter({
       createRepository: deps.createSessionRepository,
       createAudioStorage: deps.createAudioStorage,
+      createTranscriptRepository: deps.createTranscriptRepository,
+      createTranscriptionProvider: deps.createTranscriptionProvider,
+      runTranscriptionJob: deps.runTranscriptionJob,
       authenticate: deps.authenticate,
     }),
   );

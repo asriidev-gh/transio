@@ -15,7 +15,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --max-warnings=0",
-    "test": "node --import tsx --test src/**/*.test.ts"
+    "test": "bash -c 'node --import tsx --test $(find src -name \"*.test.ts\" | sort)'"
   },
   "dependencies": {
     "zod": "^3.24.2"

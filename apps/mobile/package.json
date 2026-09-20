@@ -10,7 +10,7 @@
     "web": "expo start --web --port 19047",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint app src --max-warnings=0",
-    "test": "node --import tsx --test src/**/*.test.ts"
+    "test": "bash -c 'node --import tsx --test $(find src -name \"*.test.ts\" | sort)'"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

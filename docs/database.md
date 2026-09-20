@@ -32,10 +32,14 @@ supabase/migrations/202609200001_create_sessions.sql
 | Column | Type |
 | --- | --- |
 | `id` | UUID PK |
-| `session_id` | UUID FK → sessions |
+| `session_id` | UUID FK → sessions (unique) |
 | `text` | TEXT NOT NULL |
 | `language` | TEXT |
 | `created_at` / `updated_at` | TIMESTAMPTZ |
+
+RLS: access only when the related `sessions.user_id = auth.uid()`.
+
+Migration: `202609200003_create_transcripts.sql`
 
 ### `summaries` (Phase 7)
 
@@ -88,6 +92,7 @@ npx supabase db push
 # Or run the SQL in the Supabase SQL editor:
 # supabase/migrations/202609200001_create_sessions.sql
 # supabase/migrations/202609200002_session_audio_bucket.sql
+# supabase/migrations/202609200003_create_transcripts.sql
 ```
 
 Never mutate production schema from application code.

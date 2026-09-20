@@ -87,18 +87,25 @@ Upload response:
 }
 ```
 
+### Transcription
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/sessions/:id/transcribe` | Start async transcription job (`202`) |
+| `GET` | `/sessions/:id/transcript` | Fetch saved transcript |
+| `GET` | `/sessions/:id/status` | Poll `{ status, hasAudio, hasTranscript }` |
+
+Requires uploaded audio. On failure, session status becomes `failed` and audio is retained.
+
 ## Planned endpoints (later phases)
 
 ```text
-POST   /sessions/:id/transcribe
 POST   /sessions/:id/summarize
 
-GET    /sessions/:id/transcript
 GET    /sessions/:id/summary
-GET    /sessions/:id/status
 ```
 
-Session CRUD and audio upload/signed URLs are implemented (Phases 3–5).
+Session CRUD, audio upload/signed URLs, and transcription are implemented (Phases 3–6).
 Authenticated endpoints will require a Supabase JWT (`Authorization: Bearer …`) and verify ownership server-side.
 
 ## Running

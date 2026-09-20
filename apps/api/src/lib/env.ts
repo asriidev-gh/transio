@@ -12,6 +12,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().default(''),
   ANTHROPIC_API_KEY: z.string().optional().default(''),
   TRANSCRIPTION_API_KEY: z.string().optional().default(''),
+  TRANSCRIPTION_BASE_URL: z.string().default(''),
   LOG_SENSITIVE: z
     .enum(['true', 'false'])
     .default('false')

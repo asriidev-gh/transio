@@ -13,6 +13,12 @@ import {
   type SessionRepository,
 } from '../services/sessions/repository.js';
 import { registerAudioRoutes, type AudioStorageFactory } from './audio.js';
+import {
+  registerTranscriptionRoutes,
+  type JobRunner,
+  type TranscriptRepoFactory,
+  type TranscriptionProviderFactory,
+} from './transcription.js';
 
 export type SessionRepoFactory = (req: Request) => SessionRepository;
 
@@ -26,6 +32,9 @@ function defaultRepoFactory(req: Request): SessionRepository {
 export function createSessionsRouter(options: {
   createRepository?: SessionRepoFactory;
   createAudioStorage?: AudioStorageFactory;
+  createTranscriptRepository?: TranscriptRepoFactory;
+  createTranscriptionProvider?: TranscriptionProviderFactory;
+  runTranscriptionJob?: JobRunner;
   authenticate?: RequestHandler;
 } = {}): Router {
   const router = Router();
@@ -62,6 +71,13 @@ export function createSessionsRouter(options: {
   registerAudioRoutes(router, {
     createRepository,
     createAudioStorage: options.createAudioStorage,
+  });
+
+  registerTranscriptionRoutes(router, {
+    createRepository,
+    createTranscriptRepository: options.createTranscriptRepository,
+    createProvider: options.createTranscriptionProvider,
+    runJob: options.runTranscriptionJob,
   });
 
   router.get('/:id', async (req, res, next) => {

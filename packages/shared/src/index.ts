@@ -33,6 +33,15 @@ export {
   type SignedAudioUrl,
 } from './storage.js';
 
+export {
+  TranscriptSchema,
+  SessionStatusResponseSchema,
+  TranscribeAcceptedSchema,
+  type Transcript,
+  type SessionStatusResponse,
+  type TranscribeAccepted,
+} from './transcript.js';
+
 /** Structured AI summary shape (used in Phase 7+). */
 export const SessionSummarySchema = z.object({
   overview: z.string(),
