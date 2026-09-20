@@ -10,7 +10,7 @@ import { SummarySections } from '@/src/components/SummarySections';
 import { TranscriptViewer } from '@/src/components/TranscriptViewer';
 import { ApiClientError } from '@/src/services/api';
 import { getSummary } from '@/src/services/summary';
-import { getTranscript } from '@/src/services/transcription';
+import { getTranscript, remapTranscriptSpeakers } from '@/src/services/transcription';
 import { colors, spacing, typography } from '@/src/theme';
 
 interface SessionWorkspaceProps {
@@ -95,6 +95,11 @@ export function SessionWorkspace({
             segments={transcript.segments}
             currentTimeSec={currentTimeSec}
             onSeekMs={onSeekMs}
+            onRenameSpeaker={async (from, to) => {
+              const updated = await remapTranscriptSpeakers(sessionId, { [from]: to });
+              setTranscript(updated);
+              onContentLoaded?.({ summary, transcript: updated });
+            }}
           />
         ) : (
           <Text style={styles.empty}>

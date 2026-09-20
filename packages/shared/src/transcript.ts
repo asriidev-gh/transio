@@ -46,3 +46,14 @@ export const TranscribeAcceptedSchema = z.object({
 });
 
 export type TranscribeAccepted = z.infer<typeof TranscribeAcceptedSchema>;
+
+/** Rename speaker labels across all segments of a transcript. */
+export const RemapSpeakersSchema = z.object({
+  renames: z
+    .record(z.string().trim().min(1).max(40), z.string().trim().min(1).max(40))
+    .refine((value) => Object.keys(value).length > 0, {
+      message: 'At least one rename is required',
+    }),
+});
+
+export type RemapSpeakersInput = z.infer<typeof RemapSpeakersSchema>;

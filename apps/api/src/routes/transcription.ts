@@ -1,5 +1,6 @@
 import {
   apiSuccess,
+  RemapSpeakersSchema,
   SessionIdParamSchema,
   SessionStatusResponseSchema,
   TranscribeAcceptedSchema,
@@ -160,6 +161,30 @@ export function registerTranscriptionRoutes(
       }
 
       res.status(200).json(apiSuccess(TranscriptSchema.parse(transcript)));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.patch('/:id/transcript/speakers', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+      }
+
+      const { id } = SessionIdParamSchema.parse(req.params);
+      const { renames } = RemapSpeakersSchema.parse(req.body);
+      const session = await options.createRepository(req).getById(req.user.id, id);
+      if (!session) {
+        throw new AppError('NOT_FOUND', 'Session not found', 404);
+      }
+
+      const updated = await createTranscriptRepository(req).remapSpeakers(id, renames);
+      if (!updated) {
+        throw new AppError('NOT_FOUND', 'Transcript not found', 404);
+      }
+
+      res.status(200).json(apiSuccess(TranscriptSchema.parse(updated)));
     } catch (err) {
       next(err);
     }

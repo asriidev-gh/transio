@@ -97,8 +97,10 @@ pipeline stages from backend status (`hasAudio`, `hasTranscript`, `hasSummary`).
 ## Transcript segments
 
 Whisper `verbose_json` segments are stored on `transcripts.segments` as
-`{ startMs, endMs, text, speaker? }`. Speaker labels are pause-heuristic
-(Speaker A/B) until a true diarization provider is added.
+`{ startMs, endMs, text, speaker? }`. After transcription, Claude (when
+`ANTHROPIC_API_KEY` is set) relabels speakers from dialogue context; pause-heuristic
+A/B labels remain as fallback. Users can rename speakers via
+`PATCH /sessions/:id/transcript/speakers`.
 Migration: `supabase/migrations/202609200005_transcript_segments.sql`
 
 ## Database

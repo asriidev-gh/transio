@@ -2,6 +2,7 @@ import { SESSION_AUDIO_BUCKET } from '@sessionai/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../../lib/logger.js';
 import { AppError } from '../../middleware/error-handler.js';
+import { labelSegmentsBestEffort } from '../../providers/speakers/index.js';
 import type { TranscriptionProvider } from '../../providers/transcription/types.js';
 import type { SessionRepository } from '../sessions/repository.js';
 import type { TranscriptRepository } from '../transcripts/repository.js';
@@ -64,11 +65,17 @@ export async function runTranscriptionJob(
       fileName,
     });
 
+    const segments = await labelSegmentsBestEffort({
+      title: session.title,
+      sessionType: session.sessionType,
+      segments: result.segments ?? [],
+    });
+
     await deps.transcripts.upsertForSession(
       sessionId,
       result.text,
       result.language ?? null,
-      result.segments ?? [],
+      segments,
     );
     await deps.sessions.update(deps.userId, sessionId, { status: 'transcribed' });
 
@@ -76,7 +83,7 @@ export async function runTranscriptionJob(
       sessionId,
       provider: deps.provider.name,
       textLength: result.text.length,
-      segmentCount: result.segments?.length ?? 0,
+      segmentCount: segments.length,
     });
   } catch (err) {
     logger.error('Transcription job failed', {

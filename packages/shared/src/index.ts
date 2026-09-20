@@ -38,10 +38,12 @@ export {
   TranscriptSchema,
   SessionStatusResponseSchema,
   TranscribeAcceptedSchema,
+  RemapSpeakersSchema,
   type TranscriptSegment,
   type Transcript,
   type SessionStatusResponse,
   type TranscribeAccepted,
+  type RemapSpeakersInput,
 } from './transcript.js';
 
 export {

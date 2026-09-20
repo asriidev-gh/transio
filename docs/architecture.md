@@ -42,7 +42,7 @@ labels, and production configuration docs.
 Phase 11 introduces the Harbor Studio visual theme (cool fog + signal teal), recording
 waveform, processing “safe to leave” UX, a tabbed session workspace (Summary | Transcript | Ask),
 docked audio playback with speed/seek, `POST /sessions/:id/ask` for Q&A over a session,
-and timed transcript segments with pause-heuristic speaker labels + playback sync.
+and timed transcript segments with Claude context speaker labels (plus rename) and playback sync.
 
 ## Design principles
 

@@ -59,6 +59,10 @@ export interface TranscriptRepository {
     language: string | null,
     segments?: TranscriptSegment[],
   ): Promise<Transcript>;
+  remapSpeakers(
+    sessionId: string,
+    renames: Record<string, string>,
+  ): Promise<Transcript | null>;
 }
 
 export class SupabaseTranscriptRepository implements TranscriptRepository {
@@ -111,6 +115,23 @@ export class SupabaseTranscriptRepository implements TranscriptRepository {
 
     return mapTranscriptRow(data as TranscriptRow);
   }
+
+  async remapSpeakers(
+    sessionId: string,
+    renames: Record<string, string>,
+  ): Promise<Transcript | null> {
+    const existing = await this.getBySessionId(sessionId);
+    if (!existing) return null;
+
+    const segments = existing.segments.map((seg) => {
+      const key = seg.speaker ?? '';
+      const next = renames[key];
+      if (!next || !next.trim()) return seg;
+      return { ...seg, speaker: next.trim().slice(0, 40) };
+    });
+
+    return this.upsertForSession(sessionId, existing.text, existing.language, segments);
+  }
 }
 
 export class InMemoryTranscriptRepository implements TranscriptRepository {
@@ -139,5 +160,20 @@ export class InMemoryTranscriptRepository implements TranscriptRepository {
     };
     this.bySession.set(sessionId, row);
     return row;
+  }
+
+  async remapSpeakers(
+    sessionId: string,
+    renames: Record<string, string>,
+  ): Promise<Transcript | null> {
+    const existing = await this.getBySessionId(sessionId);
+    if (!existing) return null;
+    const segments = existing.segments.map((seg) => {
+      const key = seg.speaker ?? '';
+      const next = renames[key];
+      if (!next || !next.trim()) return seg;
+      return { ...seg, speaker: next.trim().slice(0, 40) };
+    });
+    return this.upsertForSession(sessionId, existing.text, existing.language, segments);
   }
 }

@@ -1,5 +1,13 @@
-import { useEffect, useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import type { TranscriptSegment } from '@sessionai/shared';
 import { colors, radii, spacing, typography } from '@/src/theme';
 import { formatDuration } from '@/src/utils/format';
@@ -11,6 +19,8 @@ interface TranscriptViewerProps {
   /** Current playback position in seconds. */
   currentTimeSec?: number;
   onSeekMs?: (startMs: number) => void;
+  /** Persist a speaker rename across all matching segments. */
+  onRenameSpeaker?: (from: string, to: string) => void | Promise<void>;
 }
 
 function activeSegmentIndex(segments: TranscriptSegment[], currentMs: number): number {
@@ -19,12 +29,45 @@ function activeSegmentIndex(segments: TranscriptSegment[], currentMs: number): n
     const seg = segments[i];
     if (currentMs >= seg.startMs && currentMs < seg.endMs) return i;
   }
-  // Prefer the last started segment when between gaps.
   let last = -1;
   for (let i = 0; i < segments.length; i += 1) {
     if (segments[i].startMs <= currentMs) last = i;
   }
   return last;
+}
+
+async function promptRename(current: string): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    const next = globalThis.prompt?.('Rename speaker', current);
+    if (next == null) return null;
+    const trimmed = next.trim();
+    return trimmed.length > 0 ? trimmed.slice(0, 40) : null;
+  }
+
+  return new Promise((resolve) => {
+    if (typeof Alert.prompt === 'function') {
+      Alert.prompt(
+        'Rename speaker',
+        'Applies to every matching line in this transcript.',
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+          {
+            text: 'Save',
+            onPress: (value?: string) => {
+              const trimmed = (value ?? '').trim();
+              resolve(trimmed.length > 0 ? trimmed.slice(0, 40) : null);
+            },
+          },
+        ],
+        'plain-text',
+        current,
+      );
+      return;
+    }
+
+    Alert.alert('Rename speaker', 'Speaker rename is available on iOS and web for now.');
+    resolve(null);
+  });
 }
 
 export function TranscriptViewer({
@@ -33,9 +76,11 @@ export function TranscriptViewer({
   segments = [],
   currentTimeSec = 0,
   onSeekMs,
+  onRenameSpeaker,
 }: TranscriptViewerProps) {
   const scrollRef = useRef<ScrollView>(null);
   const rowOffsets = useRef<Record<number, number>>({});
+  const [busySpeaker, setBusySpeaker] = useState<string | null>(null);
   const currentMs = Math.max(0, Math.round(currentTimeSec * 1000));
   const activeIndex = activeSegmentIndex(segments, currentMs);
   const hasSegments = segments.length > 0;
@@ -48,9 +93,24 @@ export function TranscriptViewer({
     }
   }, [activeIndex]);
 
+  async function handleRename(speaker: string) {
+    if (!onRenameSpeaker || busySpeaker) return;
+    const next = await promptRename(speaker);
+    if (!next || next === speaker) return;
+    setBusySpeaker(speaker);
+    try {
+      await onRenameSpeaker(speaker, next);
+    } finally {
+      setBusySpeaker(null);
+    }
+  }
+
   return (
     <View style={styles.wrap}>
       {language ? <Text style={styles.language}>Language: {language}</Text> : null}
+      {hasSegments && onRenameSpeaker ? (
+        <Text style={styles.hint}>Tap a speaker name to rename.</Text>
+      ) : null}
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
@@ -77,9 +137,20 @@ export function TranscriptViewer({
                       {formatDuration(seg.startMs / 1000)}
                     </Text>
                     {seg.speaker ? (
-                      <Text style={[styles.speaker, active && styles.speakerActive]}>
-                        {seg.speaker}
-                      </Text>
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation?.();
+                          void handleRename(seg.speaker!);
+                        }}
+                        disabled={busySpeaker === seg.speaker}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Rename ${seg.speaker}`}
+                      >
+                        <Text style={[styles.speaker, active && styles.speakerActive]}>
+                          {busySpeaker === seg.speaker ? 'Saving…' : seg.speaker}
+                        </Text>
+                      </Pressable>
                     ) : null}
                   </View>
                   <Text style={[styles.segmentText, active && styles.segmentTextActive]} selectable>
@@ -109,6 +180,11 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  hint: {
+    ...typography.caption,
+    color: colors.inkMuted,
+    fontFamily: undefined,
   },
   scroll: {
     flex: 1,
@@ -147,12 +223,13 @@ const styles = StyleSheet.create({
   },
   speaker: {
     ...typography.caption,
-    color: colors.inkMuted,
+    color: colors.brandSoft,
     fontFamily: undefined,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   speakerActive: {
-    color: colors.brandSoft,
-    fontWeight: '700',
+    color: colors.brand,
   },
   segmentText: {
     fontSize: 16,

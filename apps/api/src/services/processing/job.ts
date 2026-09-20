@@ -1,5 +1,6 @@
 import { logger } from '../../lib/logger.js';
 import { AppError } from '../../middleware/error-handler.js';
+import { labelSegmentsBestEffort } from '../../providers/speakers/index.js';
 import type { SummaryProvider } from '../../providers/summary/types.js';
 import type { TranscriptionProvider } from '../../providers/transcription/types.js';
 import type { SessionRepository } from '../sessions/repository.js';
@@ -46,11 +47,17 @@ export async function runProcessingPipeline(
         fileName,
       });
 
+      const segments = await labelSegmentsBestEffort({
+        title: session.title,
+        sessionType: session.sessionType,
+        segments: result.segments ?? [],
+      });
+
       transcript = await deps.transcripts.upsertForSession(
         sessionId,
         result.text,
         result.language ?? null,
-        result.segments ?? [],
+        segments,
       );
       await deps.sessions.update(deps.userId, sessionId, { status: 'transcribed' });
 
@@ -58,7 +65,7 @@ export async function runProcessingPipeline(
         sessionId,
         provider: deps.transcriptionProvider.name,
         textLength: result.text.length,
-        segmentCount: result.segments?.length ?? 0,
+        segmentCount: segments.length,
       });
     }
 
