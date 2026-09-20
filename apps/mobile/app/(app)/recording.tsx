@@ -322,7 +322,8 @@ export default function RecordingScreen() {
       </View>
 
       <Text style={styles.hint}>
-        Recording continues without internet. Upload and transcription come in later phases.
+        Recording continues offline. When you stop, review locally, then Proceed to upload and
+        process.
       </Text>
     </View>
   );

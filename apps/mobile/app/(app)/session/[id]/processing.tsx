@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, type AppStateStatus, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { SessionStatusResponse } from '@sessionai/shared';
 import { ErrorState } from '@/src/components/ErrorState';
@@ -42,6 +42,7 @@ export default function ProcessingScreen() {
             if (next.status === 'completed' || next.hasSummary) {
               stopPolling();
               setLoading(false);
+              setError(null);
               return;
             }
             if (next.status === 'failed') {
@@ -116,7 +117,7 @@ export default function ProcessingScreen() {
         return;
       }
 
-      // Auto-start once for uploaded / transcribed sessions.
+      // Auto-start once for uploaded / transcribed sessions arriving here after Proceed.
       if (!startedRef.current) {
         startedRef.current = true;
         await kickOff(id);
@@ -135,11 +136,31 @@ export default function ProcessingScreen() {
     return () => stopPolling();
   }, [bootstrap, stopPolling]);
 
+  useEffect(() => {
+    const onChange = (next: AppStateStatus) => {
+      if (next !== 'active' || !id || typeof id !== 'string') return;
+      void (async () => {
+        try {
+          const latest = await refreshStatus(id);
+          if (latest.status === 'transcribing' || latest.status === 'summarizing') {
+            beginPolling(id);
+          }
+        } catch {
+          // ignore transient resume errors
+        }
+      })();
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, [beginPolling, id, refreshStatus]);
+
   const inFlight =
     starting ||
     status?.status === 'transcribing' ||
-    status?.status === 'summarizing' ||
-    (loading && !error && status?.status !== 'completed');
+    status?.status === 'summarizing';
+
+  const done = Boolean(status && (status.status === 'completed' || status.hasSummary));
+  const failed = Boolean(status && status.status === 'failed') || Boolean(error);
 
   if (!status && loading) {
     return (
@@ -149,18 +170,14 @@ export default function ProcessingScreen() {
     );
   }
 
-  if (error && !inFlight) {
+  if (!status && error) {
     return (
       <View style={styles.centered}>
         <ErrorState
           title="Processing unavailable"
           description={error}
-          actionLabel="Retry processing"
-          onRetry={() => {
-            if (!id || typeof id !== 'string') return;
-            startedRef.current = true;
-            void kickOff(id);
-          }}
+          actionLabel="Retry"
+          onRetry={() => void bootstrap()}
         />
       </View>
     );
@@ -178,17 +195,17 @@ export default function ProcessingScreen() {
     );
   }
 
-  const done = status.status === 'completed' || status.hasSummary;
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Processing</Text>
       <Text style={styles.subtitle}>
         {done
           ? 'Your session is ready.'
-          : inFlight
-            ? 'Working through transcription and summary…'
-            : 'Ready to process this recording.'}
+          : failed
+            ? 'Something went wrong — your audio is still saved.'
+            : inFlight
+              ? 'Working through transcription and summary…'
+              : 'Ready to process this recording.'}
       </Text>
 
       <ProcessingSteps
@@ -197,6 +214,20 @@ export default function ProcessingScreen() {
         hasTranscript={status.hasTranscript}
         hasSummary={status.hasSummary}
       />
+
+      {failed && !done ? (
+        <Pressable
+          style={styles.primary}
+          onPress={() => {
+            if (!id || typeof id !== 'string') return;
+            startedRef.current = true;
+            void kickOff(id);
+          }}
+          accessibilityRole="button"
+        >
+          <Text style={styles.primaryText}>Retry processing</Text>
+        </Pressable>
+      ) : null}
 
       {done ? (
         <View style={styles.actions}>
@@ -217,7 +248,7 @@ export default function ProcessingScreen() {
         </View>
       ) : null}
 
-      {!done && !inFlight ? (
+      {!done && !inFlight && !failed ? (
         <Pressable
           style={styles.primary}
           onPress={() => {
@@ -231,7 +262,9 @@ export default function ProcessingScreen() {
       ) : null}
 
       {inFlight && !done ? (
-        <Text style={styles.footerHint}>This screen updates from the server every few seconds.</Text>
+        <Text style={styles.footerHint}>
+          This screen updates from the server every few seconds. You can leave and come back.
+        </Text>
       ) : null}
     </View>
   );

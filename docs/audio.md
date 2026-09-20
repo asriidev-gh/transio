@@ -4,6 +4,7 @@
 
 - Phase 4: on-device recording + local playback
 - Phase 5: private cloud upload + signed URL playback
+- Phase 9: playback load errors + retry; upload recovery unchanged
 
 ## Flow
 
@@ -43,7 +44,7 @@ Ownership is verified before upload or signing. Paths must start with the caller
 
 - `uploadSessionAudio` — XHR upload with progress
 - `UploadProgress` — progress / success / error + retry
-- `AudioPlayer` — plays local URI or signed URL
+- `AudioPlayer` — plays local URI or signed URL; surfaces load timeouts/errors with retry
 
 ## Setup checklist
 

@@ -1,6 +1,7 @@
 import { SessionSummarySchema, type SessionSummary } from '@sessionai/shared';
 import { getEnv } from '../../lib/env.js';
 import { logger } from '../../lib/logger.js';
+import { withProviderRetry } from '../../lib/retry.js';
 import { AppError } from '../../middleware/error-handler.js';
 import {
   buildSummarySystemPrompt,
@@ -38,83 +39,104 @@ export class ClaudeSummaryProvider implements SummaryProvider {
   ) {}
 
   async summarize(input: SummaryInput): Promise<SessionSummary> {
-    const body = {
-      model: this.model,
-      max_tokens: 4096,
-      system: buildSummarySystemPrompt(input.sessionType),
-      tools: [SUMMARY_TOOL],
-      tool_choice: { type: 'tool', name: SUMMARY_TOOL_NAME },
-      messages: [
-        {
-          role: 'user',
-          content: buildSummaryUserPrompt({
-            transcriptText: input.transcriptText,
-            sessionType: input.sessionType,
-            title: input.title,
-          }),
-        },
-      ],
-    };
-
-    let response: Response;
-    try {
-      response = await fetch(ANTHROPIC_MESSAGES_URL, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': this.apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(body),
-      });
-    } catch {
-      throw new AppError('SUMMARY_ERROR', 'Could not reach the Claude API', 502);
-    }
-
-    if (!response.ok) {
-      let detail = '';
-      try {
-        const errBody = (await response.json()) as {
-          error?: { message?: string; type?: string };
-        };
-        detail = errBody.error?.message ?? '';
-      } catch {
-        // ignore parse failures
-      }
-      logger.warn('Claude summary provider returned error', {
-        status: response.status,
-        provider: this.name,
+    return withProviderRetry(async (attempt) => {
+      const body = {
         model: this.model,
-        detail: detail || undefined,
-      });
-      throw new AppError(
-        'SUMMARY_ERROR',
-        detail
-          ? `Claude summary request failed (${detail})`
-          : 'Claude summary request failed',
-        502,
+        max_tokens: 4096,
+        system: buildSummarySystemPrompt(input.sessionType),
+        tools: [SUMMARY_TOOL],
+        tool_choice: { type: 'tool', name: SUMMARY_TOOL_NAME },
+        messages: [
+          {
+            role: 'user',
+            content: buildSummaryUserPrompt({
+              transcriptText: input.transcriptText,
+              sessionType: input.sessionType,
+              title: input.title,
+            }),
+          },
+        ],
+      };
+
+      let response: Response;
+      try {
+        response = await fetch(ANTHROPIC_MESSAGES_URL, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': this.apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        throw new AppError('SUMMARY_ERROR', 'Could not reach the Claude API', 502);
+      }
+
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const errBody = (await response.json()) as {
+            error?: { message?: string; type?: string };
+          };
+          detail = errBody.error?.message ?? '';
+        } catch {
+          // ignore parse failures
+        }
+        logger.warn('Claude summary provider returned error', {
+          status: response.status,
+          provider: this.name,
+          model: this.model,
+          detail: detail || undefined,
+          attempt,
+        });
+        if (response.status === 429) {
+          throw new AppError(
+            'SUMMARY_ERROR',
+            detail
+              ? `Claude is rate-limited (${detail})`
+              : 'Claude is rate-limited. Please retry in a moment.',
+            429,
+          );
+        }
+        if (response.status === 404) {
+          throw new AppError(
+            'SUMMARY_ERROR',
+            detail
+              ? `Claude summary request failed (${detail})`
+              : 'Claude summary request failed',
+            502,
+          );
+        }
+        throw new AppError(
+          'SUMMARY_ERROR',
+          detail
+            ? `Claude summary request failed (${detail})`
+            : 'Claude summary request failed',
+          response.status >= 500 ? 502 : 502,
+        );
+      }
+
+      const payload = (await response.json()) as AnthropicMessagesResponse;
+      const toolBlock = payload.content?.find(
+        (block) => block.type === 'tool_use' && block.name === SUMMARY_TOOL_NAME,
       );
-    }
 
-    const payload = (await response.json()) as AnthropicMessagesResponse;
-    const toolBlock = payload.content?.find(
-      (block) => block.type === 'tool_use' && block.name === SUMMARY_TOOL_NAME,
-    );
+      if (!toolBlock?.input) {
+        throw new AppError('SUMMARY_ERROR', 'Claude did not return a structured summary', 502);
+      }
 
-    if (!toolBlock?.input) {
-      throw new AppError('SUMMARY_ERROR', 'Claude did not return a structured summary', 502);
-    }
+      const parsed = SessionSummarySchema.safeParse(toolBlock.input);
+      if (!parsed.success) {
+        logger.warn('Claude summary failed Zod validation', {
+          provider: this.name,
+          issueCount: parsed.error.issues.length,
+        });
+        throw new AppError('SUMMARY_ERROR', 'Claude summary failed schema validation', 502);
+      }
 
-    const parsed = SessionSummarySchema.safeParse(toolBlock.input);
-    if (!parsed.success) {
-      logger.warn('Claude summary failed Zod validation', {
-        provider: this.name,
-        issueCount: parsed.error.issues.length,
-      });
-      throw new AppError('SUMMARY_ERROR', 'Claude summary failed schema validation', 502);
-    }
-
-    return parsed.data;
+      return parsed.data;
+    });
   }
 }
 

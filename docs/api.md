@@ -104,7 +104,8 @@ On failure, session status becomes `failed` and audio/transcript are retained.
 
 ## Planned endpoints (later phases)
 
-Phase 9 focuses on reliability/UX hardening rather than new pipeline endpoints.
+Phase 9 adds provider retries for transient STT/Claude failures and clearer
+rate-limit / network error messages. No new pipeline endpoints.
 Session CRUD, audio, transcription, summarization, and end-to-end processing are
 implemented (Phases 3–8).
 

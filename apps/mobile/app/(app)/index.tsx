@@ -1,12 +1,23 @@
 import { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  AppState,
+  type AppStateStatus,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Session } from '@sessionai/shared';
+import { ConnectivityBanner } from '@/src/components/ConnectivityBanner';
 import { EmptyState } from '@/src/components/EmptyState';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { SessionCard } from '@/src/components/SessionCard';
+import { useApiReachable } from '@/src/hooks/useApiReachable';
 import { useAuth } from '@/src/hooks/useAuth';
 import { ApiClientError } from '@/src/services/api';
 import { listSessions } from '@/src/services/sessions';
@@ -15,6 +26,7 @@ import { colors, spacing, typography } from '@/src/theme';
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { reachable, refresh: refreshReachable } = useApiReachable();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,7 +57,17 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       void loadSessions();
-    }, [loadSessions]),
+      void refreshReachable();
+
+      const onAppState = (next: AppStateStatus) => {
+        if (next === 'active') {
+          void loadSessions(true);
+          void refreshReachable();
+        }
+      };
+      const sub = AppState.addEventListener('change', onAppState);
+      return () => sub.remove();
+    }, [loadSessions, refreshReachable]),
   );
 
   return (
@@ -53,9 +75,23 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void loadSessions(true)} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              void refreshReachable();
+              void loadSessions(true);
+            }}
+          />
         }
       >
+        <ConnectivityBanner
+          reachable={reachable}
+          onRetry={() => {
+            void refreshReachable();
+            void loadSessions(true);
+          }}
+        />
+
         <View style={styles.header}>
           <Text style={styles.brand} accessibilityRole="header">
             SessionAI
@@ -97,6 +133,8 @@ export default function HomeScreen() {
             <EmptyState
               title="No sessions yet."
               description="Record your first seminar or group discussion."
+              actionLabel="New Recording"
+              onAction={() => router.push('/new-session')}
             />
           ) : null}
 

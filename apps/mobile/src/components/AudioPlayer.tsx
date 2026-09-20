@@ -9,15 +9,21 @@ interface AudioPlayerProps {
   title?: string;
 }
 
+const LOAD_TIMEOUT_MS = 12000;
+
 export function AudioPlayer({ uri, title }: AudioPlayerProps) {
   const player = useAudioPlayer({ uri }, { updateInterval: 250 });
   const status = useAudioPlayerStatus(player);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const trackWidthRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
+    setReady(false);
+    setError(null);
+
     async function prepare() {
       try {
         await setAudioModeAsync({
@@ -26,7 +32,6 @@ export function AudioPlayer({ uri, title }: AudioPlayerProps) {
         });
         if (!cancelled) {
           setReady(true);
-          setError(null);
         }
       } catch {
         if (!cancelled) {
@@ -35,6 +40,7 @@ export function AudioPlayer({ uri, title }: AudioPlayerProps) {
       }
     }
     void prepare();
+
     return () => {
       cancelled = true;
       try {
@@ -43,12 +49,29 @@ export function AudioPlayer({ uri, title }: AudioPlayerProps) {
         // Player may already be released on unmount.
       }
     };
-  }, [player, uri]);
+  }, [player, uri, reloadKey]);
+
+  useEffect(() => {
+    if (status.isLoaded || error) return;
+    const timeout = setTimeout(() => {
+      if (!status.isLoaded) {
+        setError('Audio took too long to load. The file may be missing or unreadable.');
+      }
+    }, LOAD_TIMEOUT_MS);
+    return () => clearTimeout(timeout);
+  }, [status.isLoaded, error, reloadKey, uri]);
+
+  useEffect(() => {
+    const state = (status.playbackState || '').toLowerCase();
+    if (state.includes('error') || state.includes('failed')) {
+      setError('Playback failed. The recording may be unavailable.');
+    }
+  }, [status.playbackState]);
 
   const duration = status.duration > 0 ? status.duration : 0;
   const position = status.currentTime > 0 ? status.currentTime : 0;
   const progress = duration > 0 ? Math.min(1, position / duration) : 0;
-  const loading = !ready || (!status.isLoaded && !error);
+  const loading = !error && (!ready || !status.isLoaded);
 
   const statusLabel = useMemo(() => {
     if (error) return error;
@@ -69,7 +92,7 @@ export function AudioPlayer({ uri, title }: AudioPlayerProps) {
       }
       player.play();
     } catch {
-      setError('Playback failed. The local recording may be unavailable.');
+      setError('Playback failed. The recording may be unavailable.');
     }
   }
 
@@ -91,19 +114,41 @@ export function AudioPlayer({ uri, title }: AudioPlayerProps) {
     }
   }
 
+  function onRetryLoad() {
+    setError(null);
+    setReady(false);
+    setReloadKey((k) => k + 1);
+    try {
+      player.replace({ uri });
+    } catch {
+      setError('Could not reload this recording.');
+    }
+  }
+
   return (
     <View
       style={styles.container}
       accessibilityLabel={title ? `Audio player for ${title}` : 'Audio player'}
     >
       <Text style={styles.heading}>Recording</Text>
-      <Text style={styles.status}>{statusLabel}</Text>
+      <Text style={[styles.status, error ? styles.statusError : null]}>{statusLabel}</Text>
 
       {loading ? (
         <View style={styles.loadingRow}>
           <ActivityIndicator color={colors.brand} />
           <Text style={styles.loadingText}>Loading…</Text>
         </View>
+      ) : null}
+
+      {error ? (
+        <Pressable
+          onPress={onRetryLoad}
+          style={styles.retry}
+          accessibilityRole="button"
+          accessibilityLabel="Retry loading audio"
+        >
+          <Text style={styles.retryText}>Retry playback</Text>
+        </Pressable>
       ) : null}
 
       <Pressable
@@ -113,7 +158,7 @@ export function AudioPlayer({ uri, title }: AudioPlayerProps) {
         }}
         onPress={(event) => {
           const width = trackWidthRef.current;
-          if (width <= 0 || duration <= 0) return;
+          if (width <= 0 || duration <= 0 || error) return;
           const locationX = event.nativeEvent.locationX;
           void seekToRatio(Math.max(0, Math.min(1, locationX / width)));
         }}
@@ -183,6 +228,10 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.inkMuted,
   },
+  statusError: {
+    color: colors.danger,
+    fontWeight: '600',
+  },
   loadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -191,6 +240,17 @@ const styles = StyleSheet.create({
   loadingText: {
     ...typography.caption,
     color: colors.inkMuted,
+  },
+  retry: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.brand,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+  },
+  retryText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   track: {
     paddingVertical: spacing.xs,

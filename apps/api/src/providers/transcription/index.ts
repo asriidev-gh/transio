@@ -1,6 +1,7 @@
 import { getEnv } from '../../lib/env.js';
-import { AppError } from '../../middleware/error-handler.js';
 import { logger } from '../../lib/logger.js';
+import { withProviderRetry } from '../../lib/retry.js';
+import { AppError } from '../../middleware/error-handler.js';
 import type { TranscriptionInput, TranscriptionProvider, TranscriptionResult } from './types.js';
 
 /**
@@ -16,48 +17,70 @@ export class HttpTranscriptionProvider implements TranscriptionProvider {
   ) {}
 
   async transcribe(input: TranscriptionInput): Promise<TranscriptionResult> {
-    const endpoint = `${this.baseUrl.replace(/\/$/, '')}/audio/transcriptions`;
-    const form = new FormData();
-    const bytes = new Uint8Array(input.audio);
-    const blob = new Blob([bytes], { type: input.mimeType || 'application/octet-stream' });
-    form.append('file', blob, input.fileName || 'audio.m4a');
-    form.append('model', 'whisper-1');
-    form.append('response_format', 'verbose_json');
-    if (input.language) {
-      form.append('language', input.language);
-    }
+    return withProviderRetry(async (attempt) => {
+      const endpoint = `${this.baseUrl.replace(/\/$/, '')}/audio/transcriptions`;
+      const form = new FormData();
+      const bytes = new Uint8Array(input.audio);
+      const blob = new Blob([bytes], { type: input.mimeType || 'application/octet-stream' });
+      form.append('file', blob, input.fileName || 'audio.m4a');
+      form.append('model', 'whisper-1');
+      form.append('response_format', 'verbose_json');
+      if (input.language) {
+        form.append('language', input.language);
+      }
 
-    let response: Response;
-    try {
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: form,
-      });
-    } catch {
-      throw new AppError('TRANSCRIPTION_ERROR', 'Could not reach the transcription provider', 502);
-    }
+      let response: Response;
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: form,
+        });
+      } catch {
+        throw new AppError(
+          'TRANSCRIPTION_ERROR',
+          'Could not reach the transcription provider',
+          502,
+        );
+      }
 
-    if (!response.ok) {
-      logger.warn('Transcription provider returned error', {
-        status: response.status,
-        provider: this.name,
-      });
-      throw new AppError('TRANSCRIPTION_ERROR', 'Transcription provider request failed', 502);
-    }
+      if (!response.ok) {
+        logger.warn('Transcription provider returned error', {
+          status: response.status,
+          provider: this.name,
+          attempt,
+        });
+        if (response.status === 429) {
+          throw new AppError(
+            'TRANSCRIPTION_ERROR',
+            'Transcription provider is rate-limited. Please retry in a moment.',
+            429,
+          );
+        }
+        throw new AppError(
+          'TRANSCRIPTION_ERROR',
+          'Transcription provider request failed',
+          response.status >= 500 ? 502 : 502,
+        );
+      }
 
-    const payload = (await response.json()) as { text?: string; language?: string };
-    const text = payload.text?.trim();
-    if (!text) {
-      throw new AppError('TRANSCRIPTION_ERROR', 'Transcription provider returned empty text', 502);
-    }
+      const payload = (await response.json()) as { text?: string; language?: string };
+      const text = payload.text?.trim();
+      if (!text) {
+        throw new AppError(
+          'TRANSCRIPTION_ERROR',
+          'Transcription provider returned empty text',
+          502,
+        );
+      }
 
-    return {
-      text,
-      language: payload.language ?? input.language ?? null,
-    };
+      return {
+        text,
+        language: payload.language ?? input.language ?? null,
+      };
+    });
   }
 }
 

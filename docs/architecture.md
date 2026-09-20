@@ -31,6 +31,10 @@ Phase 8 connects the full pipeline (upload → transcribe → summarize → comp
 `POST /sessions/:id/process`, auto-start after upload when providers are configured,
 and a Processing screen that mirrors backend status.
 
+Phase 9 hardens reliability and recovery UX: provider retries (429/502/503), clearer
+API/network errors, connectivity banner, empty/error CTAs, failed-session styling,
+client request retries, processing resume on app foreground, and audio playback load errors.
+
 ## Design principles
 
 1. Secrets stay on the server.

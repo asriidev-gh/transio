@@ -4,7 +4,8 @@
 
 - Phase 6: speech-to-text provider + transcript persistence + transcript UI
 - Phase 7: Claude structured summaries
-- Phase 8: end-to-end processing pipeline ← current
+- Phase 8: end-to-end processing pipeline
+- Phase 9: reliability (provider retries, recovery UX) ← current
 
 ## Pipeline
 

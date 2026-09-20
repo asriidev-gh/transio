@@ -2,7 +2,7 @@
 
 AI-powered seminar and group discussion recorder. Record audio, transcribe speech, and generate structured summaries — with a mobile-first Expo client and a Node.js API.
 
-> **Phase status:** Phase 8 (End-to-End Processing) is complete. Reliability & UX hardening is intentionally not implemented yet.
+> **Phase status:** Phase 9 (Reliability & UX) is complete. MVP polish is intentionally not implemented yet.
 
 ## Architecture
 
@@ -18,8 +18,8 @@ docs/         Architecture and setup docs
 ```
 
 ```text
-Mobile  →  API  →  (Speech-to-text → Claude → PostgreSQL)   [later phases]
-         ↘ Supabase Auth / Storage / Postgres               [Phase 2+]
+Mobile  →  API  →  (Speech-to-text → Claude → PostgreSQL)
+         ↘ Supabase Auth / Storage / Postgres
 ```
 
 Secrets (service role, Anthropic, transcription) live **only** on the API. The mobile app uses the Supabase anon key and public API URL.
@@ -180,6 +180,6 @@ Zod (`SessionSummary`) before persistence. See [docs/ai.md](./docs/ai.md).
 5. Cloud audio storage
 6. **Speech-to-text**
 7. **Claude AI summary**
-8. **End-to-end processing** ← current
-9. Reliability & UX
+8. **End-to-end processing**
+9. **Reliability & UX** ← current
 10. MVP polish

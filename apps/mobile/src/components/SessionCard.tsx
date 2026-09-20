@@ -15,21 +15,27 @@ interface SessionCardProps {
 export function SessionCard({ session, onPress }: SessionCardProps) {
   const statusLabel = SESSION_STATUS_LABELS[session.status];
   const completed = session.status === 'completed';
+  const failed = session.status === 'failed';
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.card, failed && styles.cardFailed, pressed && styles.pressed]}
       accessibilityRole="button"
-      accessibilityLabel={`${session.title}, ${SESSION_TYPE_LABELS[session.sessionType]}`}
+      accessibilityLabel={`${session.title}, ${SESSION_TYPE_LABELS[session.sessionType]}, ${statusLabel}`}
     >
       <Text style={styles.title}>{session.title}</Text>
       <Text style={styles.meta}>{SESSION_TYPE_LABELS[session.sessionType]}</Text>
       <Text style={styles.meta}>{formatSessionDate(session.recordedAt)}</Text>
       <Text style={styles.meta}>{formatDurationHuman(session.durationSeconds)}</Text>
       <View style={styles.statusRow}>
-        <Text style={[styles.status, completed ? styles.statusOk : styles.statusPending]}>
-          {completed ? `✓ ${statusLabel}` : statusLabel}
+        <Text
+          style={[
+            styles.status,
+            completed ? styles.statusOk : failed ? styles.statusFailed : styles.statusPending,
+          ]}
+        >
+          {completed ? `✓ ${statusLabel}` : failed ? `⚠ ${statusLabel} — tap to recover` : statusLabel}
         </Text>
       </View>
     </Pressable>
@@ -42,6 +48,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     gap: 2,
+  },
+  cardFailed: {
+    backgroundColor: '#F8E8E4',
+    marginHorizontal: -spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderRadius: 8,
+    borderBottomColor: 'transparent',
   },
   pressed: {
     opacity: 0.7,
@@ -69,5 +82,8 @@ const styles = StyleSheet.create({
   },
   statusPending: {
     color: colors.accent,
+  },
+  statusFailed: {
+    color: colors.danger,
   },
 });
