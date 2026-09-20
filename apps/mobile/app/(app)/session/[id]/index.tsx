@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -35,52 +35,70 @@ export default function SessionDetailsScreen() {
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadMessage, setUploadMessage] = useState<string | undefined>(undefined);
-  const autoUploadAttempted = useRef<string | null>(null);
+  const [proceeding, setProceeding] = useState(false);
 
-  const runUpload = useCallback(async (sessionId: string, uri: string) => {
-    setUploadStatus('uploading');
-    setUploadProgress(0);
-    setUploadMessage(undefined);
-    try {
-      const readable = await isLocalAudioReadable(uri);
-      if (!readable) {
+  const runUploadAndProcess = useCallback(
+    async (sessionId: string, uri: string) => {
+      setProceeding(true);
+      setUploadStatus('uploading');
+      setUploadProgress(0);
+      setUploadMessage(undefined);
+      try {
+        const readable = await isLocalAudioReadable(uri);
+        if (!readable) {
+          await clearLocalAudioUri(sessionId);
+          setLocalUri(null);
+          setPlaybackUri(null);
+          setShowPlayer(false);
+          setUploadStatus('error');
+          setUploadMessage(
+            'Local recording is no longer available in this browser. Please record again.',
+          );
+          return;
+        }
+
+        await uploadSessionAudio(sessionId, uri, (progress) => {
+          setUploadProgress(progress.ratio);
+        });
         await clearLocalAudioUri(sessionId);
+        const refreshed = await getSession(sessionId);
+        setSession(refreshed);
         setLocalUri(null);
-        setPlaybackUri(null);
-        setShowPlayer(false);
+        setUploadStatus('success');
+        setUploadProgress(1);
+
+        try {
+          const signed = await getSignedAudioUrl(sessionId);
+          setPlaybackUri(signed.url);
+        } catch {
+          setPlaybackUri(uri);
+        }
+
+        router.push(`/session/${sessionId}/processing`);
+      } catch (err) {
         setUploadStatus('error');
         setUploadMessage(
-          'Local recording is no longer available in this browser. Please record again.',
+          err instanceof ApiClientError
+            ? err.message
+            : 'Upload failed. Your local recording is still saved.',
         );
-        return;
+      } finally {
+        setProceeding(false);
       }
+    },
+    [router],
+  );
 
-      await uploadSessionAudio(sessionId, uri, (progress) => {
-        setUploadProgress(progress.ratio);
-      });
-      const refreshed = await getSession(sessionId);
-      setSession(refreshed);
-      setUploadStatus('success');
-      setUploadProgress(1);
-
-      try {
-        const signed = await getSignedAudioUrl(sessionId);
-        setPlaybackUri(signed.url);
-      } catch {
-        setPlaybackUri(uri);
-      }
-
-      // Phase 8: continue into the end-to-end processing screen.
-      router.push(`/session/${sessionId}/processing`);
-    } catch (err) {
-      setUploadStatus('error');
-      setUploadMessage(
-        err instanceof ApiClientError
-          ? err.message
-          : 'Upload failed. Your local recording is still saved.',
-      );
-    }
-  }, [router]);
+  const onReRecord = useCallback(async () => {
+    if (!id || typeof id !== 'string') return;
+    await clearLocalAudioUri(id);
+    setLocalUri(null);
+    setPlaybackUri(null);
+    setShowPlayer(false);
+    setUploadStatus('idle');
+    setUploadMessage(undefined);
+    router.push(`/recording?id=${id}`);
+  }, [id, router]);
 
   const load = useCallback(async () => {
     if (!id || typeof id !== 'string') {
@@ -105,7 +123,6 @@ export default function SessionDetailsScreen() {
       if (data.audioPath) {
         setUploadStatus('success');
         setUploadProgress(1);
-        autoUploadAttempted.current = id;
         try {
           const signed = await getSignedAudioUrl(id);
           setPlaybackUri(signed.url);
@@ -115,12 +132,11 @@ export default function SessionDetailsScreen() {
           setShowPlayer(Boolean(usableUri));
         }
       } else if (usableUri) {
+        // Local draft only — wait for the user to Proceed or Re-record.
         setPlaybackUri(usableUri);
         setShowPlayer(true);
-        if (autoUploadAttempted.current !== id) {
-          autoUploadAttempted.current = id;
-          void runUpload(id, usableUri);
-        }
+        setUploadStatus('idle');
+        setUploadMessage(undefined);
       } else {
         setPlaybackUri(null);
         setShowPlayer(false);
@@ -139,7 +155,7 @@ export default function SessionDetailsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, runUpload]);
+  }, [id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -169,6 +185,7 @@ export default function SessionDetailsScreen() {
 
   const completed = session.status === 'completed';
   const canRecord = !localUri && !session.audioPath;
+  const hasLocalDraft = Boolean(localUri) && !session.audioPath;
   const hasPlayback = Boolean(playbackUri);
 
   return (
@@ -188,26 +205,70 @@ export default function SessionDetailsScreen() {
       {session.description ? <Text style={styles.description}>{session.description}</Text> : null}
 
       <View style={styles.actions}>
-        {localUri || session.audioPath ? (
+        {hasLocalDraft ? (
+          <View style={styles.reviewBox}>
+            <Text style={styles.reviewTitle}>Recording ready</Text>
+            <Text style={styles.reviewHint}>
+              Listen to your take, then upload & process it — or discard and record again.
+            </Text>
+
+            {hasPlayback && showPlayer && playbackUri ? (
+              <AudioPlayer uri={playbackUri} title={session.title} />
+            ) : null}
+
+            {uploadStatus === 'uploading' || uploadStatus === 'error' ? (
+              <UploadProgress
+                progress={uploadProgress}
+                status={uploadStatus}
+                message={uploadMessage}
+                onRetry={
+                  localUri && id
+                    ? () => {
+                        void runUploadAndProcess(String(id), localUri);
+                      }
+                    : undefined
+                }
+              />
+            ) : null}
+
+            <Pressable
+              style={[styles.primaryButton, proceeding && styles.buttonDisabled]}
+              disabled={proceeding}
+              onPress={() => {
+                if (!localUri || !id) return;
+                void runUploadAndProcess(String(id), localUri);
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={styles.primaryButtonText}>
+                {proceeding ? 'Uploading…' : 'Proceed — upload & process'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[styles.secondaryButton, proceeding && styles.buttonDisabled]}
+              disabled={proceeding}
+              onPress={() => void onReRecord()}
+              accessibilityRole="button"
+            >
+              <Text style={styles.secondaryButtonText}>Re-record</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {!hasLocalDraft && session.audioPath && uploadStatus === 'error' ? (
           <UploadProgress
             progress={uploadProgress}
             status={uploadStatus}
             message={uploadMessage}
-            onRetry={
-              localUri && id
-                ? () => {
-                    void runUpload(String(id), localUri);
-                  }
-                : undefined
-            }
           />
         ) : null}
 
-        {hasPlayback && showPlayer && playbackUri ? (
+        {!hasLocalDraft && hasPlayback && showPlayer && playbackUri ? (
           <AudioPlayer uri={playbackUri} title={session.title} />
         ) : null}
 
-        {hasPlayback && !showPlayer ? (
+        {!hasLocalDraft && hasPlayback && !showPlayer ? (
           <ActionRow
             label="▶ Play Recording"
             hint={
@@ -219,7 +280,7 @@ export default function SessionDetailsScreen() {
           />
         ) : null}
 
-        {!hasPlayback ? (
+        {!hasLocalDraft && !hasPlayback ? (
           <ActionRow label="▶ Play Recording" hint="No recording available yet" disabled />
         ) : null}
 
@@ -235,7 +296,7 @@ export default function SessionDetailsScreen() {
           label="⚙️ Processing"
           hint={
             !session.audioPath
-              ? 'Upload audio to start the pipeline'
+              ? 'Available after you proceed with a recording'
               : session.status === 'completed'
                 ? 'Pipeline finished — view progress'
                 : session.status === 'transcribing' || session.status === 'summarizing'
@@ -263,7 +324,7 @@ export default function SessionDetailsScreen() {
                   : session.status === 'failed'
                     ? 'Open processing to retry'
                     : 'Available after transcription'
-              : 'Upload audio before transcription'
+              : 'Available after you proceed with a recording'
           }
           disabled={
             !(
@@ -369,6 +430,52 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: spacing.xl,
     gap: spacing.md,
+  },
+  reviewBox: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  reviewTitle: {
+    ...typography.body,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  reviewHint: {
+    ...typography.caption,
+    color: colors.inkMuted,
+  },
+  primaryButton: {
+    backgroundColor: colors.brand,
+    borderRadius: 12,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: colors.ink,
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  buttonDisabled: {
+    opacity: 0.55,
   },
   action: {
     borderWidth: 1,

@@ -21,8 +21,7 @@ import { RecordingTimer } from '@/src/components/RecordingTimer';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { ApiClientError } from '@/src/services/api';
-import { uploadSessionAudio } from '@/src/services/audio-upload';
-import { clearLocalAudioUri, saveLocalAudioUri } from '@/src/services/local-audio';
+import { saveLocalAudioUri } from '@/src/services/local-audio';
 import { getSession, updateSession } from '@/src/services/sessions';
 import { colors, spacing, typography } from '@/src/theme';
 
@@ -207,40 +206,20 @@ export default function RecordingScreen() {
         Math.floor((recorder.getStatus().durationMillis ?? elapsedSeconds * 1000) / 1000),
       );
 
-      // Best-effort local persist (must not block upload on web quota issues).
-      let storedUri = uri;
+      // Save locally only — user chooses Proceed or Re-record on the session screen.
       try {
-        storedUri = await saveLocalAudioUri(id, uri);
+        await saveLocalAudioUri(id, uri);
       } catch {
-        storedUri = uri;
+        // Best-effort; session screen can still use an in-memory/nav flow.
       }
 
       try {
         await updateSession(id, { durationSeconds });
       } catch {
-        // Duration update is non-fatal if upload can proceed.
+        // Non-fatal.
       }
 
-      // Upload from the live recording URI first (most reliable on web).
-      try {
-        await uploadSessionAudio(id, uri);
-        await clearLocalAudioUri(id);
-        router.replace(`/session/${id}/processing`);
-        return;
-      } catch (uploadErr) {
-        // Fall through to session details for retry from persisted audio.
-        try {
-          await saveLocalAudioUri(id, storedUri);
-        } catch {
-          // ignore
-        }
-        router.replace(`/session/${id}`);
-        if (uploadErr instanceof ApiClientError) {
-          // Session page will show upload retry; keep a short hint if replace is slow.
-          setRecordError(uploadErr.message);
-        }
-        return;
-      }
+      router.replace(`/session/${id}`);
     } catch (err) {
       setRecordError(
         err instanceof ApiClientError
