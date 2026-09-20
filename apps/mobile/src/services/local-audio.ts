@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { localAudioStorageKey } from '@/src/utils/local-audio-key';
 
+/** Keep persisted web audio under typical AsyncStorage quotas (~5MB). */
+const MAX_PERSISTED_DATA_URL_CHARS = 4_000_000;
+
 async function blobToDataUrl(blob: Blob): Promise<string> {
   return await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -16,9 +19,20 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+function isQuotaError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { name?: string; message?: string; code?: number };
+  return (
+    e.name === 'QuotaExceededError' ||
+    e.code === 22 ||
+    /quota/i.test(e.message ?? '')
+  );
+}
+
 /**
  * Persists a local recording URI for a session until cloud upload.
- * On web, blob: URLs are ephemeral — convert to a data: URL so retry survives navigation.
+ * On web, blob: URLs are ephemeral — convert to a data: URL when small enough.
+ * Never throws on quota / persistence failures; returns the best usable URI.
  */
 export async function saveLocalAudioUri(sessionId: string, uri: string): Promise<string> {
   let stored = uri;
@@ -26,23 +40,49 @@ export async function saveLocalAudioUri(sessionId: string, uri: string): Promise
   if (uri.startsWith('blob:')) {
     try {
       const blob = await (await fetch(uri)).blob();
-      stored = await blobToDataUrl(blob);
+      const dataUrl = await blobToDataUrl(blob);
+      if (dataUrl.length <= MAX_PERSISTED_DATA_URL_CHARS) {
+        stored = dataUrl;
+      }
+      // If too large, keep the live blob: URI for same-tab upload/retry.
     } catch {
-      // Fall back to the original URI; upload may still work in the same tick.
       stored = uri;
     }
   }
 
-  await AsyncStorage.setItem(localAudioStorageKey(sessionId), stored);
+  try {
+    await AsyncStorage.setItem(localAudioStorageKey(sessionId), stored);
+  } catch (err) {
+    if (isQuotaError(err) && stored.startsWith('data:')) {
+      // Fall back to storing the original URI (or nothing durable).
+      try {
+        await AsyncStorage.setItem(localAudioStorageKey(sessionId), uri);
+        return uri;
+      } catch {
+        return uri;
+      }
+    }
+    // Persistence is best-effort; callers can still upload from the returned URI.
+    return stored.startsWith('data:') ? stored : uri;
+  }
+
   return stored;
 }
 
 export async function getLocalAudioUri(sessionId: string): Promise<string | null> {
-  return AsyncStorage.getItem(localAudioStorageKey(sessionId));
+  try {
+    return await AsyncStorage.getItem(localAudioStorageKey(sessionId));
+  } catch {
+    return null;
+  }
 }
 
 export async function clearLocalAudioUri(sessionId: string): Promise<void> {
-  await AsyncStorage.removeItem(localAudioStorageKey(sessionId));
+  try {
+    await AsyncStorage.removeItem(localAudioStorageKey(sessionId));
+  } catch {
+    // ignore
+  }
 }
 
 /** Returns true when a stored URI can still be read (blob:/data:/file). */

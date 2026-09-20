@@ -22,7 +22,7 @@ import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { ApiClientError } from '@/src/services/api';
 import { uploadSessionAudio } from '@/src/services/audio-upload';
-import { saveLocalAudioUri } from '@/src/services/local-audio';
+import { clearLocalAudioUri, saveLocalAudioUri } from '@/src/services/local-audio';
 import { getSession, updateSession } from '@/src/services/sessions';
 import { colors, spacing, typography } from '@/src/theme';
 
@@ -207,25 +207,47 @@ export default function RecordingScreen() {
         Math.floor((recorder.getStatus().durationMillis ?? elapsedSeconds * 1000) / 1000),
       );
 
-      // Persist immediately (web converts ephemeral blob: → data:).
-      const storedUri = await saveLocalAudioUri(id, uri);
-      await updateSession(id, { durationSeconds });
-
-      // Upload while the recording is still available in this tab.
+      // Best-effort local persist (must not block upload on web quota issues).
+      let storedUri = uri;
       try {
-        await uploadSessionAudio(id, storedUri);
-        router.replace(`/session/${id}/processing`);
-        return;
+        storedUri = await saveLocalAudioUri(id, uri);
       } catch {
-        // Fall through to session details where the user can retry from persisted audio.
+        storedUri = uri;
       }
 
-      router.replace(`/session/${id}`);
+      try {
+        await updateSession(id, { durationSeconds });
+      } catch {
+        // Duration update is non-fatal if upload can proceed.
+      }
+
+      // Upload from the live recording URI first (most reliable on web).
+      try {
+        await uploadSessionAudio(id, uri);
+        await clearLocalAudioUri(id);
+        router.replace(`/session/${id}/processing`);
+        return;
+      } catch (uploadErr) {
+        // Fall through to session details for retry from persisted audio.
+        try {
+          await saveLocalAudioUri(id, storedUri);
+        } catch {
+          // ignore
+        }
+        router.replace(`/session/${id}`);
+        if (uploadErr instanceof ApiClientError) {
+          // Session page will show upload retry; keep a short hint if replace is slow.
+          setRecordError(uploadErr.message);
+        }
+        return;
+      }
     } catch (err) {
       setRecordError(
         err instanceof ApiClientError
           ? err.message
-          : 'We saved the recording attempt, but finishing failed. Try stopping again.',
+          : err instanceof Error
+            ? err.message
+            : 'We saved the recording attempt, but finishing failed. Try stopping again.',
       );
     } finally {
       setStopping(false);
