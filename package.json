@@ -10,6 +10,7 @@
   "scripts": {
     "mobile": "npm run start --workspace=@sessionai/mobile",
     "mobile:web": "npm run web --workspace=@sessionai/mobile",
+    "mobile:android": "npm run android --workspace=@sessionai/mobile",
     "api": "npm run dev --workspace=@sessionai/api",
     "api:build": "npm run build --workspace=@sessionai/api",
     "api:start": "npm run start --workspace=@sessionai/api",

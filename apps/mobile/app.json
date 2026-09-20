@@ -23,7 +23,8 @@
       },
       "package": "com.sessionai.app",
       "predictiveBackGestureEnabled": false,
-      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"]
+      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"],
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro",

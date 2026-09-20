@@ -128,7 +128,16 @@ npm run mobile:web
 
 Expo starts on port **19047**. Open in Expo Go, a simulator, or the web bundler.
 
-The home screen shows foundation status (API reachability + Supabase config).
+### Android phone
+
+See **[docs/android.md](./docs/android.md)** for Expo Go and APK install steps.
+
+Short version:
+
+1. Install **Expo Go** on the phone (same Wi‑Fi as your PC).
+2. In `apps/mobile/.env`, set `EXPO_PUBLIC_API_BASE_URL=http://YOUR_LAN_IP:3847` (not `127.0.0.1`).
+3. Run `npm run api` and `npm run mobile`, then scan the QR code.
+4. For a real installable APK: `cd apps/mobile && npx eas build -p android --profile preview`.
 
 ## Testing
 
@@ -170,6 +179,7 @@ Zod (`SessionSummary`) before persistence. See [docs/ai.md](./docs/ai.md).
 - [API](./docs/api.md)
 - [Audio](./docs/audio.md)
 - [AI](./docs/ai.md)
+- [Android](./docs/android.md)
 - [Production](./docs/production.md)
 
 ## Phase roadmap
