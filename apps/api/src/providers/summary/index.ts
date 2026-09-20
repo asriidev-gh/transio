@@ -11,7 +11,7 @@ import {
 import type { SummaryInput, SummaryProvider } from './types.js';
 
 const ANTHROPIC_MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
-const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+const DEFAULT_MODEL = 'claude-sonnet-4-5';
 
 interface AnthropicContentBlock {
   type: string;
@@ -72,11 +72,28 @@ export class ClaudeSummaryProvider implements SummaryProvider {
     }
 
     if (!response.ok) {
+      let detail = '';
+      try {
+        const errBody = (await response.json()) as {
+          error?: { message?: string; type?: string };
+        };
+        detail = errBody.error?.message ?? '';
+      } catch {
+        // ignore parse failures
+      }
       logger.warn('Claude summary provider returned error', {
         status: response.status,
         provider: this.name,
+        model: this.model,
+        detail: detail || undefined,
       });
-      throw new AppError('SUMMARY_ERROR', 'Claude summary request failed', 502);
+      throw new AppError(
+        'SUMMARY_ERROR',
+        detail
+          ? `Claude summary request failed (${detail})`
+          : 'Claude summary request failed',
+        502,
+      );
     }
 
     const payload = (await response.json()) as AnthropicMessagesResponse;
@@ -132,5 +149,8 @@ export function createSummaryProvider(): SummaryProvider {
     );
   }
 
-  return new ClaudeSummaryProvider(env.ANTHROPIC_API_KEY);
+  return new ClaudeSummaryProvider(
+    env.ANTHROPIC_API_KEY,
+    env.ANTHROPIC_MODEL.trim() || DEFAULT_MODEL,
+  );
 }

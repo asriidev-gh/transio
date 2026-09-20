@@ -11,6 +11,7 @@ const envSchema = z.object({
   SUPABASE_ANON_KEY: z.string().optional().default(''),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().default(''),
   ANTHROPIC_API_KEY: z.string().optional().default(''),
+  ANTHROPIC_MODEL: z.string().optional().default('claude-sonnet-4-5'),
   TRANSCRIPTION_API_KEY: z.string().optional().default(''),
   TRANSCRIPTION_BASE_URL: z.string().default(''),
   LOG_SENSITIVE: z

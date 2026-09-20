@@ -84,7 +84,11 @@ export class SupabaseSummaryRepository implements SummaryRepository {
       .maybeSingle();
 
     if (error) {
-      throw new AppError('DATABASE_ERROR', 'Could not load summary', 500);
+      throw new AppError(
+        'DATABASE_ERROR',
+        `Could not load summary (${error.message}). Apply migration 202609200004_create_summaries.sql in Supabase.`,
+        500,
+      );
     }
     if (!data) return null;
     return mapSummaryRow(data as SummaryRow);
