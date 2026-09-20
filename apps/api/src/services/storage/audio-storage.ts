@@ -21,7 +21,11 @@ export class SupabaseAudioStorage implements AudioStorage {
     });
 
     if (error) {
-      throw new AppError('STORAGE_ERROR', 'Could not upload audio file', 500);
+      throw new AppError(
+        'STORAGE_ERROR',
+        `Could not upload audio file (${error.message})`,
+        500,
+      );
     }
   }
 

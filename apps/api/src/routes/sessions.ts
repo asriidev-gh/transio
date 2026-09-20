@@ -7,7 +7,7 @@ import {
 import { Router, type Request, type RequestHandler } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { AppError } from '../middleware/error-handler.js';
-import { createSupabaseUserClient } from '../lib/supabase.js';
+import { createSupabaseUserClient, getSupabaseServiceClient } from '../lib/supabase.js';
 import { createSummaryProvider } from '../providers/summary/index.js';
 import { createTranscriptionProvider } from '../providers/transcription/index.js';
 import { runProcessingPipeline } from '../services/processing/job.js';
@@ -61,6 +61,7 @@ function createDefaultProcessJobRunner(
     }
 
     const client = createSupabaseUserClient(req.accessToken);
+    const storageClient = getSupabaseServiceClient();
     const transcripts =
       createTranscriptRepository?.(req) ??
       new SupabaseTranscriptRepository(client);
@@ -74,7 +75,7 @@ function createDefaultProcessJobRunner(
       summaries,
       transcriptionProvider: (createTranscriptionProviderFn ?? createTranscriptionProvider)(),
       summaryProvider: (createSummaryProviderFn ?? createSummaryProvider)(),
-      downloadAudio: createSupabaseAudioDownloader(client),
+      downloadAudio: createSupabaseAudioDownloader(storageClient),
     });
   };
 }

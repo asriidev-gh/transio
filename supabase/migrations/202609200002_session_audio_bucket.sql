@@ -15,6 +15,7 @@ values (
     'audio/wav',
     'audio/webm',
     'audio/ogg',
+    'video/webm',
     'application/octet-stream'
   ]
 )

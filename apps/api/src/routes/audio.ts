@@ -7,7 +7,7 @@ import {
 } from '@sessionai/shared';
 import type { Request } from 'express';
 import { AppError } from '../middleware/error-handler.js';
-import { createSupabaseUserClient } from '../lib/supabase.js';
+import { getSupabaseServiceClient } from '../lib/supabase.js';
 import type { SessionRepository } from '../services/sessions/repository.js';
 import {
   resolveUploadPath,
@@ -38,11 +38,13 @@ export const audioUpload = multer({
 
 export type AudioStorageFactory = (req: Request) => AudioStorage;
 
-function defaultAudioStorageFactory(req: Request): AudioStorage {
-  if (!req.accessToken) {
-    throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
-  }
-  return new SupabaseAudioStorage(createSupabaseUserClient(req.accessToken));
+/**
+ * Storage uploads/signed URLs go through the service role after the route has
+ * verified JWT + session ownership and forced a `{userId}/{sessionId}/…` path.
+ * This avoids depending on storage.objects RLS being applied in every project.
+ */
+function defaultAudioStorageFactory(_req: Request): AudioStorage {
+  return new SupabaseAudioStorage(getSupabaseServiceClient());
 }
 
 export function registerAudioRoutes(

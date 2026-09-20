@@ -5,7 +5,7 @@ import {
 } from '@sessionai/shared';
 import type { Request, Router } from 'express';
 import { AppError } from '../middleware/error-handler.js';
-import { createSupabaseUserClient } from '../lib/supabase.js';
+import { createSupabaseUserClient, getSupabaseServiceClient } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { createSummaryProvider } from '../providers/summary/index.js';
 import type { SummaryProvider } from '../providers/summary/types.js';
@@ -57,7 +57,7 @@ function defaultProcessJobRunner(
     }
 
     const userId = req.user.id;
-    const client = createSupabaseUserClient(req.accessToken);
+    const client = getSupabaseServiceClient();
 
     void runProcessingPipeline(sessionId, {
       userId,

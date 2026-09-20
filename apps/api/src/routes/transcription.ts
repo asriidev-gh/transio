@@ -7,7 +7,7 @@ import {
 } from '@sessionai/shared';
 import type { Request, Router } from 'express';
 import { AppError } from '../middleware/error-handler.js';
-import { createSupabaseUserClient } from '../lib/supabase.js';
+import { createSupabaseUserClient, getSupabaseServiceClient } from '../lib/supabase.js';
 import { createTranscriptionProvider } from '../providers/transcription/index.js';
 import type { TranscriptionProvider } from '../providers/transcription/types.js';
 import type { SessionRepoFactory } from './sessions.js';
@@ -54,8 +54,7 @@ function defaultJobRunner(
     }
 
     const userId = req.user.id;
-    const accessToken = req.accessToken;
-    const client = createSupabaseUserClient(accessToken);
+    const client = getSupabaseServiceClient();
 
     // Fire-and-forget async job (queue can replace this later).
     void runTranscriptionJob(sessionId, {
