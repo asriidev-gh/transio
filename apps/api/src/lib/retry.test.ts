@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { AppError } from '../../middleware/error-handler.js';
+import { AppError } from '../middleware/error-handler.js';
 import { withProviderRetry } from './retry.js';
 
 describe('withProviderRetry', () => {
