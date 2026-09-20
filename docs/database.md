@@ -2,24 +2,30 @@
 
 ## Phase status
 
-Phase 1 does **not** create tables. Configuration and client setup only.
+Phase 3 introduces the `sessions` table with Row Level Security.
 
-## Planned schema (Phase 3+)
+## Schema
 
 ### `sessions`
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | UUID PK | |
-| `user_id` | UUID | Owner; RLS key |
-| `title` | TEXT NOT NULL | |
-| `session_type` | TEXT NOT NULL | seminar, group_discussion, … |
+| `id` | UUID PK | `gen_random_uuid()` |
+| `user_id` | UUID NOT NULL | FK → `auth.users(id)` ON DELETE CASCADE |
+| `title` | TEXT NOT NULL | non-empty after trim |
+| `session_type` | TEXT NOT NULL | seminar, group_discussion, bible_study, meeting, lecture, other |
 | `description` | TEXT | nullable |
-| `recorded_at` | TIMESTAMPTZ NOT NULL | |
-| `duration_seconds` | INTEGER | nullable |
-| `audio_path` | TEXT | private storage path |
+| `recorded_at` | TIMESTAMPTZ NOT NULL | defaults to now (UTC) |
+| `duration_seconds` | INTEGER | nullable, ≥ 0 |
+| `audio_path` | TEXT | private storage path (Phase 5) |
 | `status` | TEXT NOT NULL | recording → … → completed / failed |
-| `created_at` / `updated_at` | TIMESTAMPTZ | |
+| `created_at` / `updated_at` | TIMESTAMPTZ | `updated_at` maintained by trigger |
+
+Migration file:
+
+```text
+supabase/migrations/202609200001_create_sessions.sql
+```
 
 ### `transcripts` (Phase 6)
 
@@ -46,12 +52,29 @@ Phase 1 does **not** create tables. Configuration and client setup only.
 | `quotes` | JSONB |
 | `created_at` / `updated_at` | TIMESTAMPTZ |
 
-## Security
+## Row Level Security
 
-- Row Level Security on all user data tables.
-- Users access only their own sessions (and related transcripts/summaries).
-- Storage bucket `session-audio` will be **private**; playback via signed URLs.
+Enabled on `sessions`. Policies for the `authenticated` role:
 
-## Migrations
+| Policy | Command | Rule |
+| --- | --- | --- |
+| `sessions_select_own` | SELECT | `auth.uid() = user_id` |
+| `sessions_insert_own` | INSERT | `auth.uid() = user_id` |
+| `sessions_update_own` | UPDATE | `auth.uid() = user_id` |
+| `sessions_delete_own` | DELETE | `auth.uid() = user_id` |
 
-SQL files live in `supabase/migrations/`. Apply with the Supabase CLI; never mutate production from application code.
+`anon` has no grants on `sessions`.
+
+The API uses a **user-scoped** Supabase client (caller JWT) so RLS applies, and still filters by `user_id` in queries.
+
+## Applying migrations
+
+```bash
+# With Supabase CLI linked to your project:
+npx supabase db push
+
+# Or run the SQL in the Supabase SQL editor:
+# supabase/migrations/202609200001_create_sessions.sql
+```
+
+Never mutate production schema from application code.

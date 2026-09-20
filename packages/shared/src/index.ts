@@ -7,39 +7,21 @@ export {
   type AuthUser,
 } from './auth.js';
 
-/** Session types supported by SessionAI (Phase 3+ will use these fully). */
-export const SessionTypeSchema = z.enum([
-  'seminar',
-  'group_discussion',
-  'bible_study',
-  'meeting',
-  'lecture',
-  'other',
-]);
-
-export type SessionType = z.infer<typeof SessionTypeSchema>;
-
-export const SESSION_TYPE_LABELS: Record<SessionType, string> = {
-  seminar: 'Seminar',
-  group_discussion: 'Group Discussion',
-  bible_study: 'Bible Study',
-  meeting: 'Meeting',
-  lecture: 'Lecture',
-  other: 'Other',
-};
-
-/** Processing status for a recorded session. */
-export const SessionStatusSchema = z.enum([
-  'recording',
-  'uploaded',
-  'transcribing',
-  'transcribed',
-  'summarizing',
-  'completed',
-  'failed',
-]);
-
-export type SessionStatus = z.infer<typeof SessionStatusSchema>;
+export {
+  SessionTypeSchema,
+  SessionStatusSchema,
+  SessionSchema,
+  CreateSessionSchema,
+  UpdateSessionSchema,
+  SessionIdParamSchema,
+  SESSION_TYPE_LABELS,
+  SESSION_STATUS_LABELS,
+  type SessionType,
+  type SessionStatus,
+  type Session,
+  type CreateSessionInput,
+  type UpdateSessionInput,
+} from './session.js';
 
 /** Structured AI summary shape (used in Phase 7+). */
 export const SessionSummarySchema = z.object({

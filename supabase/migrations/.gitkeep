@@ -1,4 +1,0 @@
--- SessionAI database migrations live here.
--- Phase 1 has no schema yet.
--- Phase 3 will add sessions (+ user_id), with RLS.
--- Phase 6 adds transcripts; Phase 7 adds summaries.

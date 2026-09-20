@@ -23,7 +23,7 @@ Mobile app
       → PostgreSQL (sessions, transcripts, summaries)
 ```
 
-Phase 2 adds Supabase email/password auth, persistent sessions, protected Expo Router groups, and API JWT verification (`GET /me`).
+Phase 3 adds the `sessions` table with RLS, authenticated session CRUD on the API, and mobile screens for listing, creating, and viewing sessions.
 
 ## Design principles
 

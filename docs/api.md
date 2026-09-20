@@ -43,15 +43,33 @@ Returns the authenticated user `{ id, email }` derived from the JWT (never from 
 | 401 | `UNAUTHORIZED` | Missing/invalid token |
 | 503 | `SERVICE_UNAVAILABLE` | Supabase not configured on API |
 
+### Sessions (`/sessions`)
+
+All session routes require a valid Bearer token. Ownership is enforced via RLS + `user_id` filters.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/sessions` | List current user's sessions (newest first) |
+| `POST` | `/sessions` | Create session (`title`, `sessionType`, optional `description`) |
+| `GET` | `/sessions/:id` | Get one session (404 if missing or not owned) |
+| `PATCH` | `/sessions/:id` | Update fields (title, type, description, status, …) |
+| `DELETE` | `/sessions/:id` | Delete session |
+
+Create body example:
+
+```json
+{
+  "title": "GLC Session 3",
+  "sessionType": "group_discussion",
+  "description": "Weekly discussion"
+}
+```
+
+New sessions start with `status: "recording"`.
+
 ## Planned endpoints (later phases)
 
 ```text
-POST   /sessions
-GET    /sessions
-GET    /sessions/:id
-PATCH  /sessions/:id
-DELETE /sessions/:id
-
 POST   /sessions/:id/audio
 POST   /sessions/:id/transcribe
 POST   /sessions/:id/summarize
@@ -61,6 +79,7 @@ GET    /sessions/:id/summary
 GET    /sessions/:id/status
 ```
 
+Session CRUD (`POST/GET/PATCH/DELETE /sessions`) is implemented in Phase 3.
 Authenticated endpoints will require a Supabase JWT (`Authorization: Bearer …`) and verify ownership server-side.
 
 ## Running

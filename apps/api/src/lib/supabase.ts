@@ -49,6 +49,28 @@ export function getSupabaseServiceClient(): SupabaseClient {
   return serviceClient;
 }
 
+/**
+ * User-scoped client that forwards the caller's JWT so RLS policies apply.
+ */
+export function createSupabaseUserClient(accessToken: string): SupabaseClient {
+  const env = getEnv();
+  if (!isSupabaseConfigured(env) || !env.SUPABASE_URL) {
+    throw new Error('Supabase is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY.');
+  }
+
+  return createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
 export function getSupabaseConfigStatus(): {
   configured: boolean;
   hasServiceRole: boolean;

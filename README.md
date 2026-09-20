@@ -2,7 +2,7 @@
 
 AI-powered seminar and group discussion recorder. Record audio, transcribe speech, and generate structured summaries — with a mobile-first Expo client and a Node.js API.
 
-> **Phase status:** Phase 2 (Authentication) is complete. Sessions, recording, storage, transcription, and AI summary are intentionally not implemented yet.
+> **Phase status:** Phase 3 (Database & Sessions) is complete. Recording, storage, transcription, and AI summary are intentionally not implemented yet.
 
 ## Architecture
 
@@ -80,9 +80,13 @@ See [docs/auth.md](./docs/auth.md) for the auth flow. Database migrations start 
 ## Database migrations
 
 ```bash
-# Coming in Phase 3 — example once CLI is configured:
-# npx supabase db push
+# Apply SQL migrations to your Supabase project:
+npx supabase db push
+
+# Or paste supabase/migrations/*.sql into the Supabase SQL editor.
 ```
+
+Phase 3 migration: `supabase/migrations/202609200001_create_sessions.sql` (sessions + RLS).
 
 ## Running the API
 
@@ -158,8 +162,8 @@ Documented for later phases. Claude runs **only** on the API using `ANTHROPIC_AP
 ## Phase roadmap
 
 1. Foundation
-2. **Authentication** ← current
-3. Database & sessions
+2. Authentication
+3. **Database & sessions** ← current
 4. Audio recording
 5. Cloud audio storage
 6. Speech-to-text

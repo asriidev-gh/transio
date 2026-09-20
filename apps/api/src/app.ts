@@ -1,11 +1,18 @@
 import cors from 'cors';
 import express from 'express';
+import type { RequestHandler } from 'express';
 import { logger } from './lib/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { healthRouter } from './routes/health.js';
 import { meRouter } from './routes/me.js';
+import { createSessionsRouter, type SessionRepoFactory } from './routes/sessions.js';
 
-export function createApp() {
+export interface AppDeps {
+  createSessionRepository?: SessionRepoFactory;
+  authenticate?: RequestHandler;
+}
+
+export function createApp(deps: AppDeps = {}) {
   const app = express();
 
   app.use(cors());
@@ -18,6 +25,13 @@ export function createApp() {
 
   app.use(healthRouter);
   app.use(meRouter);
+  app.use(
+    '/sessions',
+    createSessionsRouter({
+      createRepository: deps.createSessionRepository,
+      authenticate: deps.authenticate,
+    }),
+  );
 
   app.use((_req, res) => {
     res.status(404).json({

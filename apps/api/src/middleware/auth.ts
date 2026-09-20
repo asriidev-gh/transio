@@ -41,6 +41,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       id: data.user.id,
       email: data.user.email ?? null,
     };
+    req.accessToken = token;
 
     next();
   } catch (err) {

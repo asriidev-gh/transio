@@ -4,8 +4,10 @@ import {
   apiError,
   apiSuccess,
   AuthCredentialsSchema,
+  CreateSessionSchema,
   HealthResponseSchema,
   SessionTypeSchema,
+  UpdateSessionSchema,
 } from './index.js';
 
 describe('shared schemas', () => {
@@ -39,5 +41,21 @@ describe('shared schemas', () => {
       password: 'password1',
     });
     assert.throws(() => AuthCredentialsSchema.parse({ email: 'bad', password: 'short' }));
+  });
+
+  it('validates create session payloads', () => {
+    const parsed = CreateSessionSchema.parse({
+      title: '  GLC Session 3  ',
+      sessionType: 'group_discussion',
+    });
+    assert.equal(parsed.title, 'GLC Session 3');
+    assert.throws(() =>
+      CreateSessionSchema.parse({ title: '', sessionType: 'seminar' }),
+    );
+  });
+
+  it('requires at least one field on update', () => {
+    assert.throws(() => UpdateSessionSchema.parse({}));
+    assert.equal(UpdateSessionSchema.parse({ title: 'Updated' }).title, 'Updated');
   });
 });

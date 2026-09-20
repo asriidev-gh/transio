@@ -10,10 +10,16 @@ describe('GET /health', () => {
 
     assert.equal(res.status, 200);
     assert.equal(res.body.success, true);
-    assert.equal(res.body.data?.status, 'ok');
-    assert.equal(res.body.data?.service, 'sessionai-api');
-    assert.equal(typeof res.body.data?.timestamp, 'string');
-    assert.equal(typeof res.body.data?.supabaseConfigured, 'boolean');
+    const data = res.body.data as {
+      status: string;
+      service: string;
+      timestamp: string;
+      supabaseConfigured: boolean;
+    };
+    assert.equal(data.status, 'ok');
+    assert.equal(data.service, 'sessionai-api');
+    assert.equal(typeof data.timestamp, 'string');
+    assert.equal(typeof data.supabaseConfigured, 'boolean');
   });
 
   it('returns 404 for unknown routes', async () => {

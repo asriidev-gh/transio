@@ -12,6 +12,8 @@ export default function AppLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: 'SessionAI', headerShown: false }} />
+      <Stack.Screen name="new-session" options={{ title: 'New Session' }} />
+      <Stack.Screen name="session/[id]" options={{ title: 'Session' }} />
       <Stack.Screen name="settings" options={{ title: 'Settings' }} />
     </Stack>
   );
