@@ -23,7 +23,7 @@ Mobile app
       → PostgreSQL (sessions, transcripts, summaries)
 ```
 
-Phase 3 adds the `sessions` table with RLS, authenticated session CRUD on the API, and mobile screens for listing, creating, and viewing sessions.
+Phase 4 adds microphone recording with `expo-audio` (permission, pause/resume, timer, local URI persistence) and session-detail playback from the device.
 
 ## Design principles
 

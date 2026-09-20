@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sessionai.app"
+      "bundleIdentifier": "com.sessionai.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "SessionAI needs microphone access to record seminars, lectures, and group discussions."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +22,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "package": "com.sessionai.app",
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"]
     },
     "web": {
       "bundler": "metro",
@@ -34,6 +38,13 @@
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
           "backgroundColor": "#0F2A24"
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "SessionAI needs microphone access to record seminars, lectures, and group discussions.",
+          "recordAudioAndroid": true
         }
       ]
     ],

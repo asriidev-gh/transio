@@ -6,9 +6,11 @@ import {
   SESSION_TYPE_LABELS,
   type Session,
 } from '@sessionai/shared';
+import { AudioPlayer } from '@/src/components/AudioPlayer';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { ApiClientError } from '@/src/services/api';
+import { getLocalAudioUri } from '@/src/services/local-audio';
 import { getSession } from '@/src/services/sessions';
 import { colors, spacing, typography } from '@/src/theme';
 import { formatDurationHuman, formatSessionDate } from '@/src/utils/format';
@@ -17,8 +19,10 @@ export default function SessionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
+  const [localUri, setLocalUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showPlayer, setShowPlayer] = useState(false);
 
   const load = useCallback(async () => {
     if (!id || typeof id !== 'string') {
@@ -30,15 +34,14 @@ export default function SessionDetailsScreen() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getSession(id);
+      const [data, uri] = await Promise.all([getSession(id), getLocalAudioUri(id)]);
       setSession(data);
+      setLocalUri(uri);
+      setShowPlayer(Boolean(uri));
     } catch (err) {
       setSession(null);
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : 'Could not load this session.',
-      );
+      setLocalUri(null);
+      setError(err instanceof ApiClientError ? err.message : 'Could not load this session.');
     } finally {
       setLoading(false);
     }
@@ -71,6 +74,7 @@ export default function SessionDetailsScreen() {
   }
 
   const completed = session.status === 'completed';
+  const canRecord = !localUri;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -81,17 +85,40 @@ export default function SessionDetailsScreen() {
       <Text style={styles.meta}>{formatSessionDate(session.recordedAt)}</Text>
       <Text style={styles.meta}>{formatDurationHuman(session.durationSeconds)}</Text>
       <Text style={[styles.status, completed ? styles.statusOk : styles.statusPending]}>
-        {completed ? `✓ ${SESSION_STATUS_LABELS[session.status]}` : SESSION_STATUS_LABELS[session.status]}
+        {completed
+          ? `✓ ${SESSION_STATUS_LABELS[session.status]}`
+          : SESSION_STATUS_LABELS[session.status]}
       </Text>
 
       {session.description ? <Text style={styles.description}>{session.description}</Text> : null}
 
       <View style={styles.actions}>
-        <ActionRow
-          label="▶ Play Recording"
-          hint="Available after audio upload (Phase 5)"
-          disabled
-        />
+        {localUri && showPlayer ? <AudioPlayer uri={localUri} title={session.title} /> : null}
+
+        {localUri && !showPlayer ? (
+          <ActionRow
+            label="▶ Play Recording"
+            hint="Play the local recording saved on this device"
+            onPress={() => setShowPlayer(true)}
+          />
+        ) : null}
+
+        {!localUri ? (
+          <ActionRow
+            label="▶ Play Recording"
+            hint="No local recording yet"
+            disabled
+          />
+        ) : null}
+
+        {canRecord ? (
+          <ActionRow
+            label="● Record audio"
+            hint="Capture microphone audio for this session"
+            onPress={() => router.push(`/recording?id=${session.id}`)}
+          />
+        ) : null}
+
         <ActionRow
           label="📄 Transcript"
           hint="Available after transcription (Phase 6)"

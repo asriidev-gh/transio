@@ -39,7 +39,7 @@ export default function NewSessionScreen() {
         sessionType,
         description: description.trim() ? description.trim() : null,
       });
-      router.replace(`/session/${session.id}`);
+      router.replace(`/recording?id=${session.id}`);
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -58,8 +58,7 @@ export default function NewSessionScreen() {
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.subtitle}>
-          Add session details. Recording starts in the next phase; for now this creates the session
-          record.
+          Add session details, then start recording. Audio is saved on this device first.
         </Text>
 
         <View style={styles.field}>

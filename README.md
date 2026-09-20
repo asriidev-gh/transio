@@ -2,7 +2,7 @@
 
 AI-powered seminar and group discussion recorder. Record audio, transcribe speech, and generate structured summaries — with a mobile-first Expo client and a Node.js API.
 
-> **Phase status:** Phase 3 (Database & Sessions) is complete. Recording, storage, transcription, and AI summary are intentionally not implemented yet.
+> **Phase status:** Phase 4 (Audio Recording) is complete. Cloud storage, transcription, and AI summary are intentionally not implemented yet.
 
 ## Architecture
 
@@ -157,14 +157,15 @@ Documented for later phases. Claude runs **only** on the API using `ANTHROPIC_AP
 - [Authentication](./docs/auth.md)
 - [Database](./docs/database.md)
 - [API](./docs/api.md)
+- [Audio](./docs/audio.md)
 - [AI](./docs/ai.md)
 
 ## Phase roadmap
 
 1. Foundation
 2. Authentication
-3. **Database & sessions** ← current
-4. Audio recording
+3. Database & sessions
+4. **Audio recording** ← current
 5. Cloud audio storage
 6. Speech-to-text
 7. Claude AI summary
