@@ -23,7 +23,7 @@ Mobile app
       → PostgreSQL (sessions, transcripts, summaries)
 ```
 
-Phase 1 implements only the outer shell: mobile launch, API launch, health check, env + Supabase client wiring, theme, and navigation placeholders.
+Phase 2 adds Supabase email/password auth, persistent sessions, protected Expo Router groups, and API JWT verification (`GET /me`).
 
 ## Design principles
 
@@ -38,12 +38,14 @@ Phase 1 implements only the outer shell: mobile launch, API launch, health check
 ```text
 apps/mobile/
   app/                 Expo Router screens
-    (auth)/            Login / register (stubs in Phase 1)
-    (app)/             Authenticated shell (unprotected until Phase 2)
+    (auth)/            Login / register
+    (app)/             Protected app shell
   src/
     components/        Reusable UI
+    contexts/          AuthProvider
+    hooks/             useAuth
     lib/               Env, Supabase client
-    services/          API client
+    services/          API + auth clients
     theme/             Colors, typography
     utils/             Pure helpers
 ```
@@ -55,8 +57,8 @@ apps/api/
   src/
     index.ts           Server entry
     app.ts             Express app factory
-    routes/            HTTP routes
-    middleware/        Errors (auth arrives Phase 2)
+    routes/            HTTP routes (/health, /me, …)
+    middleware/        Auth + errors
     lib/               Env, logger, Supabase
     providers/         (Phase 6+) transcription / AI
     prompts/           (Phase 7+) session-type prompts

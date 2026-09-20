@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { apiError, apiSuccess, HealthResponseSchema, SessionTypeSchema } from './index.js';
+import {
+  apiError,
+  apiSuccess,
+  AuthCredentialsSchema,
+  HealthResponseSchema,
+  SessionTypeSchema,
+} from './index.js';
 
 describe('shared schemas', () => {
   it('validates session types', () => {
@@ -25,5 +31,13 @@ describe('shared schemas', () => {
       supabaseConfigured: false,
     });
     assert.equal(parsed.status, 'ok');
+  });
+
+  it('validates auth credentials', () => {
+    assert.deepEqual(AuthCredentialsSchema.parse({ email: 'a@b.com', password: 'password1' }), {
+      email: 'a@b.com',
+      password: 'password1',
+    });
+    assert.throws(() => AuthCredentialsSchema.parse({ email: 'bad', password: 'short' }));
   });
 });

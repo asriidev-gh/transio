@@ -1,10 +1,13 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { colors, paperTheme } from '@/src/theme';
+import { LoadingState } from '@/src/components/LoadingState';
+import { View, StyleSheet } from 'react-native';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -18,27 +21,75 @@ const theme = {
   },
 };
 
-export default function RootLayout() {
-  useEffect(() => {
-    SplashScreen.hideAsync();
-  }, []);
+function AuthGate({ children }: { children: ReactNode }) {
+  const { session, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
 
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (!session && !inAuthGroup) {
+      router.replace('/(auth)/login');
+      return;
+    }
+
+    if (session && inAuthGroup) {
+      router.replace('/(app)');
+    }
+  }, [session, isLoading, segments, router]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      SplashScreen.hideAsync();
+    }
+  }, [isLoading]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.boot}>
+        <LoadingState message="Restoring session…" />
+      </View>
+    );
+  }
+
+  return children;
+}
+
+export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <PaperProvider theme={theme}>
-        <StatusBar style="dark" />
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: colors.background },
-            headerTintColor: colors.ink,
-            contentStyle: { backgroundColor: colors.background },
-            headerShadowVisible: false,
-          }}
-        >
-          <Stack.Screen name="(app)" options={{ headerShown: false }} />
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        </Stack>
+        <AuthProvider>
+          <StatusBar style="dark" />
+          <AuthGate>
+            <Stack
+              screenOptions={{
+                headerStyle: { backgroundColor: colors.background },
+                headerTintColor: colors.ink,
+                contentStyle: { backgroundColor: colors.background },
+                headerShadowVisible: false,
+              }}
+            >
+              <Stack.Screen name="(app)" options={{ headerShown: false }} />
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            </Stack>
+          </AuthGate>
+        </AuthProvider>
       </PaperProvider>
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  boot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
+});

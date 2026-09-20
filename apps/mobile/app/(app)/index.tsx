@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState } from '@/src/components/EmptyState';
 import { LoadingState } from '@/src/components/LoadingState';
+import { useAuth } from '@/src/hooks/useAuth';
 import { apiGet, ApiClientError } from '@/src/services/api';
 import { getSupabaseConfigStatus } from '@/src/lib/supabase';
 import { colors, spacing, typography } from '@/src/theme';
@@ -17,6 +18,7 @@ interface HealthData {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [health, setHealth] = useState<HealthData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,6 +57,7 @@ export default function HomeScreen() {
           <Text style={styles.tagline}>
             Record seminars and discussions. Transcribe. Summarize.
           </Text>
+          {user?.email ? <Text style={styles.signedIn}>Signed in as {user.email}</Text> : null}
         </View>
 
         <Pressable
@@ -75,7 +78,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>Foundation status</Text>
+          <Text style={styles.statusTitle}>Connection status</Text>
           {loading ? (
             <LoadingState message="Checking API…" />
           ) : (
@@ -161,6 +164,10 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.inkMuted,
     maxWidth: 320,
+  },
+  signedIn: {
+    ...typography.caption,
+    color: colors.brandSoft,
   },
   cta: {
     alignSelf: 'flex-start',

@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+export {
+  AuthCredentialsSchema,
+  AuthUserSchema,
+  type AuthCredentials,
+  type AuthUser,
+} from './auth.js';
+
 /** Session types supported by SessionAI (Phase 3+ will use these fully). */
 export const SessionTypeSchema = z.enum([
   'seminar',

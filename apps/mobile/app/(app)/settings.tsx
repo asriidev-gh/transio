@@ -1,14 +1,36 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useAuth } from '@/src/hooks/useAuth';
+import { AuthServiceError } from '@/src/services/auth';
 import { colors, spacing, typography } from '@/src/theme';
 import { mobileEnv, isSupabaseConfigured } from '@/src/lib/env';
 
 export default function SettingsScreen() {
+  const { user, signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSignOut() {
+    setSigningOut(true);
+    setError(null);
+    try {
+      await signOut();
+    } catch (err) {
+      setError(err instanceof AuthServiceError ? err.message : 'Could not sign out.');
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Settings</Text>
-      <Text style={styles.body}>
-        Phase 1 foundation only. Sign-in, recording, and AI processing arrive in later phases.
-      </Text>
+      <Text style={styles.body}>Manage your SessionAI account and connection settings.</Text>
+
+      <View style={styles.block}>
+        <Text style={styles.label}>Signed in as</Text>
+        <Text style={styles.value}>{user?.email ?? 'Unknown'}</Text>
+      </View>
 
       <View style={styles.block}>
         <Text style={styles.label}>API base URL</Text>
@@ -24,10 +46,25 @@ export default function SettingsScreen() {
         </Text>
       </View>
 
-      <View style={styles.block}>
-        <Text style={styles.label}>Auth</Text>
-        <Text style={styles.value}>Coming in Phase 2</Text>
-      </View>
+      {error ? (
+        <Text style={styles.error} accessibilityRole="alert">
+          {error}
+        </Text>
+      ) : null}
+
+      <Pressable
+        style={({ pressed }) => [
+          styles.button,
+          signingOut && styles.buttonDisabled,
+          pressed && !signingOut && styles.buttonPressed,
+        ]}
+        onPress={() => void onSignOut()}
+        disabled={signingOut}
+        accessibilityRole="button"
+        accessibilityLabel="Sign out"
+      >
+        <Text style={styles.buttonText}>{signingOut ? 'Signing out…' : 'Sign Out'}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -63,5 +100,24 @@ const styles = StyleSheet.create({
   value: {
     ...typography.body,
     color: colors.ink,
+  },
+  error: {
+    color: colors.danger,
+    ...typography.caption,
+  },
+  button: {
+    marginTop: spacing.md,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.brand,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+  },
+  buttonPressed: { opacity: 0.9 },
+  buttonDisabled: { opacity: 0.5 },
+  buttonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
   },
 });

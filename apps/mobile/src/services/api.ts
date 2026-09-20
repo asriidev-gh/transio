@@ -1,4 +1,5 @@
 import { mobileEnv } from '../lib/env';
+import { getCurrentSession } from './auth';
 
 export class ApiClientError extends Error {
   constructor(
@@ -21,18 +22,46 @@ interface ApiErrorBody {
   error: { code: string; message: string };
 }
 
+interface RequestOptions {
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  body?: unknown;
+  /** When true, requires a Supabase access token. */
+  auth?: boolean;
+}
+
+async function getAccessToken(): Promise<string | null> {
+  const session = await getCurrentSession();
+  return session?.access_token ?? null;
+}
+
 /**
  * Thin REST client for the SessionAI API.
- * Auth headers are added in Phase 2.
+ * Pass `auth: true` to attach the Supabase access token.
  */
-export async function apiGet<T>(path: string): Promise<T> {
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const url = `${mobileEnv.apiBaseUrl.replace(/\/$/, '')}${path}`;
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  };
+
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  if (options.auth) {
+    const token = await getAccessToken();
+    if (!token) {
+      throw new ApiClientError('UNAUTHORIZED', 'You must be signed in.', 401);
+    }
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   let response: Response;
   try {
     response = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
+      method: options.method ?? 'GET',
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
   } catch {
     throw new ApiClientError('NETWORK_ERROR', 'Unable to reach the SessionAI API.', 0);
@@ -50,4 +79,8 @@ export async function apiGet<T>(path: string): Promise<T> {
   }
 
   return body.data;
+}
+
+export async function apiGet<T>(path: string, auth = false): Promise<T> {
+  return apiRequest<T>(path, { method: 'GET', auth });
 }

@@ -15,7 +15,7 @@ type ResponseBody = {
  */
 export function request(app: Express) {
   return {
-    get(path: string): Promise<ResponseBody> {
+    get(path: string, headers: Record<string, string> = {}): Promise<ResponseBody> {
       return new Promise((resolve, reject) => {
         const server = http.createServer(app);
         server.listen(0, '127.0.0.1', () => {
@@ -32,6 +32,7 @@ export function request(app: Express) {
               port: address.port,
               path,
               method: 'GET',
+              headers,
             },
             (res) => {
               const chunks: Buffer[] = [];

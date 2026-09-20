@@ -2,7 +2,7 @@
 
 AI-powered seminar and group discussion recorder. Record audio, transcribe speech, and generate structured summaries — with a mobile-first Expo client and a Node.js API.
 
-> **Phase status:** Phase 1 (Project Foundation) is complete. Authentication, sessions, recording, storage, transcription, and AI summary are intentionally not implemented yet.
+> **Phase status:** Phase 2 (Authentication) is complete. Sessions, recording, storage, transcription, and AI summary are intentionally not implemented yet.
 
 ## Architecture
 
@@ -29,7 +29,7 @@ Secrets (service role, Anthropic, transcription) live **only** on the API. The m
 - Node.js 20+
 - npm 10+
 - Expo Go (optional, for device testing) or a simulator/emulator
-- A Supabase project (optional for Phase 1 health checks; required from Phase 2)
+- A Supabase project (required for sign-in / registration)
 
 ## Installation
 
@@ -69,11 +69,13 @@ Never set `EXPO_PUBLIC_` prefixes on service-role or AI keys.
 ## Supabase setup
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. Copy Project URL and anon key into mobile + API env files.
-3. Copy the service role key into **API only**.
-4. Migrations will be applied from Phase 3 onward (`supabase/migrations`).
+2. Enable **Email** auth (Authentication → Providers).
+3. For local MVP testing, optionally disable **Confirm email** so sign-up returns a session immediately.
+4. Copy Project URL and anon key into mobile + API env files.
+5. Copy the service role key into **API only**.
+6. Restart `npm run api` and `npm run mobile` after changing env files.
 
-Phase 1 only verifies that configuration is present; it does not create tables.
+See [docs/auth.md](./docs/auth.md) for the auth flow. Database migrations start in Phase 3 (`supabase/migrations`).
 
 ## Database migrations
 
@@ -140,19 +142,23 @@ Documented for later phases. Claude runs **only** on the API using `ANTHROPIC_AP
 | API health fails from phone | Use your LAN IP in `EXPO_PUBLIC_API_BASE_URL`, not `127.0.0.1` |
 | `supabaseConfigured: false` | Set `SUPABASE_URL` + `SUPABASE_ANON_KEY` in `apps/api/.env` |
 | Mobile “Supabase not configured” | Set `EXPO_PUBLIC_SUPABASE_*` in `apps/mobile/.env` and restart Expo |
+| Sign-in disabled / config warning on login | Same as above — auth requires a real Supabase project |
+| Stuck after register | Confirm email in inbox, or disable Confirm email in Supabase Auth settings |
+| `GET /me` returns 401 | Send `Authorization: Bearer <access_token>` from a signed-in session |
 | Workspace type errors | Run `npm install` at repo root, then `npm run build --workspace=@sessionai/shared` |
 
 ## Documentation
 
 - [Architecture](./docs/architecture.md)
+- [Authentication](./docs/auth.md)
 - [Database](./docs/database.md)
 - [API](./docs/api.md)
 - [AI](./docs/ai.md)
 
 ## Phase roadmap
 
-1. **Foundation** ← current
-2. Authentication
+1. Foundation
+2. **Authentication** ← current
 3. Database & sessions
 4. Audio recording
 5. Cloud audio storage

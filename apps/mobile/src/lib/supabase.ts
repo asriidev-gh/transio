@@ -1,3 +1,4 @@
+import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { isSupabaseConfigured, mobileEnv } from './env';
@@ -6,7 +7,7 @@ let client: SupabaseClient | null = null;
 
 /**
  * Supabase browser/mobile client using the anon key only.
- * Auth (Phase 2) will use this client; Phase 1 only establishes configuration.
+ * Sessions persist via AsyncStorage (Phase 2).
  */
 export function getSupabaseClient(): SupabaseClient {
   if (!isSupabaseConfigured()) {

@@ -15,7 +15,7 @@ All responses use a consistent envelope:
 }
 ```
 
-## Phase 1 endpoints
+## Implemented endpoints
 
 ### `GET /health`
 
@@ -30,6 +30,18 @@ Unauthenticated liveness + config probe.
 | `version` | string | API version |
 | `timestamp` | ISO string | Server time |
 | `supabaseConfigured` | boolean | `SUPABASE_URL` + `SUPABASE_ANON_KEY` present |
+
+### `GET /me`
+
+Requires `Authorization: Bearer <supabase_access_token>`.
+
+Returns the authenticated user `{ id, email }` derived from the JWT (never from a client-supplied id).
+
+| Status | Code | When |
+| --- | --- | --- |
+| 200 | — | Valid token |
+| 401 | `UNAUTHORIZED` | Missing/invalid token |
+| 503 | `SERVICE_UNAVAILABLE` | Supabase not configured on API |
 
 ## Planned endpoints (later phases)
 
