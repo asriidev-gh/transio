@@ -11,9 +11,16 @@ export interface UploadProgress {
 
 function guessMimeType(uri: string): string {
   const lower = uri.toLowerCase();
-  if (lower.includes('.webm') || lower.startsWith('blob:')) return 'audio/webm';
-  if (lower.includes('.wav')) return 'audio/wav';
-  if (lower.includes('.mp3')) return 'audio/mpeg';
+  if (lower.startsWith('data:audio/webm') || lower.includes('.webm') || lower.startsWith('blob:')) {
+    return 'audio/webm';
+  }
+  if (lower.startsWith('data:audio/wav') || lower.includes('.wav')) return 'audio/wav';
+  if (lower.startsWith('data:audio/mpeg') || lower.includes('.mp3')) return 'audio/mpeg';
+  if (lower.startsWith('data:audio/mp4') || lower.startsWith('data:audio/m4a')) return 'audio/mp4';
+  if (lower.startsWith('data:')) {
+    const match = /^data:([^;,]+)/i.exec(uri);
+    if (match?.[1]) return match[1];
+  }
   return 'audio/mp4';
 }
 
@@ -50,9 +57,29 @@ export function uploadSessionAudio(
         const fileName = guessFileName(localUri, mimeType);
         const form = new FormData();
 
-        // React Native FormData file shape; on web, fetch the blob first when needed.
-        if (localUri.startsWith('blob:') || localUri.startsWith('http')) {
-          const blob = await (await fetch(localUri)).blob();
+        // React Native FormData file shape; on web, materialize blob/data URLs first.
+        if (
+          localUri.startsWith('blob:') ||
+          localUri.startsWith('http') ||
+          localUri.startsWith('data:')
+        ) {
+          let blob: Blob;
+          try {
+            const res = await fetch(localUri);
+            if (!res.ok) {
+              throw new Error('unreachable');
+            }
+            blob = await res.blob();
+          } catch {
+            reject(
+              new ApiClientError(
+                'LOCAL_AUDIO_MISSING',
+                'Local recording is no longer available in this browser. Please record again.',
+                0,
+              ),
+            );
+            return;
+          }
           form.append('file', blob, fileName);
         } else {
           form.append('file', {

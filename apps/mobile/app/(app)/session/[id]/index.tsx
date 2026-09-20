@@ -12,7 +12,11 @@ import { LoadingState } from '@/src/components/LoadingState';
 import { UploadProgress } from '@/src/components/UploadProgress';
 import { ApiClientError } from '@/src/services/api';
 import { getSignedAudioUrl, uploadSessionAudio } from '@/src/services/audio-upload';
-import { getLocalAudioUri } from '@/src/services/local-audio';
+import {
+  clearLocalAudioUri,
+  getLocalAudioUri,
+  isLocalAudioReadable,
+} from '@/src/services/local-audio';
 import { getSession } from '@/src/services/sessions';
 import { colors, spacing, typography } from '@/src/theme';
 import { formatDurationHuman, formatSessionDate } from '@/src/utils/format';
@@ -38,6 +42,19 @@ export default function SessionDetailsScreen() {
     setUploadProgress(0);
     setUploadMessage(undefined);
     try {
+      const readable = await isLocalAudioReadable(uri);
+      if (!readable) {
+        await clearLocalAudioUri(sessionId);
+        setLocalUri(null);
+        setPlaybackUri(null);
+        setShowPlayer(false);
+        setUploadStatus('error');
+        setUploadMessage(
+          'Local recording is no longer available in this browser. Please record again.',
+        );
+        return;
+      }
+
       await uploadSessionAudio(sessionId, uri, (progress) => {
         setUploadProgress(progress.ratio);
       });
@@ -77,7 +94,13 @@ export default function SessionDetailsScreen() {
     try {
       const [data, uri] = await Promise.all([getSession(id), getLocalAudioUri(id)]);
       setSession(data);
-      setLocalUri(uri);
+
+      let usableUri = uri;
+      if (uri && !(await isLocalAudioReadable(uri))) {
+        await clearLocalAudioUri(id);
+        usableUri = null;
+      }
+      setLocalUri(usableUri);
 
       if (data.audioPath) {
         setUploadStatus('success');
@@ -88,20 +111,25 @@ export default function SessionDetailsScreen() {
           setPlaybackUri(signed.url);
           setShowPlayer(true);
         } catch {
-          setPlaybackUri(uri);
-          setShowPlayer(Boolean(uri));
+          setPlaybackUri(usableUri);
+          setShowPlayer(Boolean(usableUri));
         }
-      } else if (uri) {
-        setPlaybackUri(uri);
+      } else if (usableUri) {
+        setPlaybackUri(usableUri);
         setShowPlayer(true);
         if (autoUploadAttempted.current !== id) {
           autoUploadAttempted.current = id;
-          void runUpload(id, uri);
+          void runUpload(id, usableUri);
         }
       } else {
         setPlaybackUri(null);
         setShowPlayer(false);
-        setUploadStatus('idle');
+        setUploadStatus(uri ? 'error' : 'idle');
+        if (uri) {
+          setUploadMessage(
+            'Local recording is no longer available in this browser. Please record again.',
+          );
+        }
       }
     } catch (err) {
       setSession(null);

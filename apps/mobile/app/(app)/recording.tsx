@@ -21,6 +21,7 @@ import { RecordingTimer } from '@/src/components/RecordingTimer';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { ApiClientError } from '@/src/services/api';
+import { uploadSessionAudio } from '@/src/services/audio-upload';
 import { saveLocalAudioUri } from '@/src/services/local-audio';
 import { getSession, updateSession } from '@/src/services/sessions';
 import { colors, spacing, typography } from '@/src/theme';
@@ -206,8 +207,18 @@ export default function RecordingScreen() {
         Math.floor((recorder.getStatus().durationMillis ?? elapsedSeconds * 1000) / 1000),
       );
 
-      await saveLocalAudioUri(id, uri);
+      // Persist immediately (web converts ephemeral blob: → data:).
+      const storedUri = await saveLocalAudioUri(id, uri);
       await updateSession(id, { durationSeconds });
+
+      // Upload while the recording is still available in this tab.
+      try {
+        await uploadSessionAudio(id, storedUri);
+        router.replace(`/session/${id}/processing`);
+        return;
+      } catch {
+        // Fall through to session details where the user can retry from persisted audio.
+      }
 
       router.replace(`/session/${id}`);
     } catch (err) {
