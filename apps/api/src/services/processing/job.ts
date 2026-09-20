@@ -50,6 +50,7 @@ export async function runProcessingPipeline(
         sessionId,
         result.text,
         result.language ?? null,
+        result.segments ?? [],
       );
       await deps.sessions.update(deps.userId, sessionId, { status: 'transcribed' });
 
@@ -57,6 +58,7 @@ export async function runProcessingPipeline(
         sessionId,
         provider: deps.transcriptionProvider.name,
         textLength: result.text.length,
+        segmentCount: result.segments?.length ?? 0,
       });
     }
 

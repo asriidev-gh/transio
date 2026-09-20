@@ -64,13 +64,19 @@ export async function runTranscriptionJob(
       fileName,
     });
 
-    await deps.transcripts.upsertForSession(sessionId, result.text, result.language ?? null);
+    await deps.transcripts.upsertForSession(
+      sessionId,
+      result.text,
+      result.language ?? null,
+      result.segments ?? [],
+    );
     await deps.sessions.update(deps.userId, sessionId, { status: 'transcribed' });
 
     logger.info('Transcription completed', {
       sessionId,
       provider: deps.provider.name,
       textLength: result.text.length,
+      segmentCount: result.segments?.length ?? 0,
     });
   } catch (err) {
     logger.error('Transcription job failed', {

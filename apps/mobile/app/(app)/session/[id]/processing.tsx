@@ -7,7 +7,7 @@ import { LoadingState } from '@/src/components/LoadingState';
 import { ProcessingSteps } from '@/src/components/ProcessingSteps';
 import { ApiClientError } from '@/src/services/api';
 import { getSessionStatus, startProcessing } from '@/src/services/processing';
-import { colors, spacing, typography } from '@/src/theme';
+import { colors, radii, spacing, typography } from '@/src/theme';
 
 export default function ProcessingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -208,12 +208,22 @@ export default function ProcessingScreen() {
               : 'Ready to process this recording.'}
       </Text>
 
-      <ProcessingSteps
-        status={status.status}
-        hasAudio={status.hasAudio}
-        hasTranscript={status.hasTranscript}
-        hasSummary={status.hasSummary}
-      />
+      {inFlight && !done ? (
+        <View style={styles.safeBanner} accessibilityRole="text">
+          <Text style={styles.safeBannerText}>
+            Safe to leave. Come back anytime — this screen keeps syncing with the server.
+          </Text>
+        </View>
+      ) : null}
+
+      <View style={styles.card}>
+        <ProcessingSteps
+          status={status.status}
+          hasAudio={status.hasAudio}
+          hasTranscript={status.hasTranscript}
+          hasSummary={status.hasSummary}
+        />
+      </View>
 
       {failed && !done ? (
         <Pressable
@@ -233,10 +243,17 @@ export default function ProcessingScreen() {
         <View style={styles.actions}>
           <Pressable
             style={styles.primary}
-            onPress={() => router.replace(`/session/${id}/summary`)}
+            onPress={() => router.replace(`/session/${id}`)}
             accessibilityRole="button"
           >
-            <Text style={styles.primaryText}>View AI Summary</Text>
+            <Text style={styles.primaryText}>Open session workspace</Text>
+          </Pressable>
+          <Pressable
+            style={styles.secondary}
+            onPress={() => router.push(`/session/${id}/summary`)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.secondaryText}>View AI Summary</Text>
           </Pressable>
           <Pressable
             style={styles.secondary}
@@ -259,12 +276,6 @@ export default function ProcessingScreen() {
         >
           <Text style={styles.primaryText}>Start processing</Text>
         </Pressable>
-      ) : null}
-
-      {inFlight && !done ? (
-        <Text style={styles.footerHint}>
-          This screen updates from the server every few seconds. You can leave and come back.
-        </Text>
       ) : null}
     </View>
   );
@@ -290,7 +301,27 @@ const styles = StyleSheet.create({
   subtitle: {
     ...typography.body,
     color: colors.inkMuted,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  safeBanner: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+  safeBannerText: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.brand,
+    fontWeight: '600',
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
   },
   actions: {
     marginTop: spacing.lg,
@@ -298,13 +329,13 @@ const styles = StyleSheet.create({
   },
   primary: {
     backgroundColor: colors.brand,
-    borderRadius: 12,
+    borderRadius: radii.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
   },
   primaryText: {
-    color: '#FFFFFF',
+    color: colors.onBrand,
     fontWeight: '700',
     fontSize: 16,
   },
@@ -312,7 +343,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: radii.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
@@ -321,11 +352,5 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontWeight: '600',
     fontSize: 16,
-  },
-  footerHint: {
-    ...typography.caption,
-    color: colors.inkMuted,
-    textAlign: 'center',
-    marginTop: spacing.xl,
   },
 });

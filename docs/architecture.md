@@ -39,6 +39,11 @@ Phase 10 polishes the MVP: edit/delete sessions with confirmations, branded icon
 SpaceMono typography, settings details, pull-to-refresh on session details, accessibility
 labels, and production configuration docs.
 
+Phase 11 introduces the Harbor Studio visual theme (cool fog + signal teal), recording
+waveform, processing “safe to leave” UX, a tabbed session workspace (Summary | Transcript | Ask),
+docked audio playback with speed/seek, `POST /sessions/:id/ask` for Q&A over a session,
+and timed transcript segments with pause-heuristic speaker labels + playback sync.
+
 ## Design principles
 
 1. Secrets stay on the server.

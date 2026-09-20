@@ -169,7 +169,11 @@ export default function TranscriptScreen() {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Transcript</Text>
-        <TranscriptViewer text={transcript.text} language={transcript.language} />
+        <TranscriptViewer
+          text={transcript.text}
+          language={transcript.language}
+          segments={transcript.segments}
+        />
       </View>
     );
   }

@@ -2,7 +2,7 @@
 
 AI-powered seminar and group discussion recorder. Record audio, transcribe speech, and generate structured summaries — with a mobile-first Expo client and a Node.js API.
 
-> **Phase status:** Phase 10 (MVP Polish) is complete. The MVP phase roadmap is finished.
+> **Phase status:** Phase 11 (Harbor Studio + session workspace) is in progress. Phases 1–10 MVP are complete.
 
 ## Architecture
 
@@ -89,7 +89,9 @@ npx supabase db push
 Phase 3 migration: `202609200001_create_sessions.sql`  
 Phase 5 migration: `202609200002_session_audio_bucket.sql` (private `session-audio` bucket + storage RLS)  
 Phase 6 migration: `202609200003_create_transcripts.sql`  
-Phase 7 migration: `202609200004_create_summaries.sql`
+Phase 7 migration: `202609200004_create_summaries.sql`  
+Phase 11 migration: `202609200005_transcript_segments.sql` (timed segments JSON)  
+Phase 11 migration: `202609200006_session_favorites.sql` (`favorited_at`)
 
 ## Running the API
 
@@ -193,4 +195,5 @@ Zod (`SessionSummary`) before persistence. See [docs/ai.md](./docs/ai.md).
 7. **Claude AI summary**
 8. **End-to-end processing**
 9. **Reliability & UX**
-10. **MVP polish** ← current
+10. **MVP polish**
+11. **Harbor Studio + Ask** ← current

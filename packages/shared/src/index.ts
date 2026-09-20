@@ -34,9 +34,11 @@ export {
 } from './storage.js';
 
 export {
+  TranscriptSegmentSchema,
   TranscriptSchema,
   SessionStatusResponseSchema,
   TranscribeAcceptedSchema,
+  type TranscriptSegment,
   type Transcript,
   type SessionStatusResponse,
   type TranscribeAccepted,
@@ -56,6 +58,13 @@ export {
   PROCESSING_STAGES,
   type ProcessAccepted,
 } from './process.js';
+
+export {
+  AskQuestionSchema,
+  AskAnswerSchema,
+  type AskQuestionInput,
+  type AskAnswer,
+} from './ask.js';
 
 /** Standard API success envelope. */
 export const ApiSuccessSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>

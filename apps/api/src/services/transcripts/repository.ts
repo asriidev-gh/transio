@@ -1,4 +1,8 @@
-import { TranscriptSchema, type Transcript } from '@sessionai/shared';
+import {
+  TranscriptSchema,
+  type Transcript,
+  type TranscriptSegment,
+} from '@sessionai/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '../../middleware/error-handler.js';
 
@@ -7,8 +11,32 @@ export interface TranscriptRow {
   session_id: string;
   text: string;
   language: string | null;
+  segments?: unknown;
   created_at: string;
   updated_at: string;
+}
+
+function asSegments(value: unknown): TranscriptSegment[] {
+  if (!Array.isArray(value)) return [];
+  const out: TranscriptSegment[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as {
+      startMs?: unknown;
+      endMs?: unknown;
+      text?: unknown;
+      speaker?: unknown;
+    };
+    if (typeof row.startMs !== 'number' || typeof row.endMs !== 'number') continue;
+    if (typeof row.text !== 'string' || !row.text.trim()) continue;
+    out.push({
+      startMs: row.startMs,
+      endMs: row.endMs,
+      text: row.text.trim(),
+      speaker: typeof row.speaker === 'string' ? row.speaker : null,
+    });
+  }
+  return out;
 }
 
 export function mapTranscriptRow(row: TranscriptRow): Transcript {
@@ -17,6 +45,7 @@ export function mapTranscriptRow(row: TranscriptRow): Transcript {
     sessionId: row.session_id,
     text: row.text,
     language: row.language,
+    segments: asSegments(row.segments),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
@@ -28,6 +57,7 @@ export interface TranscriptRepository {
     sessionId: string,
     text: string,
     language: string | null,
+    segments?: TranscriptSegment[],
   ): Promise<Transcript>;
 }
 
@@ -56,6 +86,7 @@ export class SupabaseTranscriptRepository implements TranscriptRepository {
     sessionId: string,
     text: string,
     language: string | null,
+    segments: TranscriptSegment[] = [],
   ): Promise<Transcript> {
     const { data, error } = await this.client
       .from('transcripts')
@@ -64,6 +95,7 @@ export class SupabaseTranscriptRepository implements TranscriptRepository {
           session_id: sessionId,
           text,
           language,
+          segments,
         },
         { onConflict: 'session_id' },
       )
@@ -71,7 +103,10 @@ export class SupabaseTranscriptRepository implements TranscriptRepository {
       .single();
 
     if (error) {
-      throw new AppError('DATABASE_ERROR', 'Could not save transcript', 500);
+      const hint = error.message.includes('segments')
+        ? ' Apply migration 202609200005_transcript_segments.sql in Supabase.'
+        : '';
+      throw new AppError('DATABASE_ERROR', `Could not save transcript.${hint}`, 500);
     }
 
     return mapTranscriptRow(data as TranscriptRow);
@@ -89,6 +124,7 @@ export class InMemoryTranscriptRepository implements TranscriptRepository {
     sessionId: string,
     text: string,
     language: string | null,
+    segments: TranscriptSegment[] = [],
   ): Promise<Transcript> {
     const existing = this.bySession.get(sessionId);
     const now = new Date().toISOString();
@@ -97,6 +133,7 @@ export class InMemoryTranscriptRepository implements TranscriptRepository {
       sessionId,
       text,
       language,
+      segments,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

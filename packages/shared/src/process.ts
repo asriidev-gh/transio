@@ -12,7 +12,7 @@ export type ProcessAccepted = z.infer<typeof ProcessAcceptedSchema>;
 export const PROCESSING_STAGES = [
   { key: 'uploaded', label: 'Uploaded' },
   { key: 'transcribing', label: 'Transcribing' },
-  { key: 'transcribed', label: 'Transcript saved' },
-  { key: 'summarizing', label: 'Generating summary' },
-  { key: 'completed', label: 'Completed' },
+  { key: 'transcribed', label: 'Transcript + speakers' },
+  { key: 'summarizing', label: 'Summarizing' },
+  { key: 'completed', label: 'Finishing up' },
 ] as const;

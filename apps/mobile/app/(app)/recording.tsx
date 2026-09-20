@@ -20,10 +20,11 @@ import { RecordingButton } from '@/src/components/RecordingButton';
 import { RecordingTimer } from '@/src/components/RecordingTimer';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
+import { WaveformVisualizer } from '@/src/components/WaveformVisualizer';
 import { ApiClientError } from '@/src/services/api';
 import { saveLocalAudioUri } from '@/src/services/local-audio';
 import { getSession, updateSession } from '@/src/services/sessions';
-import { colors, spacing, typography } from '@/src/theme';
+import { colors, radii, spacing, typography } from '@/src/theme';
 
 type PermissionState = 'checking' | 'granted' | 'denied' | 'unavailable';
 
@@ -278,6 +279,8 @@ export default function RecordingScreen() {
 
       <RecordingTimer seconds={elapsedSeconds} />
 
+      <WaveformVisualizer active={isRecording && !stopping} />
+
       <View style={styles.statusRow}>
         <View
           style={[styles.dot, isRecording ? styles.dotLive : isPaused ? styles.dotPaused : styles.dotIdle]}
@@ -391,7 +394,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
-    borderRadius: 12,
+    borderRadius: radii.md,
     minWidth: 140,
     alignItems: 'center',
   },

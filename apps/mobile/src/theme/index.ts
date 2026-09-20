@@ -1,23 +1,28 @@
 /**
- * SessionAI visual theme — forest ink + warm parchment.
- * Avoids generic purple/cream AI defaults.
+ * SessionAI visual theme — Harbor Studio.
+ * Cool fog surfaces, deep harbor ink, signal teal. Distinct from blue Material
+ * clones and warm parchment/terracotta defaults.
  */
 import { Platform } from 'react-native';
 
 export const colors = {
-  background: '#F3EEE4',
-  backgroundAlt: '#E8E0D2',
-  surface: '#FFFBF5',
-  ink: '#14211C',
-  inkMuted: '#4A5A52',
-  brand: '#0F2A24',
-  brandSoft: '#1F4A40',
-  accent: '#C45C26',
-  accentSoft: '#E8A87C',
-  success: '#2F6B4F',
-  danger: '#A33B2B',
-  border: '#D5CBB8',
-  recording: '#B42318',
+  background: '#D8E0E4',
+  backgroundAlt: '#C5D0D6',
+  surface: '#F4F7F8',
+  ink: '#0B1A22',
+  inkMuted: '#5A6B74',
+  brand: '#0B1F2A',
+  brandSoft: '#1A3A4A',
+  accent: '#1AA6B7',
+  accentSoft: '#C8EBF0',
+  success: '#1F7A5C',
+  danger: '#C41E3A',
+  border: '#B8C5CC',
+  recording: '#C41E3A',
+  player: '#0B1F2A',
+  playerText: '#E8F0F2',
+  playerMuted: '#9BB0B8',
+  onBrand: '#F4F7F8',
 } as const;
 
 export const spacing = {
@@ -27,6 +32,13 @@ export const spacing = {
   lg: 24,
   xl: 32,
   xxl: 48,
+} as const;
+
+export const radii = {
+  sm: 10,
+  md: 14,
+  lg: 18,
+  pill: 999,
 } as const;
 
 /** SpaceMono loaded in root layout; falls back to monospace platforms. */
@@ -41,14 +53,14 @@ export const fonts = {
 export const typography = {
   brand: {
     fontFamily: fonts.mono,
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '700' as const,
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
   },
   title: {
     fontSize: 24,
     fontWeight: '600' as const,
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   body: {
     fontSize: 16,
@@ -56,7 +68,7 @@ export const typography = {
   },
   caption: {
     fontFamily: fonts.mono,
-    fontSize: 13,
+    fontSize: 12,
     lineHeight: 18,
   },
   mono: {
@@ -73,8 +85,8 @@ export const paperTheme = {
     background: colors.background,
     surface: colors.surface,
     error: colors.danger,
-    onPrimary: '#FFFFFF',
-    onSecondary: '#FFFFFF',
+    onPrimary: colors.onBrand,
+    onSecondary: colors.brand,
     onBackground: colors.ink,
     onSurface: colors.ink,
     outline: colors.border,

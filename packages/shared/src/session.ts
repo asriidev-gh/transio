@@ -55,6 +55,7 @@ export const SessionSchema = z.object({
   durationSeconds: z.number().int().nonnegative().nullable(),
   audioPath: z.string().nullable(),
   status: SessionStatusSchema,
+  favoritedAt: z.string().nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -98,6 +99,8 @@ export const UpdateSessionSchema = z
     durationSeconds: z.number().int().nonnegative().nullable().optional(),
     audioPath: z.string().min(1).nullable().optional(),
     status: SessionStatusSchema.optional(),
+    /** ISO timestamp to favorite; null to unfavorite. */
+    favoritedAt: z.string().datetime().nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',

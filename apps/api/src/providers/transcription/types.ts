@@ -9,9 +9,17 @@ export interface TranscriptionInput {
   language?: string;
 }
 
+export interface TranscriptionSegment {
+  startMs: number;
+  endMs: number;
+  text: string;
+  speaker?: string | null;
+}
+
 export interface TranscriptionResult {
   text: string;
   language?: string | null;
+  segments?: TranscriptionSegment[];
 }
 
 /**

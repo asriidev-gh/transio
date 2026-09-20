@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   AppState,
   type AppStateStatus,
@@ -7,11 +7,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { Session } from '@sessionai/shared';
+import type { Session, SessionType } from '@sessionai/shared';
 import { ConnectivityBanner } from '@/src/components/ConnectivityBanner';
 import { EmptyState } from '@/src/components/EmptyState';
 import { ErrorState } from '@/src/components/ErrorState';
@@ -21,7 +22,17 @@ import { useApiReachable } from '@/src/hooks/useApiReachable';
 import { useAuth } from '@/src/hooks/useAuth';
 import { ApiClientError } from '@/src/services/api';
 import { listSessions } from '@/src/services/sessions';
-import { colors, spacing, typography } from '@/src/theme';
+import { colors, radii, spacing, typography } from '@/src/theme';
+
+type FilterKey = 'all' | 'favorites' | SessionType;
+
+const FILTERS: Array<{ key: FilterKey; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'favorites', label: 'Favorites' },
+  { key: 'seminar', label: 'Seminar' },
+  { key: 'group_discussion', label: 'Discussion' },
+  { key: 'meeting', label: 'Meeting' },
+];
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -31,6 +42,8 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<FilterKey>('all');
 
   const loadSessions = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
@@ -70,10 +83,26 @@ export default function HomeScreen() {
     }, [loadSessions, refreshReachable]),
   );
 
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return sessions.filter((session) => {
+      if (filter === 'favorites' && !session.favoritedAt) return false;
+      if (filter !== 'all' && filter !== 'favorites' && session.sessionType !== filter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        session.title.toLowerCase().includes(q) ||
+        (session.description ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [filter, query, sessions]);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScrollView
         contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -93,11 +122,21 @@ export default function HomeScreen() {
         />
 
         <View style={styles.header}>
-          <Text style={styles.brand} accessibilityRole="header">
-            SessionAI
-          </Text>
+          <View style={styles.headerRow}>
+            <Text style={styles.brand} accessibilityRole="header">
+              Session<Text style={styles.brandAccent}>AI</Text>
+            </Text>
+            <Pressable
+              onPress={() => router.push('/settings')}
+              style={styles.settingsBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
+            >
+              <Text style={styles.settingsBtnText}>Settings</Text>
+            </Pressable>
+          </View>
           <Text style={styles.tagline}>
-            Record seminars and discussions. Transcribe. Summarize.
+            Record seminars and discussions. Transcribe. Summarize. Ask.
           </Text>
           {user?.email ? <Text style={styles.signedIn}>Signed in as {user.email}</Text> : null}
         </View>
@@ -106,18 +145,51 @@ export default function HomeScreen() {
           style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
           onPress={() => router.push('/new-session')}
           accessibilityRole="button"
-          accessibilityLabel="New Recording"
+          accessibilityLabel="New session"
         >
-          <Text style={styles.ctaText}>+ New Recording</Text>
+          <Text style={styles.ctaText}>New session</Text>
         </Pressable>
 
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chips}
+          accessibilityRole="tablist"
+        >
+          {FILTERS.map((chip) => {
+            const selected = filter === chip.key;
+            return (
+              <Pressable
+                key={chip.key}
+                onPress={() => setFilter(chip.key)}
+                style={[styles.chip, selected && styles.chipSelected]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                accessibilityLabel={chip.label}
+              >
+                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                  {chip.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        <TextInput
+          style={styles.search}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search sessions"
+          placeholderTextColor={colors.inkMuted}
+          accessibilityLabel="Search sessions"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+        />
+
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Sessions</Text>
-            <Pressable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Open settings">
-              <Text style={styles.settingsLink}>Settings</Text>
-            </Pressable>
-          </View>
+          <Text style={styles.sectionTitle}>
+            {filter === 'favorites' ? 'Favorites' : 'Sessions'}
+          </Text>
 
           {loading ? <LoadingState message="Loading sessions…" /> : null}
 
@@ -133,13 +205,25 @@ export default function HomeScreen() {
             <EmptyState
               title="No sessions yet."
               description="Record your first seminar or group discussion."
-              actionLabel="New Recording"
+              actionLabel="New session"
               onAction={() => router.push('/new-session')}
             />
           ) : null}
 
+          {!loading && !error && sessions.length > 0 && filtered.length === 0 ? (
+            <EmptyState
+              title="No matches."
+              description="Try another search or filter."
+              actionLabel="Clear filters"
+              onAction={() => {
+                setQuery('');
+                setFilter('all');
+              }}
+            />
+          ) : null}
+
           {!loading && !error
-            ? sessions.map((session) => (
+            ? filtered.map((session) => (
                 <SessionCard
                   key={session.id}
                   session={session}
@@ -162,54 +246,103 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.xxl,
-    gap: spacing.lg,
+    gap: spacing.md,
   },
   header: {
     gap: spacing.sm,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
   },
   brand: {
     ...typography.brand,
     color: colors.brand,
   },
+  brandAccent: {
+    color: colors.accent,
+  },
+  settingsBtn: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  settingsBtnText: {
+    ...typography.caption,
+    color: colors.ink,
+    fontWeight: '700',
+  },
   tagline: {
     ...typography.body,
     color: colors.inkMuted,
-    maxWidth: 320,
+    maxWidth: 340,
   },
   signedIn: {
     ...typography.caption,
     color: colors.brandSoft,
   },
   cta: {
-    alignSelf: 'flex-start',
+    alignSelf: 'stretch',
     backgroundColor: colors.brand,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    borderRadius: 12,
+    borderRadius: radii.md,
+    alignItems: 'center',
   },
   ctaPressed: {
     opacity: 0.88,
   },
   ctaText: {
-    color: '#FFFFFF',
+    color: colors.onBrand,
     fontSize: 16,
+    fontWeight: '700',
+  },
+  chips: {
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  chip: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  chipSelected: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  chipText: {
+    fontSize: 13,
     fontWeight: '600',
+    color: colors.inkMuted,
+  },
+  chipTextSelected: {
+    color: colors.onBrand,
+  },
+  search: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    color: colors.ink,
+    fontSize: 15,
   },
   section: {
     gap: spacing.sm,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
   sectionTitle: {
     ...typography.title,
     fontSize: 20,
     color: colors.ink,
-  },
-  settingsLink: {
-    color: colors.brandSoft,
-    fontWeight: '600',
+    marginBottom: spacing.xs,
   },
 });

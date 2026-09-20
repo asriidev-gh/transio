@@ -22,6 +22,10 @@ import {
 import { SupabaseTranscriptRepository } from '../services/transcripts/repository.js';
 import { registerAudioRoutes, type AudioStorageFactory } from './audio.js';
 import {
+  registerAskRoutes,
+  type AskProviderFactory,
+} from './ask.js';
+import {
   registerProcessRoutes,
   tryStartProcessingAfterUpload,
   type ProcessJobRunner,
@@ -88,6 +92,7 @@ export function createSessionsRouter(options: {
   runTranscriptionJob?: JobRunner;
   createSummaryRepository?: SummaryRepoFactory;
   createSummaryProvider?: SummaryProviderFactory;
+  createAskProvider?: AskProviderFactory;
   runSummaryJob?: SummaryJobRunner;
   runProcessJob?: ProcessJobRunner;
   authenticate?: RequestHandler;
@@ -169,6 +174,13 @@ export function createSessionsRouter(options: {
     createTranscriptionProvider: options.createTranscriptionProvider,
     createSummaryProvider: options.createSummaryProvider,
     runJob: runProcessJob,
+  });
+
+  registerAskRoutes(router, {
+    createRepository,
+    createTranscriptRepository: options.createTranscriptRepository,
+    createSummaryRepository: options.createSummaryRepository,
+    createAskProvider: options.createAskProvider,
   });
 
   router.get('/:id', async (req, res, next) => {

@@ -2,7 +2,63 @@ import { getEnv } from '../../lib/env.js';
 import { logger } from '../../lib/logger.js';
 import { withProviderRetry } from '../../lib/retry.js';
 import { AppError } from '../../middleware/error-handler.js';
-import type { TranscriptionInput, TranscriptionProvider, TranscriptionResult } from './types.js';
+import type {
+  TranscriptionInput,
+  TranscriptionProvider,
+  TranscriptionResult,
+  TranscriptionSegment,
+} from './types.js';
+
+interface WhisperVerboseSegment {
+  start?: number;
+  end?: number;
+  text?: string;
+}
+
+interface WhisperVerbosePayload {
+  text?: string;
+  language?: string;
+  segments?: WhisperVerboseSegment[];
+}
+
+const SPEAKER_GAP_MS = 1200;
+
+/**
+ * Map Whisper timed segments into SessionAI segments.
+ * Speaker labels are pause-heuristic only (not true diarization).
+ */
+export function mapWhisperSegments(
+  raw: WhisperVerboseSegment[] | undefined,
+): TranscriptionSegment[] {
+  if (!raw?.length) return [];
+
+  const timed = raw
+    .map((seg) => {
+      const text = typeof seg.text === 'string' ? seg.text.trim() : '';
+      if (!text) return null;
+      const startMs = Math.max(0, Math.round((seg.start ?? 0) * 1000));
+      const endMs = Math.max(startMs, Math.round((seg.end ?? seg.start ?? 0) * 1000));
+      return { startMs, endMs, text };
+    })
+    .filter((seg): seg is { startMs: number; endMs: number; text: string } => seg !== null);
+
+  let speakerIndex = 0;
+  let previousEnd = -SPEAKER_GAP_MS;
+
+  return timed.map((seg) => {
+    if (seg.startMs - previousEnd >= SPEAKER_GAP_MS) {
+      // Keep first speaker on the opening gap; rotate afterward.
+      if (previousEnd >= 0) {
+        speakerIndex = (speakerIndex + 1) % 2;
+      }
+    }
+    previousEnd = seg.endMs;
+    return {
+      ...seg,
+      speaker: speakerIndex === 0 ? 'Speaker A' : 'Speaker B',
+    };
+  });
+}
 
 /**
  * OpenAI Whisper-compatible HTTP transcription provider.
@@ -66,7 +122,7 @@ export class HttpTranscriptionProvider implements TranscriptionProvider {
         );
       }
 
-      const payload = (await response.json()) as { text?: string; language?: string };
+      const payload = (await response.json()) as WhisperVerbosePayload;
       const text = payload.text?.trim();
       if (!text) {
         throw new AppError(
@@ -76,9 +132,12 @@ export class HttpTranscriptionProvider implements TranscriptionProvider {
         );
       }
 
+      const segments = mapWhisperSegments(payload.segments);
+
       return {
         text,
         language: payload.language ?? input.language ?? null,
+        segments,
       };
     });
   }
@@ -91,7 +150,18 @@ export class FakeTranscriptionProvider implements TranscriptionProvider {
   constructor(private readonly text = 'This is a test transcript.') {}
 
   async transcribe(_input: TranscriptionInput): Promise<TranscriptionResult> {
-    return { text: this.text, language: 'en' };
+    return {
+      text: this.text,
+      language: 'en',
+      segments: [
+        {
+          startMs: 0,
+          endMs: 2000,
+          text: this.text,
+          speaker: 'Speaker A',
+        },
+      ],
+    };
   }
 }
 

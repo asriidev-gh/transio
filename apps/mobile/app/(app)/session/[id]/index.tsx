@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -17,6 +17,7 @@ import {
 import { AudioPlayer } from '@/src/components/AudioPlayer';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
+import { SessionWorkspace } from '@/src/components/SessionWorkspace';
 import { UploadProgress } from '@/src/components/UploadProgress';
 import { ApiClientError } from '@/src/services/api';
 import { getSignedAudioUrl, uploadSessionAudio } from '@/src/services/audio-upload';
@@ -25,9 +26,11 @@ import {
   getLocalAudioUri,
   isLocalAudioReadable,
 } from '@/src/services/local-audio';
-import { deleteSession, getSession } from '@/src/services/sessions';
-import { colors, spacing, typography } from '@/src/theme';
+import { deleteSession, getSession, updateSession } from '@/src/services/sessions';
+import { colors, radii, spacing, typography } from '@/src/theme';
 import { formatDurationHuman, formatSessionDate } from '@/src/utils/format';
+import { shareSessionContent } from '@/src/utils/share-session';
+import type { SummaryRecord, Transcript } from '@sessionai/shared';
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 
@@ -46,6 +49,13 @@ export default function SessionDetailsScreen() {
   const [proceeding, setProceeding] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [playbackTimeSec, setPlaybackTimeSec] = useState(0);
+  const [seekRequest, setSeekRequest] = useState<{ id: number; sec: number } | null>(null);
+  const [favoriting, setFavoriting] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareSummary, setShareSummary] = useState<SummaryRecord | null>(null);
+  const [shareTranscript, setShareTranscript] = useState<Transcript | null>(null);
+  const seekIdRef = useRef(0);
 
   const runUploadAndProcess = useCallback(
     async (sessionId: string, uri: string) => {
@@ -158,6 +168,53 @@ export default function SessionDetailsScreen() {
     );
   }, [id, router, session]);
 
+  const onToggleFavorite = useCallback(() => {
+    if (!id || typeof id !== 'string' || !session) return;
+    void (async () => {
+      setFavoriting(true);
+      try {
+        const next = await updateSession(id, {
+          favoritedAt: session.favoritedAt ? null : new Date().toISOString(),
+        });
+        setSession(next);
+      } catch (err) {
+        setError(
+          err instanceof ApiClientError
+            ? err.message
+            : 'Could not update favorite. Apply the favorites migration if needed.',
+        );
+      } finally {
+        setFavoriting(false);
+      }
+    })();
+  }, [id, session]);
+
+  const onShare = useCallback(() => {
+    if (!session) return;
+    void (async () => {
+      setSharing(true);
+      try {
+        await shareSessionContent({
+          session,
+          summary: shareSummary,
+          transcript: shareTranscript,
+        });
+      } catch {
+        setError('Could not open the share sheet.');
+      } finally {
+        setSharing(false);
+      }
+    })();
+  }, [session, shareSummary, shareTranscript]);
+
+  const onWorkspaceContent = useCallback(
+    (content: { summary: SummaryRecord | null; transcript: Transcript | null }) => {
+      setShareSummary(content.summary);
+      setShareTranscript(content.transcript);
+    },
+    [],
+  );
+
   const load = useCallback(async () => {
     if (!id || typeof id !== 'string') {
       setError('Invalid session id.');
@@ -254,6 +311,16 @@ export default function SessionDetailsScreen() {
   const canRecord = !localUri && !session.audioPath;
   const hasLocalDraft = Boolean(localUri) && !session.audioPath;
   const hasPlayback = Boolean(playbackUri);
+  const showWorkspace =
+    session.status === 'completed' ||
+    session.status === 'transcribed' ||
+    session.status === 'summarizing' ||
+    session.status === 'transcribing';
+  const hasTranscript =
+    session.status === 'transcribed' ||
+    session.status === 'summarizing' ||
+    session.status === 'completed';
+  const hasSummary = session.status === 'completed';
 
   return (
     <ScrollView
@@ -282,6 +349,31 @@ export default function SessionDetailsScreen() {
       {session.description ? <Text style={styles.description}>{session.description}</Text> : null}
 
       <View style={styles.manageRow}>
+        <Pressable
+          style={[styles.manageButton, session.favoritedAt ? styles.favoriteOn : null]}
+          onPress={onToggleFavorite}
+          disabled={favoriting}
+          accessibilityRole="button"
+          accessibilityLabel={session.favoritedAt ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <Text
+            style={[
+              styles.manageButtonText,
+              session.favoritedAt ? styles.favoriteOnText : null,
+            ]}
+          >
+            {favoriting ? '…' : session.favoritedAt ? '★ Favorited' : '☆ Favorite'}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.manageButton}
+          onPress={onShare}
+          disabled={sharing}
+          accessibilityRole="button"
+          accessibilityLabel="Share session"
+        >
+          <Text style={styles.manageButtonText}>{sharing ? 'Sharing…' : 'Share'}</Text>
+        </Pressable>
         <Pressable
           style={styles.manageButton}
           onPress={() => router.push(`/session/${session.id}/edit`)}
@@ -312,7 +404,13 @@ export default function SessionDetailsScreen() {
             </Text>
 
             {hasPlayback && showPlayer && playbackUri ? (
-              <AudioPlayer uri={playbackUri} title={session.title} />
+              <AudioPlayer
+                uri={playbackUri}
+                title={session.title}
+                variant="dock"
+                onProgress={setPlaybackTimeSec}
+                seekRequest={seekRequest}
+              />
             ) : null}
 
             {uploadStatus === 'uploading' || uploadStatus === 'error' ? (
@@ -366,7 +464,13 @@ export default function SessionDetailsScreen() {
         ) : null}
 
         {!hasLocalDraft && hasPlayback && showPlayer && playbackUri ? (
-          <AudioPlayer uri={playbackUri} title={session.title} />
+          <AudioPlayer
+            uri={playbackUri}
+            title={session.title}
+            variant="dock"
+            onProgress={setPlaybackTimeSec}
+            seekRequest={seekRequest}
+          />
         ) : null}
 
         {!hasLocalDraft && hasPlayback && !showPlayer ? (
@@ -414,52 +518,22 @@ export default function SessionDetailsScreen() {
           }
         />
 
-        <ActionRow
-          label="📄 Transcript"
-          hint={
-            session.audioPath
-              ? session.status === 'transcribed' || session.status === 'completed'
-                ? 'View the full transcript'
-                : session.status === 'transcribing'
-                  ? 'Transcription in progress'
-                  : session.status === 'failed'
-                    ? 'Open processing to retry'
-                    : 'Available after transcription'
-              : 'Available after you proceed with a recording'
-          }
-          disabled={
-            !(
-              session.status === 'transcribed' ||
-              session.status === 'summarizing' ||
-              session.status === 'completed' ||
-              session.status === 'transcribing'
-            )
-          }
-          onPress={
-            session.status === 'transcribed' ||
-            session.status === 'summarizing' ||
-            session.status === 'completed' ||
-            session.status === 'transcribing'
-              ? () => router.push(`/session/${session.id}/transcript`)
-              : undefined
-          }
-        />
-        <ActionRow
-          label="✨ AI Summary"
-          hint={
-            session.status === 'completed'
-              ? 'View the structured AI summary'
-              : session.status === 'summarizing'
-                ? 'Summary in progress'
-                : 'Available after processing completes'
-          }
-          disabled={!(session.status === 'completed' || session.status === 'summarizing')}
-          onPress={
-            session.status === 'completed' || session.status === 'summarizing'
-              ? () => router.push(`/session/${session.id}/summary`)
-              : undefined
-          }
-        />
+        {showWorkspace ? (
+          <SessionWorkspace
+            sessionId={session.id}
+            sessionTitle={session.title}
+            hasTranscript={hasTranscript}
+            hasSummary={hasSummary}
+            initialTab={hasSummary ? 'summary' : 'transcript'}
+            currentTimeSec={playbackTimeSec}
+            onContentLoaded={onWorkspaceContent}
+            onSeekMs={(startMs) => {
+              seekIdRef.current += 1;
+              setSeekRequest({ id: seekIdRef.current, sec: startMs / 1000 });
+              setShowPlayer(true);
+            }}
+          />
+        ) : null}
       </View>
 
       <Pressable onPress={() => router.back()} style={styles.back} accessibilityRole="button" accessibilityLabel="Back to sessions">
@@ -532,6 +606,7 @@ const styles = StyleSheet.create({
   },
   manageRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     marginTop: spacing.md,
   },
@@ -539,7 +614,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    borderRadius: 10,
+    borderRadius: radii.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -548,9 +623,16 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontWeight: '700',
   },
+  favoriteOn: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+  },
+  favoriteOnText: {
+    color: colors.brand,
+  },
   dangerButton: {
     borderColor: colors.danger,
-    backgroundColor: '#F8E8E4',
+    backgroundColor: '#F8D5DA',
   },
   dangerButtonText: {
     color: colors.danger,
@@ -563,7 +645,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: radii.md,
     padding: spacing.md,
     gap: spacing.md,
   },
@@ -578,13 +660,13 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: colors.brand,
-    borderRadius: 12,
+    borderRadius: radii.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#FFFFFF',
+    color: colors.onBrand,
     fontWeight: '700',
     fontSize: 16,
   },
@@ -592,7 +674,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,
-    borderRadius: 12,
+    borderRadius: radii.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
@@ -609,7 +691,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: radii.md,
     padding: spacing.md,
     gap: 4,
   },

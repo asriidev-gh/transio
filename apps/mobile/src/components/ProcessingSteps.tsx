@@ -26,7 +26,7 @@ const STEPS: Array<{
   },
   {
     key: 'transcript',
-    label: 'Transcript saved',
+    label: 'Transcript + speakers',
     matches: (status, flags) => {
       if (flags.hasTranscript || status === 'transcribed' || status === 'summarizing' || status === 'completed') {
         return 'done';
@@ -36,7 +36,7 @@ const STEPS: Array<{
   },
   {
     key: 'summarizing',
-    label: 'Generating summary',
+    label: 'Summarizing',
     matches: (status, flags) => {
       if (flags.hasSummary || status === 'completed') return 'done';
       if (status === 'summarizing') return 'active';
@@ -46,7 +46,7 @@ const STEPS: Array<{
   },
   {
     key: 'completed',
-    label: 'Completed',
+    label: 'Finishing up',
     matches: (status, flags) => {
       if (status === 'completed' || flags.hasSummary) return 'done';
       return 'pending';
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   lineActive: {
-    backgroundColor: colors.brandSoft,
+    backgroundColor: colors.accent,
   },
   labelWrap: {
     flex: 1,

@@ -1,10 +1,21 @@
 import { z } from 'zod';
 
+/** Timed transcript chunk from Whisper verbose_json (optional speaker label). */
+export const TranscriptSegmentSchema = z.object({
+  startMs: z.number().nonnegative(),
+  endMs: z.number().nonnegative(),
+  text: z.string().min(1),
+  speaker: z.string().nullable().optional(),
+});
+
+export type TranscriptSegment = z.infer<typeof TranscriptSegmentSchema>;
+
 export const TranscriptSchema = z.object({
   id: z.string().uuid(),
   sessionId: z.string().uuid(),
   text: z.string().min(1),
   language: z.string().nullable(),
+  segments: z.array(TranscriptSegmentSchema).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

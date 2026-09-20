@@ -7,6 +7,7 @@
 - Phase 8: end-to-end processing pipeline
 - Phase 9: reliability (provider retries, recovery UX)
 - Phase 10: MVP polish (edit/delete, confirmations, production config)
+- Phase 11: Harbor Studio UI + `POST /sessions/:id/ask` Q&A over transcript/summary
 
 ## Pipeline
 
@@ -86,6 +87,19 @@ pipeline stages from backend status (`hasAudio`, `hasTranscript`, `hasSummary`).
 | `GET` | `/sessions/:id/summary` | Structured summary record |
 | `POST` | `/sessions/:id/process` | Full pipeline (transcribe → summarize) |
 | `GET` | `/sessions/:id/status` | `{ status, hasAudio, hasTranscript, hasSummary }` for polling |
+
+## Ask (session Q&A)
+
+`POST /sessions/:id/ask` with `{ "question": "..." }` returns
+`{ answer, suggestedFollowUps }` using Claude grounded in the session transcript
+(and summary when available). Requires `ANTHROPIC_API_KEY` on the API.
+
+## Transcript segments
+
+Whisper `verbose_json` segments are stored on `transcripts.segments` as
+`{ startMs, endMs, text, speaker? }`. Speaker labels are pause-heuristic
+(Speaker A/B) until a true diarization provider is added.
+Migration: `supabase/migrations/202609200005_transcript_segments.sql`
 
 ## Database
 

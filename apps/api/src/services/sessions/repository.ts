@@ -82,6 +82,7 @@ export class SupabaseSessionRepository implements SessionRepository {
     if (input.durationSeconds !== undefined) patch.duration_seconds = input.durationSeconds;
     if (input.audioPath !== undefined) patch.audio_path = input.audioPath;
     if (input.status !== undefined) patch.status = input.status;
+    if (input.favoritedAt !== undefined) patch.favorited_at = input.favoritedAt;
 
     const { data, error } = await this.client
       .from('sessions')
@@ -92,7 +93,10 @@ export class SupabaseSessionRepository implements SessionRepository {
       .maybeSingle();
 
     if (error) {
-      throw new AppError('DATABASE_ERROR', 'Could not update session', 500);
+      const hint = error.message.includes('favorited_at')
+        ? ' Apply migration 202609200006_session_favorites.sql in Supabase.'
+        : '';
+      throw new AppError('DATABASE_ERROR', `Could not update session.${hint}`, 500);
     }
 
     if (!data) {
@@ -149,6 +153,7 @@ export class InMemorySessionRepository implements SessionRepository {
       durationSeconds: null,
       audioPath: null,
       status: 'recording',
+      favoritedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -177,6 +182,8 @@ export class InMemorySessionRepository implements SessionRepository {
         input.durationSeconds !== undefined ? input.durationSeconds : existing.durationSeconds,
       audioPath: input.audioPath !== undefined ? input.audioPath : existing.audioPath,
       status: input.status ?? existing.status,
+      favoritedAt:
+        input.favoritedAt !== undefined ? input.favoritedAt : existing.favoritedAt,
       updatedAt: new Date().toISOString(),
     };
 

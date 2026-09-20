@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
   },
   innerStop: {
     borderColor: colors.recording,
-    backgroundColor: '#F8E8E6',
+    backgroundColor: '#F8D5DA',
   },
   recordDot: {
     width: 36,
