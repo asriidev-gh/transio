@@ -6,7 +6,13 @@ import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { ProcessingSteps } from '@/src/components/ProcessingSteps';
 import { ApiClientError } from '@/src/services/api';
+import { enqueueCompletionNotice } from '@/src/services/completion-inbox';
+import {
+  notifyProcessingComplete,
+  requestNotificationPermission,
+} from '@/src/services/notifications';
 import { getSessionStatus, startProcessing } from '@/src/services/processing';
+import { getSession } from '@/src/services/sessions';
 import { colors, radii, spacing, typography } from '@/src/theme';
 
 export default function ProcessingScreen() {
@@ -16,8 +22,11 @@ export default function ProcessingScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [sessionTitle, setSessionTitle] = useState<string>('Session');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedRef = useRef(false);
+  const notifiedRef = useRef(false);
+  const sawInFlightRef = useRef(false);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -25,6 +34,17 @@ export default function ProcessingScreen() {
       pollRef.current = null;
     }
   }, []);
+
+  const announceComplete = useCallback(async (sessionId: string) => {
+    if (notifiedRef.current) return;
+    notifiedRef.current = true;
+    try {
+      await enqueueCompletionNotice({ sessionId, title: sessionTitle });
+      await notifyProcessingComplete({ sessionId, title: sessionTitle });
+    } catch {
+      // Non-fatal — UI already shows completed state.
+    }
+  }, [sessionTitle]);
 
   const refreshStatus = useCallback(async (sessionId: string) => {
     const next = await getSessionStatus(sessionId);
@@ -35,6 +55,7 @@ export default function ProcessingScreen() {
   const beginPolling = useCallback(
     (sessionId: string) => {
       stopPolling();
+      sawInFlightRef.current = true;
       pollRef.current = setInterval(() => {
         void (async () => {
           try {
@@ -43,6 +64,9 @@ export default function ProcessingScreen() {
               stopPolling();
               setLoading(false);
               setError(null);
+              if (sawInFlightRef.current) {
+                await announceComplete(sessionId);
+              }
               return;
             }
             if (next.status === 'failed') {
@@ -58,7 +82,7 @@ export default function ProcessingScreen() {
         })();
       }, 2000);
     },
-    [refreshStatus, stopPolling],
+    [announceComplete, refreshStatus, stopPolling],
   );
 
   const kickOff = useCallback(
@@ -66,6 +90,7 @@ export default function ProcessingScreen() {
       setStarting(true);
       setError(null);
       try {
+        void requestNotificationPermission();
         await startProcessing(sessionId);
         setLoading(true);
         beginPolling(sessionId);
@@ -93,6 +118,13 @@ export default function ProcessingScreen() {
     setLoading(true);
     setError(null);
     try {
+      try {
+        const session = await getSession(id);
+        setSessionTitle(session.title);
+      } catch {
+        // Title is optional for notifications.
+      }
+
       const next = await refreshStatus(id);
 
       if (next.status === 'completed' || next.hasSummary) {
@@ -211,7 +243,7 @@ export default function ProcessingScreen() {
       {inFlight && !done ? (
         <View style={styles.safeBanner} accessibilityRole="text">
           <Text style={styles.safeBannerText}>
-            Safe to leave. Come back anytime — this screen keeps syncing with the server.
+            Safe to leave. We’ll notify you when processing finishes (if notifications are allowed).
           </Text>
         </View>
       ) : null}

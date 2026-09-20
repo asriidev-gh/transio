@@ -44,6 +44,9 @@ waveform, processing “safe to leave” UX, a tabbed session workspace (Summary
 docked audio playback with speed/seek, `POST /sessions/:id/ask` for Q&A over a session,
 and timed transcript segments with Claude context speaker labels (plus rename) and playback sync.
 
+Processing completion adds an optional browser notification plus a home “Ready to review”
+banner so users can leave during the pipeline and return to the finished session.
+
 ## Design principles
 
 1. Secrets stay on the server.

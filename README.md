@@ -197,3 +197,5 @@ Zod (`SessionSummary`) before persistence. See [docs/ai.md](./docs/ai.md).
 9. **Reliability & UX**
 10. **MVP polish**
 11. **Harbor Studio + Ask** ← current
+    - Theme, workspace tabs, Ask, segments/speakers, favorites/share
+    - Processing completion: browser notification + home “Ready to review” banner

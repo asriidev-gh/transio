@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   AppState,
   type AppStateStatus,
@@ -13,6 +13,7 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Session, SessionType } from '@sessionai/shared';
+import { CompletionBanner } from '@/src/components/CompletionBanner';
 import { ConnectivityBanner } from '@/src/components/ConnectivityBanner';
 import { EmptyState } from '@/src/components/EmptyState';
 import { ErrorState } from '@/src/components/ErrorState';
@@ -21,10 +22,19 @@ import { SessionCard } from '@/src/components/SessionCard';
 import { useApiReachable } from '@/src/hooks/useApiReachable';
 import { useAuth } from '@/src/hooks/useAuth';
 import { ApiClientError } from '@/src/services/api';
+import {
+  dismissCompletionNotice,
+  enqueueCompletionNotice,
+  listCompletionNotices,
+  type CompletionNotice,
+} from '@/src/services/completion-inbox';
+import { notifyProcessingComplete } from '@/src/services/notifications';
 import { listSessions } from '@/src/services/sessions';
 import { colors, radii, spacing, typography } from '@/src/theme';
 
 type FilterKey = 'all' | 'favorites' | SessionType;
+
+const IN_FLIGHT_STATUSES = new Set(['transcribing', 'summarizing']);
 
 const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: 'all', label: 'All' },
@@ -33,6 +43,10 @@ const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: 'group_discussion', label: 'Discussion' },
   { key: 'meeting', label: 'Meeting' },
 ];
+
+function isInFlight(session: Session): boolean {
+  return IN_FLIGHT_STATUSES.has(session.status);
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -44,6 +58,10 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [notice, setNotice] = useState<CompletionNotice | null>(null);
+  const inFlightIdsRef = useRef<Set<string>>(new Set());
+  const announcedIdsRef = useRef<Set<string>>(new Set());
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadSessions = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
@@ -55,6 +73,9 @@ export default function HomeScreen() {
     try {
       const data = await listSessions();
       setSessions(data);
+      inFlightIdsRef.current = new Set(data.filter(isInFlight).map((s) => s.id));
+      const notices = await listCompletionNotices();
+      setNotice(notices[0] ?? null);
     } catch (err) {
       const message =
         err instanceof ApiClientError
@@ -64,6 +85,34 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  }, []);
+
+  const reconcileCompletions = useCallback(async (data: Session[]) => {
+    const previouslyInFlight = inFlightIdsRef.current;
+    const nextInFlight = new Set(data.filter(isInFlight).map((s) => s.id));
+    const newlyCompleted = data.filter(
+      (session) =>
+        previouslyInFlight.has(session.id) &&
+        session.status === 'completed' &&
+        !announcedIdsRef.current.has(session.id),
+    );
+
+    for (const session of newlyCompleted) {
+      announcedIdsRef.current.add(session.id);
+      try {
+        await enqueueCompletionNotice({ sessionId: session.id, title: session.title });
+        await notifyProcessingComplete({ sessionId: session.id, title: session.title });
+      } catch {
+        // Non-fatal — banner can still appear on next list refresh.
+      }
+    }
+
+    inFlightIdsRef.current = nextInFlight;
+
+    if (newlyCompleted.length > 0) {
+      const notices = await listCompletionNotices();
+      setNotice(notices[0] ?? null);
     }
   }, []);
 
@@ -79,8 +128,29 @@ export default function HomeScreen() {
         }
       };
       const sub = AppState.addEventListener('change', onAppState);
-      return () => sub.remove();
-    }, [loadSessions, refreshReachable]),
+
+      // Poll only while Home is focused and something is still processing.
+      pollRef.current = setInterval(() => {
+        if (inFlightIdsRef.current.size === 0) return;
+        void (async () => {
+          try {
+            const data = await listSessions();
+            setSessions(data);
+            await reconcileCompletions(data);
+          } catch {
+            // Keep polling through transient blips.
+          }
+        })();
+      }, 4000);
+
+      return () => {
+        sub.remove();
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      };
+    }, [loadSessions, reconcileCompletions, refreshReachable]),
   );
 
   const filtered = useMemo(() => {
@@ -120,6 +190,20 @@ export default function HomeScreen() {
             void loadSessions(true);
           }}
         />
+
+        {notice ? (
+          <CompletionBanner
+            title={notice.title}
+            onOpen={() => {
+              const sessionId = notice.sessionId;
+              void dismissCompletionNotice(sessionId).then(() => setNotice(null));
+              router.push(`/session/${sessionId}`);
+            }}
+            onDismiss={() => {
+              void dismissCompletionNotice(notice.sessionId).then(() => setNotice(null));
+            }}
+          />
+        ) : null}
 
         <View style={styles.header}>
           <View style={styles.headerRow}>
