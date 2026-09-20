@@ -42,7 +42,11 @@ export class SupabaseTranscriptRepository implements TranscriptRepository {
       .maybeSingle();
 
     if (error) {
-      throw new AppError('DATABASE_ERROR', 'Could not load transcript', 500);
+      throw new AppError(
+        'DATABASE_ERROR',
+        `Could not load transcript (${error.message}). Apply migration 202609200003_create_transcripts.sql in Supabase.`,
+        500,
+      );
     }
     if (!data) return null;
     return mapTranscriptRow(data as TranscriptRow);

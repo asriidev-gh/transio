@@ -178,8 +178,12 @@ export function registerTranscriptionRoutes(
       }
 
       const [transcript, summary] = await Promise.all([
-        createTranscriptRepository(req).getBySessionId(id),
-        createSummaryRepository(req).getBySessionId(id),
+        createTranscriptRepository(req)
+          .getBySessionId(id)
+          .catch(() => null),
+        createSummaryRepository(req)
+          .getBySessionId(id)
+          .catch(() => null),
       ]);
       const payload = SessionStatusResponseSchema.parse({
         sessionId: id,
