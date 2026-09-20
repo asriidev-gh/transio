@@ -3,7 +3,7 @@
 ## Phase status
 
 - Phase 6: speech-to-text provider + transcript persistence + transcript UI
-- Phase 7: Claude structured summaries (not yet)
+- Phase 7: Claude structured summaries ← current
 
 ## Pipeline
 
@@ -15,10 +15,14 @@ Upload audio
   → TranscriptionProvider.transcribe(...)
   → save transcripts row
   → status = transcribed
-  → (Phase 7) Claude summary → completed
+  → POST /sessions/:id/summarize
+  → status = summarizing
+  → SummaryProvider.summarize(...)  (Claude + Zod)
+  → save summaries row
+  → status = completed
 ```
 
-On failure, audio is retained and status becomes `failed` with a retry path.
+On failure, audio/transcript are retained and status becomes `failed` with a retry path.
 
 ## Transcription provider
 
@@ -39,26 +43,44 @@ Initial implementation: `HttpTranscriptionProvider` (OpenAI Whisper-compatible
 Swap providers by implementing `TranscriptionProvider` and wiring it in
 `createTranscriptionProvider()` / app deps. Tests use `FakeTranscriptionProvider`.
 
+## Summary provider (Claude)
+
+```ts
+interface SummaryProvider {
+  summarize(input: SummaryInput): Promise<SessionSummary>;
+}
+```
+
+Implementation: `ClaudeSummaryProvider` calls Anthropic Messages API with a
+`tool_use` schema matching `SessionSummary`, then validates with Zod before
+persistence.
+
+Session-type prompts live in `apps/api/src/prompts/summary.ts`
+(seminar, group_discussion, bible_study, meeting, lecture, other).
+
+| Env | Purpose |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Server-only Claude API key |
+
+Tests use `FakeSummaryProvider`.
+
 ## API
 
 | Method | Path | Notes |
 | --- | --- | --- |
 | `POST` | `/sessions/:id/transcribe` | Starts async job; returns `202` + `status: transcribing` |
 | `GET` | `/sessions/:id/transcript` | Full transcript text |
-| `GET` | `/sessions/:id/status` | `{ status, hasAudio, hasTranscript }` for polling |
+| `POST` | `/sessions/:id/summarize` | Starts async Claude job; returns `202` + `status: summarizing` |
+| `GET` | `/sessions/:id/summary` | Structured summary record |
+| `GET` | `/sessions/:id/status` | `{ status, hasAudio, hasTranscript, hasSummary }` for polling |
 
 ## Database
 
-Table `transcripts` (one row per session) with RLS via owning `sessions.user_id`.
-
+Table `transcripts` (one row per session) with RLS via owning `sessions.user_id`.  
 Migration: `supabase/migrations/202609200003_create_transcripts.sql`
 
-## Claude summarization (Phase 7)
-
-- Runs **only** on the API with `ANTHROPIC_API_KEY`.
-- Returns structured JSON matching `SessionSummary` in `@sessionai/shared`.
-- Validated with Zod before persistence.
-- Prompts vary by `session_type`.
+Table `summaries` (one row per session) with RLS via owning `sessions.user_id`.  
+Migration: `supabase/migrations/202609200004_create_summaries.sql`
 
 ## Safety
 

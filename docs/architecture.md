@@ -25,6 +25,8 @@ Mobile app
 
 Phase 6 adds a replaceable `TranscriptionProvider`, async transcription jobs, `transcripts` table with RLS, transcript/status API endpoints, and a mobile transcript screen with polling + retry.
 
+Phase 7 adds Claude structured summaries: `SummaryProvider`, session-type prompts, Zod-validated `SessionSummary`, `summaries` table with RLS, summarize/summary API endpoints, and a mobile summary screen with polling + retry.
+
 ## Design principles
 
 1. Secrets stay on the server.

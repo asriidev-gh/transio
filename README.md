@@ -2,7 +2,7 @@
 
 AI-powered seminar and group discussion recorder. Record audio, transcribe speech, and generate structured summaries — with a mobile-first Expo client and a Node.js API.
 
-> **Phase status:** Phase 6 (Speech-to-Text) is complete. Claude AI summary is intentionally not implemented yet.
+> **Phase status:** Phase 7 (Claude AI Summary) is complete. End-to-end auto-pipeline is intentionally not implemented yet.
 
 ## Architecture
 
@@ -88,7 +88,8 @@ npx supabase db push
 
 Phase 3 migration: `202609200001_create_sessions.sql`  
 Phase 5 migration: `202609200002_session_audio_bucket.sql` (private `session-audio` bucket + storage RLS)  
-Phase 6 migration: `202609200003_create_transcripts.sql`
+Phase 6 migration: `202609200003_create_transcripts.sql`  
+Phase 7 migration: `202609200004_create_summaries.sql`
 
 ## Running the API
 
@@ -139,7 +140,13 @@ npm test
 
 ## AI provider configuration
 
-Documented for later phases. Claude runs **only** on the API using `ANTHROPIC_API_KEY`. See [docs/ai.md](./docs/ai.md).
+Claude runs **only** on the API using `ANTHROPIC_API_KEY`. Summaries are validated with
+Zod (`SessionSummary`) before persistence. See [docs/ai.md](./docs/ai.md).
+
+| Variable | Purpose |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Claude Messages API (summaries) |
+| `TRANSCRIPTION_API_KEY` | Whisper-compatible STT |
 
 ## Troubleshooting
 
@@ -152,6 +159,7 @@ Documented for later phases. Claude runs **only** on the API using `ANTHROPIC_AP
 | Stuck after register | Confirm email in inbox, or disable Confirm email in Supabase Auth settings |
 | `GET /me` returns 401 | Send `Authorization: Bearer <access_token>` from a signed-in session |
 | Transcription returns 503 | Set `TRANSCRIPTION_API_KEY` in `apps/api/.env` (Whisper-compatible) |
+| Summarization returns 503 | Set `ANTHROPIC_API_KEY` in `apps/api/.env` |
 | Workspace type errors | Run `npm install` at repo root, then `npm run build --workspace=@sessionai/shared` |
 
 ## Documentation
@@ -170,8 +178,8 @@ Documented for later phases. Claude runs **only** on the API using `ANTHROPIC_AP
 3. Database & sessions
 4. Audio recording
 5. Cloud audio storage
-6. **Speech-to-text** ← current
-7. Claude AI summary
+6. **Speech-to-text**
+7. **Claude AI summary** ← current
 8. End-to-end processing
 9. Reliability & UX
 10. MVP polish

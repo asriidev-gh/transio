@@ -11,6 +11,11 @@ import {
   type SessionRepoFactory,
 } from './routes/sessions.js';
 import type {
+  SummaryJobRunner,
+  SummaryProviderFactory,
+  SummaryRepoFactory,
+} from './routes/summary.js';
+import type {
   JobRunner,
   TranscriptRepoFactory,
   TranscriptionProviderFactory,
@@ -22,6 +27,9 @@ export interface AppDeps {
   createTranscriptRepository?: TranscriptRepoFactory;
   createTranscriptionProvider?: TranscriptionProviderFactory;
   runTranscriptionJob?: JobRunner;
+  createSummaryRepository?: SummaryRepoFactory;
+  createSummaryProvider?: SummaryProviderFactory;
+  runSummaryJob?: SummaryJobRunner;
   authenticate?: RequestHandler;
 }
 
@@ -46,6 +54,9 @@ export function createApp(deps: AppDeps = {}) {
       createTranscriptRepository: deps.createTranscriptRepository,
       createTranscriptionProvider: deps.createTranscriptionProvider,
       runTranscriptionJob: deps.runTranscriptionJob,
+      createSummaryRepository: deps.createSummaryRepository,
+      createSummaryProvider: deps.createSummaryProvider,
+      runSummaryJob: deps.runSummaryJob,
       authenticate: deps.authenticate,
     }),
   );

@@ -14,6 +14,12 @@ import {
 } from '../services/sessions/repository.js';
 import { registerAudioRoutes, type AudioStorageFactory } from './audio.js';
 import {
+  registerSummaryRoutes,
+  type SummaryJobRunner,
+  type SummaryProviderFactory,
+  type SummaryRepoFactory,
+} from './summary.js';
+import {
   registerTranscriptionRoutes,
   type JobRunner,
   type TranscriptRepoFactory,
@@ -35,6 +41,9 @@ export function createSessionsRouter(options: {
   createTranscriptRepository?: TranscriptRepoFactory;
   createTranscriptionProvider?: TranscriptionProviderFactory;
   runTranscriptionJob?: JobRunner;
+  createSummaryRepository?: SummaryRepoFactory;
+  createSummaryProvider?: SummaryProviderFactory;
+  runSummaryJob?: SummaryJobRunner;
   authenticate?: RequestHandler;
 } = {}): Router {
   const router = Router();
@@ -76,8 +85,17 @@ export function createSessionsRouter(options: {
   registerTranscriptionRoutes(router, {
     createRepository,
     createTranscriptRepository: options.createTranscriptRepository,
+    createSummaryRepository: options.createSummaryRepository,
     createProvider: options.createTranscriptionProvider,
     runJob: options.runTranscriptionJob,
+  });
+
+  registerSummaryRoutes(router, {
+    createRepository,
+    createTranscriptRepository: options.createTranscriptRepository,
+    createSummaryRepository: options.createSummaryRepository,
+    createProvider: options.createSummaryProvider,
+    runJob: options.runSummaryJob,
   });
 
   router.get('/:id', async (req, res, next) => {

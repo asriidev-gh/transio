@@ -222,8 +222,33 @@ export default function SessionDetailsScreen() {
         />
         <ActionRow
           label="✨ AI Summary"
-          hint="Available after summarization (Phase 7)"
-          disabled
+          hint={
+            session.status === 'completed'
+              ? 'View the structured AI summary'
+              : session.status === 'summarizing'
+                ? 'Summary in progress'
+                : session.status === 'transcribed' || session.status === 'failed'
+                  ? session.status === 'failed'
+                    ? 'Summarization failed — tap to retry'
+                    : 'Generate a structured summary from the transcript'
+                  : 'Available after transcription'
+          }
+          disabled={
+            !(
+              session.status === 'transcribed' ||
+              session.status === 'summarizing' ||
+              session.status === 'completed' ||
+              session.status === 'failed'
+            )
+          }
+          onPress={
+            session.status === 'transcribed' ||
+            session.status === 'summarizing' ||
+            session.status === 'completed' ||
+            session.status === 'failed'
+              ? () => router.push(`/session/${session.id}/summary`)
+              : undefined
+          }
         />
       </View>
 

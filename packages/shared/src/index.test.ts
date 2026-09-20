@@ -8,6 +8,7 @@ import {
   CreateSessionSchema,
   extensionFromMimeType,
   HealthResponseSchema,
+  SessionSummarySchema,
   SessionTypeSchema,
   UpdateSessionSchema,
 } from './index.js';
@@ -62,5 +63,22 @@ describe('shared schemas', () => {
   it('builds session audio storage paths', () => {
     assert.equal(buildSessionAudioPath('u1', 's1', '.m4a'), 'u1/s1/audio.m4a');
     assert.equal(extensionFromMimeType('audio/webm'), 'webm');
+  });
+
+  it('validates session summary shape', () => {
+    const parsed = SessionSummarySchema.parse({
+      overview: 'A short overview',
+      keyPoints: ['One'],
+      topics: [{ title: 'Topic', summary: 'Details' }],
+      questionsDiscussed: [],
+      actionItems: [{ task: 'Follow up' }],
+      importantInsights: ['Insight'],
+    });
+    assert.equal(parsed.overview, 'A short overview');
+    assert.throws(() =>
+      SessionSummarySchema.parse({
+        overview: 'Missing the rest',
+      }),
+    );
   });
 });

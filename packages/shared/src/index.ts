@@ -42,28 +42,14 @@ export {
   type TranscribeAccepted,
 } from './transcript.js';
 
-/** Structured AI summary shape (used in Phase 7+). */
-export const SessionSummarySchema = z.object({
-  overview: z.string(),
-  keyPoints: z.array(z.string()),
-  topics: z.array(
-    z.object({
-      title: z.string(),
-      summary: z.string(),
-    }),
-  ),
-  questionsDiscussed: z.array(z.string()),
-  actionItems: z.array(
-    z.object({
-      task: z.string(),
-      details: z.string().optional(),
-    }),
-  ),
-  importantInsights: z.array(z.string()),
-  quotes: z.array(z.string()).optional(),
-});
-
-export type SessionSummary = z.infer<typeof SessionSummarySchema>;
+export {
+  SessionSummarySchema,
+  SummaryRecordSchema,
+  SummarizeAcceptedSchema,
+  type SessionSummary,
+  type SummaryRecord,
+  type SummarizeAccepted,
+} from './summary.js';
 
 /** Standard API success envelope. */
 export const ApiSuccessSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>

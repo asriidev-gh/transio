@@ -87,26 +87,26 @@ Upload response:
 }
 ```
 
-### Transcription
+### Transcription & summary
 
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/sessions/:id/transcribe` | Start async transcription job (`202`) |
 | `GET` | `/sessions/:id/transcript` | Fetch saved transcript |
-| `GET` | `/sessions/:id/status` | Poll `{ status, hasAudio, hasTranscript }` |
+| `POST` | `/sessions/:id/summarize` | Start async Claude summary job (`202`) |
+| `GET` | `/sessions/:id/summary` | Fetch structured AI summary |
+| `GET` | `/sessions/:id/status` | Poll `{ status, hasAudio, hasTranscript, hasSummary }` |
 
-Requires uploaded audio. On failure, session status becomes `failed` and audio is retained.
+Requires uploaded audio for transcription. Summarization requires a saved transcript.
+On failure, session status becomes `failed` and audio/transcript are retained.
 
 ## Planned endpoints (later phases)
 
-```text
-POST   /sessions/:id/summarize
+End-to-end auto-pipeline orchestration (Phase 8) will chain upload → transcribe → summarize
+without separate client taps. Session CRUD, audio, transcription, and summarization are
+implemented (Phases 3–7).
 
-GET    /sessions/:id/summary
-```
-
-Session CRUD, audio upload/signed URLs, and transcription are implemented (Phases 3–6).
-Authenticated endpoints will require a Supabase JWT (`Authorization: Bearer …`) and verify ownership server-side.
+Authenticated endpoints require a Supabase JWT (`Authorization: Bearer …`) and verify ownership server-side.
 
 ## Running
 

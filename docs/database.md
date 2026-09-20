@@ -46,7 +46,7 @@ Migration: `202609200003_create_transcripts.sql`
 | Column | Type |
 | --- | --- |
 | `id` | UUID PK |
-| `session_id` | UUID FK → sessions |
+| `session_id` | UUID FK → sessions (unique) |
 | `overview` | TEXT |
 | `key_points` | JSONB |
 | `topics` | JSONB |
@@ -55,6 +55,10 @@ Migration: `202609200003_create_transcripts.sql`
 | `important_insights` | JSONB |
 | `quotes` | JSONB |
 | `created_at` / `updated_at` | TIMESTAMPTZ |
+
+RLS: access only when the related `sessions.user_id = auth.uid()`.
+
+Migration: `202609200004_create_summaries.sql`
 
 ## Row Level Security
 
@@ -93,6 +97,7 @@ npx supabase db push
 # supabase/migrations/202609200001_create_sessions.sql
 # supabase/migrations/202609200002_session_audio_bucket.sql
 # supabase/migrations/202609200003_create_transcripts.sql
+# supabase/migrations/202609200004_create_summaries.sql
 ```
 
 Never mutate production schema from application code.

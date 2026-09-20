@@ -13,6 +13,7 @@ export default function SessionIdLayout() {
     >
       <Stack.Screen name="index" options={{ title: 'Session' }} />
       <Stack.Screen name="transcript" options={{ title: 'Transcript' }} />
+      <Stack.Screen name="summary" options={{ title: 'AI Summary' }} />
     </Stack>
   );
 }

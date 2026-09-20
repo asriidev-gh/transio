@@ -24,6 +24,7 @@ export const SessionStatusResponseSchema = z.object({
   ]),
   hasAudio: z.boolean(),
   hasTranscript: z.boolean(),
+  hasSummary: z.boolean(),
 });
 
 export type SessionStatusResponse = z.infer<typeof SessionStatusResponseSchema>;

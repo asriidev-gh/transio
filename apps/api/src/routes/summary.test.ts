@@ -4,9 +4,11 @@ import type { NextFunction, Request, Response } from 'express';
 import { createApp } from '../app.js';
 import { AppError } from '../middleware/error-handler.js';
 import { parseBearerToken } from '../middleware/auth.js';
+import { FakeSummaryProvider } from '../providers/summary/index.js';
 import { FakeTranscriptionProvider } from '../providers/transcription/index.js';
 import { InMemorySessionRepository } from '../services/sessions/repository.js';
 import { InMemorySummaryRepository } from '../services/summaries/repository.js';
+import { runSummaryJob } from '../services/summary/job.js';
 import { InMemoryTranscriptRepository } from '../services/transcripts/repository.js';
 import { runTranscriptionJob } from '../services/transcription/job.js';
 import { request } from './test-helpers/request.js';
@@ -31,11 +33,12 @@ function testAuthenticate(req: Request, _res: Response, next: NextFunction): voi
   next(new AppError('UNAUTHORIZED', 'Authentication required', 401));
 }
 
-function createTranscriptionTestApp() {
+function createSummaryTestApp() {
   const sessions = new InMemorySessionRepository();
   const transcripts = new InMemoryTranscriptRepository();
   const summaries = new InMemorySummaryRepository();
-  const provider = new FakeTranscriptionProvider('Hello from the seminar transcript.');
+  const transcriptionProvider = new FakeTranscriptionProvider('Hello from the seminar.');
+  const summaryProvider = new FakeSummaryProvider();
   const pendingJobs: Promise<void>[] = [];
 
   const app = createApp({
@@ -43,20 +46,34 @@ function createTranscriptionTestApp() {
     createSessionRepository: () => sessions,
     createTranscriptRepository: () => transcripts,
     createSummaryRepository: () => summaries,
-    createTranscriptionProvider: () => provider,
+    createTranscriptionProvider: () => transcriptionProvider,
+    createSummaryProvider: () => summaryProvider,
     runTranscriptionJob: (sessionId, req) => {
       if (!req.user) return;
-      const job = runTranscriptionJob(sessionId, {
-        userId: req.user.id,
-        sessions,
-        transcripts,
-        provider,
-        downloadAudio: async () => ({
-          data: Buffer.from('fake-audio'),
-          mimeType: 'audio/mp4',
+      pendingJobs.push(
+        runTranscriptionJob(sessionId, {
+          userId: req.user.id,
+          sessions,
+          transcripts,
+          provider: transcriptionProvider,
+          downloadAudio: async () => ({
+            data: Buffer.from('fake-audio'),
+            mimeType: 'audio/mp4',
+          }),
         }),
-      });
-      pendingJobs.push(job);
+      );
+    },
+    runSummaryJob: (sessionId, req) => {
+      if (!req.user) return;
+      pendingJobs.push(
+        runSummaryJob(sessionId, {
+          userId: req.user.id,
+          sessions,
+          transcripts,
+          summaries,
+          provider: summaryProvider,
+        }),
+      );
     },
   });
 
@@ -64,6 +81,7 @@ function createTranscriptionTestApp() {
     app,
     sessions,
     transcripts,
+    summaries,
     pendingJobs,
     async flushJobs() {
       await Promise.all(pendingJobs.splice(0, pendingJobs.length));
@@ -71,38 +89,50 @@ function createTranscriptionTestApp() {
   };
 }
 
-describe('transcription API', () => {
-  it('starts a transcription job and saves transcript text', async () => {
-    const ctx = createTranscriptionTestApp();
-    const created = await request(ctx.app).post(
-      '/sessions',
-      { title: 'Talk', sessionType: 'seminar' },
-      { Authorization: 'Bearer token-a' },
-    );
-    const id = (created.body.data as { id: string }).id;
+async function seedTranscribedSession(ctx: ReturnType<typeof createSummaryTestApp>) {
+  const created = await request(ctx.app).post(
+    '/sessions',
+    { title: 'Talk', sessionType: 'seminar' },
+    { Authorization: 'Bearer token-a' },
+  );
+  const id = (created.body.data as { id: string }).id;
+  await request(ctx.app).patch(
+    `/sessions/${id}`,
+    { audioPath: `${USER_A}/${id}/audio.m4a`, status: 'uploaded' },
+    { Authorization: 'Bearer token-a' },
+  );
+  await request(ctx.app).post(`/sessions/${id}/transcribe`, undefined, {
+    Authorization: 'Bearer token-a',
+  });
+  await ctx.flushJobs();
+  return id;
+}
 
-    await request(ctx.app).patch(
-      `/sessions/${id}`,
-      { audioPath: `${USER_A}/${id}/audio.m4a`, status: 'uploaded' },
-      { Authorization: 'Bearer token-a' },
-    );
+describe('summary API', () => {
+  it('starts a summary job and saves structured summary', async () => {
+    const ctx = createSummaryTestApp();
+    const id = await seedTranscribedSession(ctx);
 
-    const start = await request(ctx.app).post(`/sessions/${id}/transcribe`, undefined, {
+    const start = await request(ctx.app).post(`/sessions/${id}/summarize`, undefined, {
       Authorization: 'Bearer token-a',
     });
     assert.equal(start.status, 202);
-    assert.equal((start.body.data as { status: string }).status, 'transcribing');
+    assert.equal((start.body.data as { status: string }).status, 'summarizing');
 
     await ctx.flushJobs();
 
-    const transcript = await request(ctx.app).get(`/sessions/${id}/transcript`, {
+    const summary = await request(ctx.app).get(`/sessions/${id}/summary`, {
       Authorization: 'Bearer token-a',
     });
-    assert.equal(transcript.status, 200);
-    assert.equal(
-      (transcript.body.data as { text: string }).text,
-      'Hello from the seminar transcript.',
-    );
+    assert.equal(summary.status, 200);
+    const data = summary.body.data as {
+      overview: string;
+      keyPoints: string[];
+      topics: Array<{ title: string; summary: string }>;
+    };
+    assert.ok(data.overview.length > 0);
+    assert.ok(data.keyPoints.length >= 1);
+    assert.ok(data.topics.length >= 1);
 
     const status = await request(ctx.app).get(`/sessions/${id}/status`, {
       Authorization: 'Bearer token-a',
@@ -110,89 +140,75 @@ describe('transcription API', () => {
     assert.equal(status.status, 200);
     const statusData = status.body.data as {
       status: string;
-      hasAudio: boolean;
       hasTranscript: boolean;
       hasSummary: boolean;
     };
-    assert.equal(statusData.status, 'transcribed');
-    assert.equal(statusData.hasAudio, true);
+    assert.equal(statusData.status, 'completed');
     assert.equal(statusData.hasTranscript, true);
-    assert.equal(statusData.hasSummary, false);
+    assert.equal(statusData.hasSummary, true);
   });
 
-  it('prevents another user from reading a transcript', async () => {
-    const ctx = createTranscriptionTestApp();
-    const created = await request(ctx.app).post(
-      '/sessions',
-      { title: 'Private talk', sessionType: 'meeting' },
-      { Authorization: 'Bearer token-a' },
-    );
-    const id = (created.body.data as { id: string }).id;
-    await request(ctx.app).patch(
-      `/sessions/${id}`,
-      { audioPath: `${USER_A}/${id}/audio.m4a`, status: 'uploaded' },
-      { Authorization: 'Bearer token-a' },
-    );
-    await request(ctx.app).post(`/sessions/${id}/transcribe`, undefined, {
+  it('prevents another user from reading a summary', async () => {
+    const ctx = createSummaryTestApp();
+    const id = await seedTranscribedSession(ctx);
+    await request(ctx.app).post(`/sessions/${id}/summarize`, undefined, {
       Authorization: 'Bearer token-a',
     });
     await ctx.flushJobs();
 
-    const res = await request(ctx.app).get(`/sessions/${id}/transcript`, {
+    const res = await request(ctx.app).get(`/sessions/${id}/summary`, {
       Authorization: 'Bearer token-b',
     });
     assert.equal(res.status, 404);
   });
 
-  it('rejects transcription when audio is missing', async () => {
-    const ctx = createTranscriptionTestApp();
+  it('rejects summarization when transcript is missing', async () => {
+    const ctx = createSummaryTestApp();
     const created = await request(ctx.app).post(
       '/sessions',
-      { title: 'No audio', sessionType: 'other' },
+      { title: 'No transcript', sessionType: 'other' },
       { Authorization: 'Bearer token-a' },
     );
     const id = (created.body.data as { id: string }).id;
 
-    const res = await request(ctx.app).post(`/sessions/${id}/transcribe`, undefined, {
+    const res = await request(ctx.app).post(`/sessions/${id}/summarize`, undefined, {
       Authorization: 'Bearer token-a',
     });
     assert.equal(res.status, 400);
     assert.equal(res.body.error?.code, 'VALIDATION_ERROR');
   });
 
-  it('marks session failed when provider throws', async () => {
+  it('marks session failed when summary provider throws', async () => {
     const sessions = new InMemorySessionRepository();
     const transcripts = new InMemoryTranscriptRepository();
+    const summaries = new InMemorySummaryRepository();
     const pendingJobs: Promise<void>[] = [];
 
     const app = createApp({
       authenticate: testAuthenticate,
       createSessionRepository: () => sessions,
       createTranscriptRepository: () => transcripts,
-      createSummaryRepository: () => new InMemorySummaryRepository(),
-      createTranscriptionProvider: () => ({
+      createSummaryRepository: () => summaries,
+      createSummaryProvider: () => ({
         name: 'broken',
-        async transcribe() {
-          throw new AppError('TRANSCRIPTION_ERROR', 'provider down', 502);
+        async summarize() {
+          throw new AppError('SUMMARY_ERROR', 'provider down', 502);
         },
       }),
-      runTranscriptionJob: (sessionId, req) => {
+      runSummaryJob: (sessionId, req) => {
         if (!req.user) return;
         pendingJobs.push(
-          runTranscriptionJob(sessionId, {
+          runSummaryJob(sessionId, {
             userId: req.user.id,
             sessions,
             transcripts,
+            summaries,
             provider: {
               name: 'broken',
-              async transcribe() {
-                throw new AppError('TRANSCRIPTION_ERROR', 'provider down', 502);
+              async summarize() {
+                throw new AppError('SUMMARY_ERROR', 'provider down', 502);
               },
             },
-            downloadAudio: async () => ({
-              data: Buffer.from('x'),
-              mimeType: 'audio/mp4',
-            }),
           }),
         );
       },
@@ -200,16 +216,18 @@ describe('transcription API', () => {
 
     const created = await request(app).post(
       '/sessions',
-      { title: 'Failing', sessionType: 'lecture' },
+      { title: 'Failing summary', sessionType: 'lecture' },
       { Authorization: 'Bearer token-a' },
     );
     const id = (created.body.data as { id: string }).id;
+    await transcripts.upsertForSession(id, 'Some transcript text', 'en');
     await request(app).patch(
       `/sessions/${id}`,
-      { audioPath: `${USER_A}/${id}/audio.m4a`, status: 'uploaded' },
+      { status: 'transcribed' },
       { Authorization: 'Bearer token-a' },
     );
-    await request(app).post(`/sessions/${id}/transcribe`, undefined, {
+
+    await request(app).post(`/sessions/${id}/summarize`, undefined, {
       Authorization: 'Bearer token-a',
     });
     await Promise.all(pendingJobs);

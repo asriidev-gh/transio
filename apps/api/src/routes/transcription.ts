@@ -19,16 +19,28 @@ import {
   SupabaseTranscriptRepository,
   type TranscriptRepository,
 } from '../services/transcripts/repository.js';
+import {
+  SupabaseSummaryRepository,
+  type SummaryRepository,
+} from '../services/summaries/repository.js';
 
 export type TranscriptRepoFactory = (req: Request) => TranscriptRepository;
 export type TranscriptionProviderFactory = () => TranscriptionProvider;
 export type JobRunner = (sessionId: string, req: Request) => void;
+export type SummaryRepoFactoryForStatus = (req: Request) => SummaryRepository;
 
 function defaultTranscriptRepoFactory(req: Request): TranscriptRepository {
   if (!req.accessToken) {
     throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
   }
   return new SupabaseTranscriptRepository(createSupabaseUserClient(req.accessToken));
+}
+
+function defaultSummaryRepoFactory(req: Request): SummaryRepository {
+  if (!req.accessToken) {
+    throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+  }
+  return new SupabaseSummaryRepository(createSupabaseUserClient(req.accessToken));
 }
 
 function defaultJobRunner(
@@ -61,12 +73,15 @@ export function registerTranscriptionRoutes(
   options: {
     createRepository: SessionRepoFactory;
     createTranscriptRepository?: TranscriptRepoFactory;
+    createSummaryRepository?: SummaryRepoFactoryForStatus;
     createProvider?: TranscriptionProviderFactory;
     runJob?: JobRunner;
   },
 ): void {
   const createTranscriptRepository =
     options.createTranscriptRepository ?? defaultTranscriptRepoFactory;
+  const createSummaryRepository =
+    options.createSummaryRepository ?? defaultSummaryRepoFactory;
   const createProvider = options.createProvider ?? createTranscriptionProvider;
   const runJob =
     options.runJob ??
@@ -163,12 +178,16 @@ export function registerTranscriptionRoutes(
         throw new AppError('NOT_FOUND', 'Session not found', 404);
       }
 
-      const transcript = await createTranscriptRepository(req).getBySessionId(id);
+      const [transcript, summary] = await Promise.all([
+        createTranscriptRepository(req).getBySessionId(id),
+        createSummaryRepository(req).getBySessionId(id),
+      ]);
       const payload = SessionStatusResponseSchema.parse({
         sessionId: id,
         status: session.status,
         hasAudio: Boolean(session.audioPath),
         hasTranscript: Boolean(transcript),
+        hasSummary: Boolean(summary),
       });
 
       res.status(200).json(apiSuccess(payload));
