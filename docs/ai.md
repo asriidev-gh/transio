@@ -3,26 +3,27 @@
 ## Phase status
 
 - Phase 6: speech-to-text provider + transcript persistence + transcript UI
-- Phase 7: Claude structured summaries ← current
+- Phase 7: Claude structured summaries
+- Phase 8: end-to-end processing pipeline ← current
 
 ## Pipeline
 
 ```text
-Upload audio
-  → status = uploaded
-  → POST /sessions/:id/transcribe
+Record
+  → Upload
+  → (auto) POST /sessions/:id/process   — or manual from Processing screen
   → status = transcribing
   → TranscriptionProvider.transcribe(...)
   → save transcripts row
   → status = transcribed
-  → POST /sessions/:id/summarize
   → status = summarizing
   → SummaryProvider.summarize(...)  (Claude + Zod)
   → save summaries row
   → status = completed
 ```
 
-On failure, audio/transcript are retained and status becomes `failed` with a retry path.
+On failure, audio/transcript are retained and status becomes `failed` with a retry path
+via `POST /sessions/:id/process` (resumes at summarize if a transcript already exists).
 
 ## Transcription provider
 
@@ -64,14 +65,24 @@ Session-type prompts live in `apps/api/src/prompts/summary.ts`
 
 Tests use `FakeSummaryProvider`.
 
+## End-to-end processing
+
+`runProcessingPipeline` chains transcription → summarization in one async job.
+`POST /sessions/:id/process` starts it; successful audio uploads also best-effort
+auto-start when both providers are configured.
+
+The mobile **Processing** screen polls `GET /sessions/:id/status` and renders
+pipeline stages from backend status (`hasAudio`, `hasTranscript`, `hasSummary`).
+
 ## API
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `POST` | `/sessions/:id/transcribe` | Starts async job; returns `202` + `status: transcribing` |
+| `POST` | `/sessions/:id/transcribe` | Starts async transcription only |
 | `GET` | `/sessions/:id/transcript` | Full transcript text |
-| `POST` | `/sessions/:id/summarize` | Starts async Claude job; returns `202` + `status: summarizing` |
+| `POST` | `/sessions/:id/summarize` | Starts async Claude summary only |
 | `GET` | `/sessions/:id/summary` | Structured summary record |
+| `POST` | `/sessions/:id/process` | Full pipeline (transcribe → summarize) |
 | `GET` | `/sessions/:id/status` | `{ status, hasAudio, hasTranscript, hasSummary }` for polling |
 
 ## Database

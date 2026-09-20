@@ -51,6 +51,12 @@ export {
   type SummarizeAccepted,
 } from './summary.js';
 
+export {
+  ProcessAcceptedSchema,
+  PROCESSING_STAGES,
+  type ProcessAccepted,
+} from './process.js';
+
 /** Standard API success envelope. */
 export const ApiSuccessSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
   z.object({

@@ -2,7 +2,7 @@
 
 AI-powered seminar and group discussion recorder. Record audio, transcribe speech, and generate structured summaries — with a mobile-first Expo client and a Node.js API.
 
-> **Phase status:** Phase 7 (Claude AI Summary) is complete. End-to-end auto-pipeline is intentionally not implemented yet.
+> **Phase status:** Phase 8 (End-to-End Processing) is complete. Reliability & UX hardening is intentionally not implemented yet.
 
 ## Architecture
 
@@ -179,7 +179,7 @@ Zod (`SessionSummary`) before persistence. See [docs/ai.md](./docs/ai.md).
 4. Audio recording
 5. Cloud audio storage
 6. **Speech-to-text**
-7. **Claude AI summary** ← current
-8. End-to-end processing
+7. **Claude AI summary**
+8. **End-to-end processing** ← current
 9. Reliability & UX
 10. MVP polish

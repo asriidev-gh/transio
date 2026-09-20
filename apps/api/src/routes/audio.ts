@@ -50,6 +50,8 @@ export function registerAudioRoutes(
   options: {
     createRepository: SessionRepoFactory;
     createAudioStorage?: AudioStorageFactory;
+    /** Optional: start end-to-end processing after a successful upload. */
+    onUploaded?: (sessionId: string, req: Request) => void;
   },
 ): void {
   const createAudioStorage = options.createAudioStorage ?? defaultAudioStorageFactory;
@@ -99,6 +101,9 @@ export function registerAudioRoutes(
       });
 
       res.status(200).json(apiSuccess(payload));
+
+      // Fire-and-forget end-to-end pipeline (Phase 8). Does not affect the upload response.
+      options.onUploaded?.(id, req);
     } catch (err) {
       next(err);
     }

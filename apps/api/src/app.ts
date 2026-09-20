@@ -15,6 +15,7 @@ import type {
   SummaryProviderFactory,
   SummaryRepoFactory,
 } from './routes/summary.js';
+import type { ProcessJobRunner } from './routes/process.js';
 import type {
   JobRunner,
   TranscriptRepoFactory,
@@ -30,6 +31,7 @@ export interface AppDeps {
   createSummaryRepository?: SummaryRepoFactory;
   createSummaryProvider?: SummaryProviderFactory;
   runSummaryJob?: SummaryJobRunner;
+  runProcessJob?: ProcessJobRunner;
   authenticate?: RequestHandler;
 }
 
@@ -57,6 +59,7 @@ export function createApp(deps: AppDeps = {}) {
       createSummaryRepository: deps.createSummaryRepository,
       createSummaryProvider: deps.createSummaryProvider,
       runSummaryJob: deps.runSummaryJob,
+      runProcessJob: deps.runProcessJob,
       authenticate: deps.authenticate,
     }),
   );

@@ -52,6 +52,9 @@ export default function SessionDetailsScreen() {
       } catch {
         setPlaybackUri(uri);
       }
+
+      // Phase 8: continue into the end-to-end processing screen.
+      router.push(`/session/${sessionId}/processing`);
     } catch (err) {
       setUploadStatus('error');
       setUploadMessage(
@@ -60,7 +63,7 @@ export default function SessionDetailsScreen() {
           : 'Upload failed. Your local recording is still saved.',
       );
     }
-  }, []);
+  }, [router]);
 
   const load = useCallback(async () => {
     if (!id || typeof id !== 'string') {
@@ -201,6 +204,27 @@ export default function SessionDetailsScreen() {
         ) : null}
 
         <ActionRow
+          label="⚙️ Processing"
+          hint={
+            !session.audioPath
+              ? 'Upload audio to start the pipeline'
+              : session.status === 'completed'
+                ? 'Pipeline finished — view progress'
+                : session.status === 'transcribing' || session.status === 'summarizing'
+                  ? 'Pipeline in progress'
+                  : session.status === 'failed'
+                    ? 'Processing failed — tap to retry'
+                    : 'Transcribe and summarize in one flow'
+          }
+          disabled={!session.audioPath}
+          onPress={
+            session.audioPath
+              ? () => router.push(`/session/${session.id}/processing`)
+              : undefined
+          }
+        />
+
+        <ActionRow
           label="📄 Transcript"
           hint={
             session.audioPath
@@ -209,13 +233,23 @@ export default function SessionDetailsScreen() {
                 : session.status === 'transcribing'
                   ? 'Transcription in progress'
                   : session.status === 'failed'
-                    ? 'Transcription failed — tap to retry'
-                    : 'Generate a transcript from the uploaded audio'
+                    ? 'Open processing to retry'
+                    : 'Available after transcription'
               : 'Upload audio before transcription'
           }
-          disabled={!session.audioPath}
+          disabled={
+            !(
+              session.status === 'transcribed' ||
+              session.status === 'summarizing' ||
+              session.status === 'completed' ||
+              session.status === 'transcribing'
+            )
+          }
           onPress={
-            session.audioPath
+            session.status === 'transcribed' ||
+            session.status === 'summarizing' ||
+            session.status === 'completed' ||
+            session.status === 'transcribing'
               ? () => router.push(`/session/${session.id}/transcript`)
               : undefined
           }
@@ -227,25 +261,11 @@ export default function SessionDetailsScreen() {
               ? 'View the structured AI summary'
               : session.status === 'summarizing'
                 ? 'Summary in progress'
-                : session.status === 'transcribed' || session.status === 'failed'
-                  ? session.status === 'failed'
-                    ? 'Summarization failed — tap to retry'
-                    : 'Generate a structured summary from the transcript'
-                  : 'Available after transcription'
+                : 'Available after processing completes'
           }
-          disabled={
-            !(
-              session.status === 'transcribed' ||
-              session.status === 'summarizing' ||
-              session.status === 'completed' ||
-              session.status === 'failed'
-            )
-          }
+          disabled={!(session.status === 'completed' || session.status === 'summarizing')}
           onPress={
-            session.status === 'transcribed' ||
-            session.status === 'summarizing' ||
-            session.status === 'completed' ||
-            session.status === 'failed'
+            session.status === 'completed' || session.status === 'summarizing'
               ? () => router.push(`/session/${session.id}/summary`)
               : undefined
           }

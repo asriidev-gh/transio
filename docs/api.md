@@ -87,7 +87,7 @@ Upload response:
 }
 ```
 
-### Transcription & summary
+### Transcription, summary & processing
 
 | Method | Path | Description |
 | --- | --- | --- |
@@ -95,16 +95,18 @@ Upload response:
 | `GET` | `/sessions/:id/transcript` | Fetch saved transcript |
 | `POST` | `/sessions/:id/summarize` | Start async Claude summary job (`202`) |
 | `GET` | `/sessions/:id/summary` | Fetch structured AI summary |
+| `POST` | `/sessions/:id/process` | Start end-to-end pipeline (`202`) |
 | `GET` | `/sessions/:id/status` | Poll `{ status, hasAudio, hasTranscript, hasSummary }` |
 
-Requires uploaded audio for transcription. Summarization requires a saved transcript.
+Requires uploaded audio for processing. Summarization-only requires a saved transcript.
+Successful uploads best-effort auto-start `/process` when STT + Claude keys are configured.
 On failure, session status becomes `failed` and audio/transcript are retained.
 
 ## Planned endpoints (later phases)
 
-End-to-end auto-pipeline orchestration (Phase 8) will chain upload → transcribe → summarize
-without separate client taps. Session CRUD, audio, transcription, and summarization are
-implemented (Phases 3–7).
+Phase 9 focuses on reliability/UX hardening rather than new pipeline endpoints.
+Session CRUD, audio, transcription, summarization, and end-to-end processing are
+implemented (Phases 3–8).
 
 Authenticated endpoints require a Supabase JWT (`Authorization: Bearer …`) and verify ownership server-side.
 

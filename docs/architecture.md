@@ -27,6 +27,10 @@ Phase 6 adds a replaceable `TranscriptionProvider`, async transcription jobs, `t
 
 Phase 7 adds Claude structured summaries: `SummaryProvider`, session-type prompts, Zod-validated `SessionSummary`, `summaries` table with RLS, summarize/summary API endpoints, and a mobile summary screen with polling + retry.
 
+Phase 8 connects the full pipeline (upload → transcribe → summarize → completed) via
+`POST /sessions/:id/process`, auto-start after upload when providers are configured,
+and a Processing screen that mirrors backend status.
+
 ## Design principles
 
 1. Secrets stay on the server.
