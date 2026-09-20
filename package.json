@@ -1,0 +1,33 @@
+{
+  "name": "sessionai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SessionAI — AI-powered seminar and group discussion recorder",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "mobile": "npm run start --workspace=@sessionai/mobile",
+    "mobile:web": "npm run web --workspace=@sessionai/mobile",
+    "api": "npm run dev --workspace=@sessionai/api",
+    "api:build": "npm run build --workspace=@sessionai/api",
+    "api:start": "npm run start --workspace=@sessionai/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.24.0",
+    "@typescript-eslint/parser": "^8.24.0",
+    "eslint": "^9.20.0",
+    "eslint-config-prettier": "^10.0.1",
+    "prettier": "^3.5.1",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
