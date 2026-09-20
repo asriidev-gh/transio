@@ -67,6 +67,18 @@ Enabled on `sessions`. Policies for the `authenticated` role:
 
 The API uses a **user-scoped** Supabase client (caller JWT) so RLS applies, and still filters by `user_id` in queries.
 
+## Storage (`session-audio`)
+
+Private bucket created in `202609200002_session_audio_bucket.sql`.
+
+| Item | Value |
+| --- | --- |
+| Public | **false** |
+| Path | `{user_id}/{session_id}/audio.{ext}` |
+| Max size | 100 MB |
+| Access | storage RLS: first path folder must equal `auth.uid()` |
+| Playback | signed URLs only |
+
 ## Applying migrations
 
 ```bash
@@ -75,6 +87,7 @@ npx supabase db push
 
 # Or run the SQL in the Supabase SQL editor:
 # supabase/migrations/202609200001_create_sessions.sql
+# supabase/migrations/202609200002_session_audio_bucket.sql
 ```
 
 Never mutate production schema from application code.

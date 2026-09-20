@@ -1,5 +1,6 @@
 import { apiError } from '@sessionai/shared';
 import type { NextFunction, Request, Response } from 'express';
+import { MulterError } from 'multer';
 import { ZodError } from 'zod';
 import { logger } from '../lib/logger.js';
 
@@ -28,6 +29,17 @@ export function errorHandler(
   if (err instanceof ZodError) {
     const message = err.issues[0]?.message ?? 'Validation failed';
     res.status(400).json(apiError('VALIDATION_ERROR', message));
+    return;
+  }
+
+  if (err instanceof MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      res
+        .status(400)
+        .json(apiError('VALIDATION_ERROR', 'Audio file is too large (max 100 MB)'));
+      return;
+    }
+    res.status(400).json(apiError('VALIDATION_ERROR', err.message));
     return;
   }
 

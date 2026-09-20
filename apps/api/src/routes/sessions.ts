@@ -12,6 +12,7 @@ import {
   SupabaseSessionRepository,
   type SessionRepository,
 } from '../services/sessions/repository.js';
+import { registerAudioRoutes, type AudioStorageFactory } from './audio.js';
 
 export type SessionRepoFactory = (req: Request) => SessionRepository;
 
@@ -24,6 +25,7 @@ function defaultRepoFactory(req: Request): SessionRepository {
 
 export function createSessionsRouter(options: {
   createRepository?: SessionRepoFactory;
+  createAudioStorage?: AudioStorageFactory;
   authenticate?: RequestHandler;
 } = {}): Router {
   const router = Router();
@@ -55,6 +57,11 @@ export function createSessionsRouter(options: {
     } catch (err) {
       next(err);
     }
+  });
+
+  registerAudioRoutes(router, {
+    createRepository,
+    createAudioStorage: options.createAudioStorage,
   });
 
   router.get('/:id', async (req, res, next) => {

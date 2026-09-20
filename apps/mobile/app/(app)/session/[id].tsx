@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -9,20 +9,58 @@ import {
 import { AudioPlayer } from '@/src/components/AudioPlayer';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
+import { UploadProgress } from '@/src/components/UploadProgress';
 import { ApiClientError } from '@/src/services/api';
+import { getSignedAudioUrl, uploadSessionAudio } from '@/src/services/audio-upload';
 import { getLocalAudioUri } from '@/src/services/local-audio';
 import { getSession } from '@/src/services/sessions';
 import { colors, spacing, typography } from '@/src/theme';
 import { formatDurationHuman, formatSessionDate } from '@/src/utils/format';
+
+type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 
 export default function SessionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [localUri, setLocalUri] = useState<string | null>(null);
+  const [playbackUri, setPlaybackUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadMessage, setUploadMessage] = useState<string | undefined>(undefined);
+  const autoUploadAttempted = useRef<string | null>(null);
+
+  const runUpload = useCallback(async (sessionId: string, uri: string) => {
+    setUploadStatus('uploading');
+    setUploadProgress(0);
+    setUploadMessage(undefined);
+    try {
+      await uploadSessionAudio(sessionId, uri, (progress) => {
+        setUploadProgress(progress.ratio);
+      });
+      const refreshed = await getSession(sessionId);
+      setSession(refreshed);
+      setUploadStatus('success');
+      setUploadProgress(1);
+
+      try {
+        const signed = await getSignedAudioUrl(sessionId);
+        setPlaybackUri(signed.url);
+      } catch {
+        setPlaybackUri(uri);
+      }
+    } catch (err) {
+      setUploadStatus('error');
+      setUploadMessage(
+        err instanceof ApiClientError
+          ? err.message
+          : 'Upload failed. Your local recording is still saved.',
+      );
+    }
+  }, []);
 
   const load = useCallback(async () => {
     if (!id || typeof id !== 'string') {
@@ -37,15 +75,40 @@ export default function SessionDetailsScreen() {
       const [data, uri] = await Promise.all([getSession(id), getLocalAudioUri(id)]);
       setSession(data);
       setLocalUri(uri);
-      setShowPlayer(Boolean(uri));
+
+      if (data.audioPath) {
+        setUploadStatus('success');
+        setUploadProgress(1);
+        autoUploadAttempted.current = id;
+        try {
+          const signed = await getSignedAudioUrl(id);
+          setPlaybackUri(signed.url);
+          setShowPlayer(true);
+        } catch {
+          setPlaybackUri(uri);
+          setShowPlayer(Boolean(uri));
+        }
+      } else if (uri) {
+        setPlaybackUri(uri);
+        setShowPlayer(true);
+        if (autoUploadAttempted.current !== id) {
+          autoUploadAttempted.current = id;
+          void runUpload(id, uri);
+        }
+      } else {
+        setPlaybackUri(null);
+        setShowPlayer(false);
+        setUploadStatus('idle');
+      }
     } catch (err) {
       setSession(null);
       setLocalUri(null);
+      setPlaybackUri(null);
       setError(err instanceof ApiClientError ? err.message : 'Could not load this session.');
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, runUpload]);
 
   useFocusEffect(
     useCallback(() => {
@@ -74,7 +137,8 @@ export default function SessionDetailsScreen() {
   }
 
   const completed = session.status === 'completed';
-  const canRecord = !localUri;
+  const canRecord = !localUri && !session.audioPath;
+  const hasPlayback = Boolean(playbackUri);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -93,22 +157,39 @@ export default function SessionDetailsScreen() {
       {session.description ? <Text style={styles.description}>{session.description}</Text> : null}
 
       <View style={styles.actions}>
-        {localUri && showPlayer ? <AudioPlayer uri={localUri} title={session.title} /> : null}
+        {localUri || session.audioPath ? (
+          <UploadProgress
+            progress={uploadProgress}
+            status={uploadStatus}
+            message={uploadMessage}
+            onRetry={
+              localUri && id
+                ? () => {
+                    void runUpload(String(id), localUri);
+                  }
+                : undefined
+            }
+          />
+        ) : null}
 
-        {localUri && !showPlayer ? (
+        {hasPlayback && showPlayer && playbackUri ? (
+          <AudioPlayer uri={playbackUri} title={session.title} />
+        ) : null}
+
+        {hasPlayback && !showPlayer ? (
           <ActionRow
             label="▶ Play Recording"
-            hint="Play the local recording saved on this device"
+            hint={
+              session.audioPath
+                ? 'Play via secure signed URL'
+                : 'Play the local recording saved on this device'
+            }
             onPress={() => setShowPlayer(true)}
           />
         ) : null}
 
-        {!localUri ? (
-          <ActionRow
-            label="▶ Play Recording"
-            hint="No local recording yet"
-            disabled
-          />
+        {!hasPlayback ? (
+          <ActionRow label="▶ Play Recording" hint="No recording available yet" disabled />
         ) : null}
 
         {canRecord ? (

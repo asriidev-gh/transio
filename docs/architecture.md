@@ -23,7 +23,7 @@ Mobile app
       → PostgreSQL (sessions, transcripts, summaries)
 ```
 
-Phase 4 adds microphone recording with `expo-audio` (permission, pause/resume, timer, local URI persistence) and session-detail playback from the device.
+Phase 5 adds private Supabase Storage (`session-audio`), authenticated multipart upload, signed playback URLs, and mobile upload progress with retry.
 
 ## Design principles
 

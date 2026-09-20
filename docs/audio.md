@@ -1,57 +1,52 @@
-# Audio recording & playback
+# Audio recording, upload & playback
 
-Phase 4 adds on-device recording with `expo-audio` and local playback before cloud upload.
+## Phase status
+
+- Phase 4: on-device recording + local playback
+- Phase 5: private cloud upload + signed URL playback
 
 ## Flow
 
 ```text
-New Session
-  → create session (API)
-  → Recording screen
-      → request microphone permission
-      → prepare + record
-      → pause / resume
-      → stop
-      → save local URI (AsyncStorage)
-      → PATCH duration_seconds
+Stop recording
+  → save local URI
   → Session Details
-      → AudioPlayer (local URI)
+      → upload multipart to POST /sessions/:id/audio (with progress)
+      → status = uploaded, audio_path set
+      → GET /sessions/:id/audio-url → signed URL
+      → AudioPlayer uses signed URL (falls back to local URI)
 ```
 
-Recording does **not** require internet. Upload to Supabase Storage is Phase 5.
+If upload fails, the local recording is kept and the user can tap **Try Again**.
 
-## APIs used
+## Storage
 
-| Concern | API |
+| Item | Value |
 | --- | --- |
-| Permission | `requestRecordingPermissionsAsync()` |
-| Recorder | `useAudioRecorder`, `useAudioRecorderState` |
-| Mode | `setAudioModeAsync({ allowsRecording: true, … })` |
-| Playback | `useAudioPlayer`, `useAudioPlayerStatus` |
-| Local URI map | AsyncStorage key `sessionai:local-audio:<sessionId>` |
+| Bucket | `session-audio` (private) |
+| Path | `{user_id}/{session_id}/audio.{ext}` |
+| Access | RLS on `storage.objects`; no public URLs |
+| Playback | Signed URLs (1 hour TTL) |
 
-Recordings use `RecordingPresets.HIGH_QUALITY` with `directory: 'document'` so files are less likely to be purged than cache.
+Migration: `supabase/migrations/202609200002_session_audio_bucket.sql`
 
-## UI pieces
+## API
 
-- `RecordingTimer` — `HH:MM:SS`
-- `RecordingButton` — large stop / start control
-- `AudioPlayer` — play, pause, ±10s seek, progress, loading/error
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/sessions/:id/audio` | Multipart field `file` |
+| `GET` | `/sessions/:id/audio-url` | Temporary signed playback URL |
 
-## Navigation safety
+Ownership is verified before upload or signing. Paths must start with the caller's `user_id`.
 
-While a recording is active or paused, leaving the screen prompts a confirmation dialog.
+## Mobile pieces
 
-## Permissions
+- `uploadSessionAudio` — XHR upload with progress
+- `UploadProgress` — progress / success / error + retry
+- `AudioPlayer` — plays local URI or signed URL
 
-Configured in `apps/mobile/app.json`:
+## Setup checklist
 
-- iOS: `NSMicrophoneUsageDescription`
-- Android: `RECORD_AUDIO`
-- `expo-audio` config plugin
-
-## Limitations (by design for Phase 4)
-
-- No cloud upload yet (audio stays on device)
-- No signed URL playback
-- Web recording depends on browser microphone permission and MediaRecorder support
+1. Apply both SQL migrations (sessions + storage bucket).
+2. Confirm bucket `session-audio` exists and is **not** public.
+3. Ensure API + mobile Supabase env vars are set.

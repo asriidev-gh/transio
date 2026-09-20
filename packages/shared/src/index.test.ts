@@ -4,7 +4,9 @@ import {
   apiError,
   apiSuccess,
   AuthCredentialsSchema,
+  buildSessionAudioPath,
   CreateSessionSchema,
+  extensionFromMimeType,
   HealthResponseSchema,
   SessionTypeSchema,
   UpdateSessionSchema,
@@ -49,13 +51,16 @@ describe('shared schemas', () => {
       sessionType: 'group_discussion',
     });
     assert.equal(parsed.title, 'GLC Session 3');
-    assert.throws(() =>
-      CreateSessionSchema.parse({ title: '', sessionType: 'seminar' }),
-    );
+    assert.throws(() => CreateSessionSchema.parse({ title: '', sessionType: 'seminar' }));
   });
 
   it('requires at least one field on update', () => {
     assert.throws(() => UpdateSessionSchema.parse({}));
     assert.equal(UpdateSessionSchema.parse({ title: 'Updated' }).title, 'Updated');
+  });
+
+  it('builds session audio storage paths', () => {
+    assert.equal(buildSessionAudioPath('u1', 's1', '.m4a'), 'u1/s1/audio.m4a');
+    assert.equal(extensionFromMimeType('audio/webm'), 'webm');
   });
 });

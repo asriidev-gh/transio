@@ -13,6 +13,7 @@ type ResponseBody = {
 type RequestInit = {
   headers?: Record<string, string>;
   body?: unknown;
+  rawBody?: Buffer;
 };
 
 function send(
@@ -31,11 +32,19 @@ function send(
         return;
       }
 
-      const payload = init.body !== undefined ? JSON.stringify(init.body) : undefined;
       const headers: Record<string, string> = { ...(init.headers ?? {}) };
-      if (payload !== undefined) {
+      let payload: Buffer | undefined;
+
+      if (init.rawBody) {
+        payload = init.rawBody;
+      } else if (init.body !== undefined) {
+        const json = JSON.stringify(init.body);
+        payload = Buffer.from(json, 'utf8');
         headers['Content-Type'] = 'application/json';
-        headers['Content-Length'] = Buffer.byteLength(payload).toString();
+      }
+
+      if (payload) {
+        headers['Content-Length'] = payload.byteLength.toString();
       }
 
       const req = http.request(
@@ -68,12 +77,30 @@ function send(
         reject(err);
       });
 
-      if (payload !== undefined) {
+      if (payload) {
         req.write(payload);
       }
       req.end();
     });
   });
+}
+
+export function buildMultipartBody(
+  fieldName: string,
+  filename: string,
+  contentType: string,
+  file: Buffer,
+): { body: Buffer; contentType: string } {
+  const boundary = '----SessionAITestBoundary7d4a';
+  const head =
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="${fieldName}"; filename="${filename}"\r\n` +
+    `Content-Type: ${contentType}\r\n\r\n`;
+  const tail = `\r\n--${boundary}--\r\n`;
+  return {
+    contentType: `multipart/form-data; boundary=${boundary}`,
+    body: Buffer.concat([Buffer.from(head, 'utf8'), file, Buffer.from(tail, 'utf8')]),
+  };
 }
 
 /**
@@ -86,6 +113,13 @@ export function request(app: Express) {
     },
     post(path: string, body?: unknown, headers: Record<string, string> = {}): Promise<ResponseBody> {
       return send(app, 'POST', path, { body, headers });
+    },
+    postRaw(
+      path: string,
+      rawBody: Buffer,
+      headers: Record<string, string> = {},
+    ): Promise<ResponseBody> {
+      return send(app, 'POST', path, { rawBody, headers });
     },
     patch(
       path: string,

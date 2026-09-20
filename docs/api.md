@@ -67,10 +67,29 @@ Create body example:
 
 New sessions start with `status: "recording"`.
 
+### Audio upload & signed URLs
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/sessions/:id/audio` | Multipart upload (`file` field), sets `audio_path` + `status=uploaded` |
+| `GET` | `/sessions/:id/audio-url` | Returns a private signed URL (`expiresIn` seconds) |
+
+Upload response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "sessionId": "…",
+    "audioPath": "userId/sessionId/audio.m4a",
+    "status": "uploaded"
+  }
+}
+```
+
 ## Planned endpoints (later phases)
 
 ```text
-POST   /sessions/:id/audio
 POST   /sessions/:id/transcribe
 POST   /sessions/:id/summarize
 
@@ -79,7 +98,7 @@ GET    /sessions/:id/summary
 GET    /sessions/:id/status
 ```
 
-Session CRUD (`POST/GET/PATCH/DELETE /sessions`) is implemented in Phase 3.
+Session CRUD and audio upload/signed URLs are implemented (Phases 3–5).
 Authenticated endpoints will require a Supabase JWT (`Authorization: Bearer …`) and verify ownership server-side.
 
 ## Running

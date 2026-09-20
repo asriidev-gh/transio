@@ -2,7 +2,7 @@
 
 AI-powered seminar and group discussion recorder. Record audio, transcribe speech, and generate structured summaries — with a mobile-first Expo client and a Node.js API.
 
-> **Phase status:** Phase 4 (Audio Recording) is complete. Cloud storage, transcription, and AI summary are intentionally not implemented yet.
+> **Phase status:** Phase 5 (Cloud Audio Storage) is complete. Transcription and AI summary are intentionally not implemented yet.
 
 ## Architecture
 
@@ -86,7 +86,8 @@ npx supabase db push
 # Or paste supabase/migrations/*.sql into the Supabase SQL editor.
 ```
 
-Phase 3 migration: `supabase/migrations/202609200001_create_sessions.sql` (sessions + RLS).
+Phase 3 migration: `202609200001_create_sessions.sql`  
+Phase 5 migration: `202609200002_session_audio_bucket.sql` (private `session-audio` bucket + storage RLS)
 
 ## Running the API
 
@@ -165,8 +166,8 @@ Documented for later phases. Claude runs **only** on the API using `ANTHROPIC_AP
 1. Foundation
 2. Authentication
 3. Database & sessions
-4. **Audio recording** ← current
-5. Cloud audio storage
+4. Audio recording
+5. **Cloud audio storage** ← current
 6. Speech-to-text
 7. Claude AI summary
 8. End-to-end processing

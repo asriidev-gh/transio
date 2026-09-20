@@ -23,6 +23,16 @@ export {
   type UpdateSessionInput,
 } from './session.js';
 
+export {
+  SESSION_AUDIO_BUCKET,
+  AudioUploadResultSchema,
+  SignedAudioUrlSchema,
+  buildSessionAudioPath,
+  extensionFromMimeType,
+  type AudioUploadResult,
+  type SignedAudioUrl,
+} from './storage.js';
+
 /** Structured AI summary shape (used in Phase 7+). */
 export const SessionSummarySchema = z.object({
   overview: z.string(),

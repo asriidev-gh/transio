@@ -5,10 +5,12 @@ import { logger } from './lib/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { healthRouter } from './routes/health.js';
 import { meRouter } from './routes/me.js';
+import type { AudioStorageFactory } from './routes/audio.js';
 import { createSessionsRouter, type SessionRepoFactory } from './routes/sessions.js';
 
 export interface AppDeps {
   createSessionRepository?: SessionRepoFactory;
+  createAudioStorage?: AudioStorageFactory;
   authenticate?: RequestHandler;
 }
 
@@ -29,6 +31,7 @@ export function createApp(deps: AppDeps = {}) {
     '/sessions',
     createSessionsRouter({
       createRepository: deps.createSessionRepository,
+      createAudioStorage: deps.createAudioStorage,
       authenticate: deps.authenticate,
     }),
   );
