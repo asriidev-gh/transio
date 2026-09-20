@@ -2,7 +2,7 @@
 
 AI-powered seminar and group discussion recorder. Record audio, transcribe speech, and generate structured summaries — with a mobile-first Expo client and a Node.js API.
 
-> **Phase status:** Phase 9 (Reliability & UX) is complete. MVP polish is intentionally not implemented yet.
+> **Phase status:** Phase 10 (MVP Polish) is complete. The MVP phase roadmap is finished.
 
 ## Architecture
 
@@ -170,6 +170,7 @@ Zod (`SessionSummary`) before persistence. See [docs/ai.md](./docs/ai.md).
 - [API](./docs/api.md)
 - [Audio](./docs/audio.md)
 - [AI](./docs/ai.md)
+- [Production](./docs/production.md)
 
 ## Phase roadmap
 
@@ -181,5 +182,5 @@ Zod (`SessionSummary`) before persistence. See [docs/ai.md](./docs/ai.md).
 6. **Speech-to-text**
 7. **Claude AI summary**
 8. **End-to-end processing**
-9. **Reliability & UX** ← current
-10. MVP polish
+9. **Reliability & UX**
+10. **MVP polish** ← current

@@ -1,5 +1,13 @@
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   SESSION_STATUS_LABELS,
@@ -17,7 +25,7 @@ import {
   getLocalAudioUri,
   isLocalAudioReadable,
 } from '@/src/services/local-audio';
-import { getSession } from '@/src/services/sessions';
+import { deleteSession, getSession } from '@/src/services/sessions';
 import { colors, spacing, typography } from '@/src/theme';
 import { formatDurationHuman, formatSessionDate } from '@/src/utils/format';
 
@@ -36,6 +44,8 @@ export default function SessionDetailsScreen() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadMessage, setUploadMessage] = useState<string | undefined>(undefined);
   const [proceeding, setProceeding] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const runUploadAndProcess = useCallback(
     async (sessionId: string, uri: string) => {
@@ -89,16 +99,64 @@ export default function SessionDetailsScreen() {
     [router],
   );
 
-  const onReRecord = useCallback(async () => {
+  const onReRecord = useCallback(() => {
     if (!id || typeof id !== 'string') return;
-    await clearLocalAudioUri(id);
-    setLocalUri(null);
-    setPlaybackUri(null);
-    setShowPlayer(false);
-    setUploadStatus('idle');
-    setUploadMessage(undefined);
-    router.push(`/recording?id=${id}`);
+    Alert.alert(
+      'Re-record this session?',
+      'The current local take will be discarded. Cloud audio (if already uploaded) is kept until you upload a new recording.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Re-record',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              await clearLocalAudioUri(id);
+              setLocalUri(null);
+              setPlaybackUri(null);
+              setShowPlayer(false);
+              setUploadStatus('idle');
+              setUploadMessage(undefined);
+              router.push(`/recording?id=${id}`);
+            })();
+          },
+        },
+      ],
+    );
   }, [id, router]);
+
+  const onDelete = useCallback(() => {
+    if (!id || typeof id !== 'string' || !session) return;
+    Alert.alert(
+      'Delete session?',
+      `“${session.title}” and its transcript/summary will be permanently removed.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setDeleting(true);
+              try {
+                await deleteSession(id);
+                await clearLocalAudioUri(id);
+                router.replace('/');
+              } catch (err) {
+                setError(
+                  err instanceof ApiClientError
+                    ? err.message
+                    : 'Could not delete this session.',
+                );
+              } finally {
+                setDeleting(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [id, router, session]);
 
   const load = useCallback(async () => {
     if (!id || typeof id !== 'string') {
@@ -163,7 +221,16 @@ export default function SessionDetailsScreen() {
     }, [load]),
   );
 
-  if (loading) {
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  if (loading && !refreshing) {
     return (
       <View style={styles.centered}>
         <LoadingState message="Loading session…" />
@@ -189,20 +256,52 @@ export default function SessionDetailsScreen() {
   const hasPlayback = Boolean(playbackUri);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+    >
       <Text style={styles.title} accessibilityRole="header">
         {session.title}
       </Text>
       <Text style={styles.meta}>{SESSION_TYPE_LABELS[session.sessionType]}</Text>
       <Text style={styles.meta}>{formatSessionDate(session.recordedAt)}</Text>
       <Text style={styles.meta}>{formatDurationHuman(session.durationSeconds)}</Text>
-      <Text style={[styles.status, completed ? styles.statusOk : styles.statusPending]}>
+      <Text
+        style={[
+          styles.status,
+          completed ? styles.statusOk : session.status === 'failed' ? styles.statusFailed : styles.statusPending,
+        ]}
+      >
         {completed
           ? `✓ ${SESSION_STATUS_LABELS[session.status]}`
-          : SESSION_STATUS_LABELS[session.status]}
+          : session.status === 'failed'
+            ? `⚠ ${SESSION_STATUS_LABELS[session.status]}`
+            : SESSION_STATUS_LABELS[session.status]}
       </Text>
 
       {session.description ? <Text style={styles.description}>{session.description}</Text> : null}
+
+      <View style={styles.manageRow}>
+        <Pressable
+          style={styles.manageButton}
+          onPress={() => router.push(`/session/${session.id}/edit`)}
+          accessibilityRole="button"
+          accessibilityLabel="Edit session"
+        >
+          <Text style={styles.manageButtonText}>Edit</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.manageButton, styles.dangerButton]}
+          onPress={onDelete}
+          disabled={deleting}
+          accessibilityRole="button"
+          accessibilityLabel="Delete session"
+        >
+          <Text style={[styles.manageButtonText, styles.dangerButtonText]}>
+            {deleting ? 'Deleting…' : 'Delete'}
+          </Text>
+        </Pressable>
+      </View>
 
       <View style={styles.actions}>
         {hasLocalDraft ? (
@@ -239,6 +338,7 @@ export default function SessionDetailsScreen() {
                 void runUploadAndProcess(String(id), localUri);
               }}
               accessibilityRole="button"
+              accessibilityLabel="Proceed — upload and process"
             >
               <Text style={styles.primaryButtonText}>
                 {proceeding ? 'Uploading…' : 'Proceed — upload & process'}
@@ -248,8 +348,9 @@ export default function SessionDetailsScreen() {
             <Pressable
               style={[styles.secondaryButton, proceeding && styles.buttonDisabled]}
               disabled={proceeding}
-              onPress={() => void onReRecord()}
+              onPress={onReRecord}
               accessibilityRole="button"
+              accessibilityLabel="Re-record session"
             >
               <Text style={styles.secondaryButtonText}>Re-record</Text>
             </Pressable>
@@ -361,7 +462,7 @@ export default function SessionDetailsScreen() {
         />
       </View>
 
-      <Pressable onPress={() => router.back()} style={styles.back} accessibilityRole="button">
+      <Pressable onPress={() => router.back()} style={styles.back} accessibilityRole="button" accessibilityLabel="Back to sessions">
         <Text style={styles.backText}>Back to sessions</Text>
       </Pressable>
     </ScrollView>
@@ -385,6 +486,7 @@ function ActionRow({
       disabled={disabled}
       style={[styles.action, disabled && styles.actionDisabled]}
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ disabled: Boolean(disabled) }}
     >
       <Text style={styles.actionLabel}>{label}</Text>
@@ -422,10 +524,36 @@ const styles = StyleSheet.create({
   },
   statusOk: { color: colors.success },
   statusPending: { color: colors.accent },
+  statusFailed: { color: colors.danger },
   description: {
     ...typography.body,
     color: colors.ink,
     marginTop: spacing.md,
+  },
+  manageRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  manageButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  manageButtonText: {
+    ...typography.caption,
+    color: colors.ink,
+    fontWeight: '700',
+  },
+  dangerButton: {
+    borderColor: colors.danger,
+    backgroundColor: '#F8E8E4',
+  },
+  dangerButtonText: {
+    color: colors.danger,
   },
   actions: {
     marginTop: spacing.xl,

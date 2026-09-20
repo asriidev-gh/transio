@@ -1,4 +1,5 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
+import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
@@ -25,9 +26,12 @@ function AuthGate({ children }: { children: ReactNode }) {
   const { session, isLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const [fontsLoaded] = useFonts({
+    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+  });
 
   useEffect(() => {
-    if (isLoading) {
+    if (isLoading || !fontsLoaded) {
       return;
     }
 
@@ -41,18 +45,18 @@ function AuthGate({ children }: { children: ReactNode }) {
     if (session && inAuthGroup) {
       router.replace('/(app)');
     }
-  }, [session, isLoading, segments, router]);
+  }, [session, isLoading, fontsLoaded, segments, router]);
 
   useEffect(() => {
-    if (!isLoading) {
-      SplashScreen.hideAsync();
+    if (!isLoading && fontsLoaded) {
+      void SplashScreen.hideAsync();
     }
-  }, [isLoading]);
+  }, [isLoading, fontsLoaded]);
 
-  if (isLoading) {
+  if (isLoading || !fontsLoaded) {
     return (
       <View style={styles.boot}>
-        <LoadingState message="Restoring session…" />
+        <LoadingState message="Starting SessionAI…" />
       </View>
     );
   }

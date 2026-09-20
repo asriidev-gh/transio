@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, spacing } from '@/src/theme';
+import { colors, spacing, typography } from '@/src/theme';
 import { formatDuration } from '@/src/utils/format';
 
 interface RecordingTimerProps {
@@ -21,6 +21,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   time: {
+    ...typography.mono,
     fontSize: 48,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],

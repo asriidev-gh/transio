@@ -120,6 +120,42 @@ describe('sessions API', () => {
     assert.equal(data.durationSeconds, 90);
   });
 
+  it('deletes a session owned by the user', async () => {
+    const { app } = createTestApp();
+    const created = await request(app).post(
+      '/sessions',
+      { title: 'Disposable', sessionType: 'other' },
+      { Authorization: 'Bearer token-a' },
+    );
+    const id = (created.body.data as { id: string }).id;
+
+    const deleted = await request(app).delete(`/sessions/${id}`, {
+      Authorization: 'Bearer token-a',
+    });
+    assert.equal(deleted.status, 200);
+    assert.equal((deleted.body.data as { id: string }).id, id);
+
+    const missing = await request(app).get(`/sessions/${id}`, {
+      Authorization: 'Bearer token-a',
+    });
+    assert.equal(missing.status, 404);
+  });
+
+  it('prevents deleting another user session', async () => {
+    const { app } = createTestApp();
+    const created = await request(app).post(
+      '/sessions',
+      { title: 'Keep', sessionType: 'meeting' },
+      { Authorization: 'Bearer token-a' },
+    );
+    const id = (created.body.data as { id: string }).id;
+
+    const res = await request(app).delete(`/sessions/${id}`, {
+      Authorization: 'Bearer token-b',
+    });
+    assert.equal(res.status, 404);
+  });
+
   it('rejects invalid create payloads', async () => {
     const { app } = createTestApp();
     const res = await request(app).post(

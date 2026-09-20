@@ -114,7 +114,7 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Sessions</Text>
-            <Pressable onPress={() => router.push('/settings')} accessibilityRole="button">
+            <Pressable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Open settings">
               <Text style={styles.settingsLink}>Settings</Text>
             </Pressable>
           </View>

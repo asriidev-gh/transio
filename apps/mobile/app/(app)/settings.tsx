@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Constants from 'expo-constants';
 import { useAuth } from '@/src/hooks/useAuth';
 import { AuthServiceError } from '@/src/services/auth';
 import { colors, spacing, typography } from '@/src/theme';
@@ -9,23 +10,37 @@ export default function SettingsScreen() {
   const { user, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const appVersion = Constants.expoConfig?.version ?? '0.1.0';
 
-  async function onSignOut() {
-    setSigningOut(true);
-    setError(null);
-    try {
-      await signOut();
-    } catch (err) {
-      setError(err instanceof AuthServiceError ? err.message : 'Could not sign out.');
-    } finally {
-      setSigningOut(false);
-    }
+  function onSignOut() {
+    Alert.alert('Sign out?', 'You can sign back in anytime with the same account.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setSigningOut(true);
+            setError(null);
+            try {
+              await signOut();
+            } catch (err) {
+              setError(err instanceof AuthServiceError ? err.message : 'Could not sign out.');
+            } finally {
+              setSigningOut(false);
+            }
+          })();
+        },
+      },
+    ]);
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Settings</Text>
-      <Text style={styles.body}>Manage your SessionAI account and connection settings.</Text>
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title} accessibilityRole="header">
+        Settings
+      </Text>
+      <Text style={styles.body}>Account, connection, and app details for SessionAI.</Text>
 
       <View style={styles.block}>
         <Text style={styles.label}>Signed in as</Text>
@@ -33,8 +48,13 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.block}>
+        <Text style={styles.label}>App version</Text>
+        <Text style={styles.value}>{appVersion}</Text>
+      </View>
+
+      <View style={styles.block}>
         <Text style={styles.label}>API base URL</Text>
-        <Text style={styles.value}>{mobileEnv.apiBaseUrl}</Text>
+        <Text style={[styles.value, styles.mono]}>{mobileEnv.apiBaseUrl}</Text>
       </View>
 
       <View style={styles.block}>
@@ -43,6 +63,14 @@ export default function SettingsScreen() {
           {isSupabaseConfigured()
             ? 'Public URL and anon key are set'
             : 'Not configured — see .env.example'}
+        </Text>
+      </View>
+
+      <View style={styles.block}>
+        <Text style={styles.label}>About</Text>
+        <Text style={styles.value}>
+          SessionAI records seminars and discussions, then transcribes and summarizes them with
+          server-side AI. Secrets never leave the API.
         </Text>
       </View>
 
@@ -58,20 +86,20 @@ export default function SettingsScreen() {
           signingOut && styles.buttonDisabled,
           pressed && !signingOut && styles.buttonPressed,
         ]}
-        onPress={() => void onSignOut()}
+        onPress={onSignOut}
         disabled={signingOut}
         accessibilityRole="button"
         accessibilityLabel="Sign out"
       >
         <Text style={styles.buttonText}>{signingOut ? 'Signing out…' : 'Sign Out'}</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: colors.background,
     padding: spacing.lg,
     gap: spacing.md,
@@ -99,6 +127,10 @@ const styles = StyleSheet.create({
   },
   value: {
     ...typography.body,
+    color: colors.ink,
+  },
+  mono: {
+    ...typography.mono,
     color: colors.ink,
   },
   error: {

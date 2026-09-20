@@ -2,6 +2,8 @@
  * SessionAI visual theme — forest ink + warm parchment.
  * Avoids generic purple/cream AI defaults.
  */
+import { Platform } from 'react-native';
+
 export const colors = {
   background: '#F3EEE4',
   backgroundAlt: '#E8E0D2',
@@ -27,8 +29,18 @@ export const spacing = {
   xxl: 48,
 } as const;
 
+/** SpaceMono loaded in root layout; falls back to monospace platforms. */
+export const fonts = {
+  mono: Platform.select({
+    ios: 'SpaceMono',
+    android: 'SpaceMono',
+    default: 'SpaceMono',
+  }) as string,
+} as const;
+
 export const typography = {
   brand: {
+    fontFamily: fonts.mono,
     fontSize: 36,
     fontWeight: '700' as const,
     letterSpacing: -0.5,
@@ -36,14 +48,21 @@ export const typography = {
   title: {
     fontSize: 24,
     fontWeight: '600' as const,
+    letterSpacing: -0.2,
   },
   body: {
     fontSize: 16,
     lineHeight: 24,
   },
   caption: {
+    fontFamily: fonts.mono,
     fontSize: 13,
     lineHeight: 18,
+  },
+  mono: {
+    fontFamily: fonts.mono,
+    fontSize: 14,
+    lineHeight: 20,
   },
 } as const;
 

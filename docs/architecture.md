@@ -35,6 +35,10 @@ Phase 9 hardens reliability and recovery UX: provider retries (429/502/503), cle
 API/network errors, connectivity banner, empty/error CTAs, failed-session styling,
 client request retries, processing resume on app foreground, and audio playback load errors.
 
+Phase 10 polishes the MVP: edit/delete sessions with confirmations, branded icon/splash,
+SpaceMono typography, settings details, pull-to-refresh on session details, accessibility
+labels, and production configuration docs.
+
 ## Design principles
 
 1. Secrets stay on the server.
