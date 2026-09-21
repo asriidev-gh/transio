@@ -128,6 +128,13 @@ export function request(app: Express) {
     ): Promise<ResponseBody> {
       return send(app, 'PATCH', path, { body, headers });
     },
+    put(
+      path: string,
+      body?: unknown,
+      headers: Record<string, string> = {},
+    ): Promise<ResponseBody> {
+      return send(app, 'PUT', path, { body, headers });
+    },
     delete(path: string, headers: Record<string, string> = {}): Promise<ResponseBody> {
       return send(app, 'DELETE', path, { headers });
     },

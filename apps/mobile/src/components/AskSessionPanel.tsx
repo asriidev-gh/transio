@@ -10,12 +10,14 @@ import {
 } from 'react-native';
 import { ApiClientError } from '@/src/services/api';
 import { askSessionQuestion } from '@/src/services/ask';
-import { colors, radii, spacing, typography } from '@/src/theme';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
+import { Icon } from '@/src/components/ui/Icon';
 
 const DEFAULT_PROMPTS = [
   'What were the key points?',
   'List the action items.',
-  'What questions were discussed?',
+  'What was decided?',
 ];
 
 interface ChatTurn {
@@ -29,16 +31,14 @@ interface AskSessionPanelProps {
 }
 
 export function AskSessionPanel({ sessionId, sessionTitle }: AskSessionPanelProps) {
+  const { colors } = useTheme();
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [turns, setTurns] = useState<ChatTurn[]>([
-    {
-      role: 'assistant',
-      text: `Ask anything about “${sessionTitle}”. Answers use this session’s transcript and summary.`,
-    },
-  ]);
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [followUps, setFollowUps] = useState<string[]>(DEFAULT_PROMPTS);
+  const hasConversation = turns.some((turn) => turn.role === 'user');
+  const canSend = Boolean(input.trim()) && !busy;
 
   async function submit(question: string) {
     const trimmed = question.trim();
@@ -74,49 +74,99 @@ export function AskSessionPanel({ sessionId, sessionTitle }: AskSessionPanelProp
         style={styles.thread}
         contentContainerStyle={styles.threadContent}
         accessibilityLabel="Ask conversation"
+        keyboardShouldPersistTaps="handled"
       >
+        {!hasConversation ? (
+          <View style={styles.greeting}>
+            <Icon name="chat" size={40} />
+            <Text style={[styles.greetingEyebrow, { color: colors.success }]}>
+              Ask this session
+            </Text>
+            <Text style={[styles.greetingTitle, { color: colors.ink }]}>
+              What do you want to know about “{sessionTitle}”?
+            </Text>
+            <Text style={[styles.greetingBody, { color: colors.inkMuted }]}>
+              Answers use this session’s transcript and summary.
+            </Text>
+          </View>
+        ) : null}
+
         {turns.map((turn, index) => (
           <View
             key={`${turn.role}-${index}`}
-            style={[styles.bubble, turn.role === 'user' ? styles.userBubble : styles.botBubble]}
+            style={[
+              styles.bubble,
+              turn.role === 'user'
+                ? { backgroundColor: colors.brand, alignSelf: 'flex-end' }
+                : {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                    alignSelf: 'flex-start',
+                  },
+            ]}
           >
-            <Text style={turn.role === 'user' ? styles.userText : styles.botText}>{turn.text}</Text>
+            <Text
+              style={[
+                styles.bubbleText,
+                { color: turn.role === 'user' ? colors.onBrand : colors.ink },
+              ]}
+            >
+              {turn.text}
+            </Text>
           </View>
         ))}
         {busy ? (
           <View style={styles.busyRow}>
             <ActivityIndicator color={colors.accent} />
-            <Text style={styles.busyText}>Thinking…</Text>
+            <Text style={[styles.busyText, { color: colors.inkMuted }]}>Thinking…</Text>
           </View>
         ) : null}
         {error ? (
-          <Text style={styles.error} accessibilityRole="alert">
+          <Text style={[styles.error, { color: colors.danger }]} accessibilityRole="alert">
             {error}
           </Text>
         ) : null}
       </ScrollView>
 
       <View style={styles.prompts}>
-        <Text style={styles.promptsLabel}>Keep asking</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.promptRow}>
+        <Text style={[styles.promptsLabel, { color: colors.inkMuted }]}>
+          {hasConversation ? 'Keep asking' : 'Suggested'}
+        </Text>
+        <View style={styles.promptStack}>
           {followUps.map((prompt) => (
             <Pressable
               key={prompt}
-              style={styles.promptChip}
+              style={[
+                styles.promptRow,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+                busy && styles.promptDisabled,
+              ]}
               onPress={() => void submit(prompt)}
               disabled={busy}
               accessibilityRole="button"
               accessibilityLabel={prompt}
             >
-              <Text style={styles.promptText}>{prompt}</Text>
+              <Text style={[styles.promptText, { color: colors.ink }]}>{prompt}</Text>
+              <Text style={[styles.promptChevron, { color: colors.success }]}>›</Text>
             </Pressable>
           ))}
-        </ScrollView>
+        </View>
       </View>
 
       <View style={styles.composer}>
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              color: colors.ink,
+            },
+          ]}
           value={input}
           onChangeText={setInput}
           placeholder="Ask anything about this session"
@@ -127,13 +177,17 @@ export function AskSessionPanel({ sessionId, sessionTitle }: AskSessionPanelProp
           accessibilityLabel="Ask question"
         />
         <Pressable
-          style={[styles.send, (!input.trim() || busy) && styles.sendDisabled]}
+          style={[
+            styles.send,
+            { backgroundColor: colors.brand },
+            !canSend && styles.sendDisabled,
+          ]}
           onPress={() => void submit(input)}
-          disabled={!input.trim() || busy}
+          disabled={!canSend}
           accessibilityRole="button"
           accessibilityLabel="Send question"
         >
-          <Text style={styles.sendText}>Ask</Text>
+          <Text style={[styles.sendText, { color: colors.onBrand }]}>Ask</Text>
         </Pressable>
       </View>
     </View>
@@ -144,39 +198,42 @@ const styles = StyleSheet.create({
   wrap: {
     flex: 1,
     minHeight: 360,
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   thread: {
     flexGrow: 1,
-    maxHeight: 320,
+    maxHeight: 280,
   },
   threadContent: {
     gap: spacing.sm,
     paddingBottom: spacing.sm,
+  },
+  greeting: {
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  greetingEyebrow: {
+    ...typography.caption,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontWeight: '700',
+  },
+  greetingTitle: {
+    ...typography.title,
+    fontSize: 22,
+    lineHeight: 28,
+  },
+  greetingBody: {
+    ...typography.body,
+    fontSize: 15,
   },
   bubble: {
     borderRadius: radii.md,
     padding: spacing.md,
     maxWidth: '92%',
   },
-  userBubble: {
-    alignSelf: 'flex-end',
-    backgroundColor: colors.brand,
-  },
-  botBubble: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  userText: {
+  bubbleText: {
     ...typography.body,
-    color: colors.onBrand,
-    fontSize: 15,
-  },
-  botText: {
-    ...typography.body,
-    color: colors.ink,
     fontSize: 15,
   },
   busyRow: {
@@ -186,66 +243,70 @@ const styles = StyleSheet.create({
   },
   busyText: {
     ...typography.caption,
-    color: colors.inkMuted,
   },
   error: {
     ...typography.caption,
-    color: colors.danger,
     fontWeight: '600',
   },
   prompts: {
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   promptsLabel: {
     ...typography.caption,
-    color: colors.inkMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  promptRow: {
+  promptStack: {
     gap: spacing.sm,
-    paddingVertical: spacing.xs,
   },
-  promptChip: {
+  promptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radii.pill,
+    borderRadius: radii.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  promptDisabled: {
+    opacity: 0.55,
   },
   promptText: {
-    fontSize: 13,
-    color: colors.ink,
+    flex: 1,
+    fontSize: 15,
     fontWeight: '600',
+  },
+  promptChevron: {
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 22,
   },
   composer: {
     flexDirection: 'row',
     gap: spacing.sm,
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
-    color: colors.ink,
     fontSize: 15,
+    minHeight: 48,
   },
   send: {
-    backgroundColor: colors.accent,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 48,
   },
   sendDisabled: {
     opacity: 0.45,
   },
   sendText: {
-    color: colors.brand,
     fontWeight: '700',
     fontSize: 15,
   },

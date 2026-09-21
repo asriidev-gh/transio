@@ -91,7 +91,9 @@ Phase 5 migration: `202609200002_session_audio_bucket.sql` (private `session-aud
 Phase 6 migration: `202609200003_create_transcripts.sql`  
 Phase 7 migration: `202609200004_create_summaries.sql`  
 Phase 11 migration: `202609200005_transcript_segments.sql` (timed segments JSON)  
-Phase 11 migration: `202609200006_session_favorites.sql` (`favorited_at`)
+Phase 11 migration: `202609200006_session_favorites.sql` (`favorited_at`)  
+Phase 11 migration: `202609200007_session_content_feedback.sql` (summary/transcript thumbs)
+Phase 11 migration: `202609210001_session_folders.sql` (`session_folders` + `sessions.folder_id`)
 
 ## Running the API
 
@@ -199,3 +201,6 @@ Zod (`SessionSummary`) before persistence. See [docs/ai.md](./docs/ai.md).
 11. **Harbor Studio + Ask** ← current
     - Theme, workspace tabs, Ask, segments/speakers, favorites/share
     - Processing completion: browser notification + home “Ready to review” banner
+    - Import existing audio files (alongside mic recording)
+    - On-demand Translate via language select (EN, Filipino, Cebuano, ES, ZH, JA, KO, …)
+    - Thumbs up/down feedback on summary and transcript

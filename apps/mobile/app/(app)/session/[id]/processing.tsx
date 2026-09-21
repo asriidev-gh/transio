@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, type AppStateStatus, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, type AppStateStatus, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { SessionStatusResponse } from '@sessionai/shared';
 import { ErrorState } from '@/src/components/ErrorState';
@@ -13,11 +13,15 @@ import {
 } from '@/src/services/notifications';
 import { getSessionStatus, startProcessing } from '@/src/services/processing';
 import { getSession } from '@/src/services/sessions';
-import { colors, radii, spacing, typography } from '@/src/theme';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
+import { Button } from '@/src/components/ui/Button';
+import { WaveformVisualizer } from '@/src/components/WaveformVisualizer';
 
 export default function ProcessingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { colors } = useTheme();
   const [status, setStatus] = useState<SessionStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -196,7 +200,7 @@ export default function ProcessingScreen() {
 
   if (!status && loading) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <LoadingState message="Checking processing status…" />
       </View>
     );
@@ -204,7 +208,7 @@ export default function ProcessingScreen() {
 
   if (!status && error) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <ErrorState
           title="Processing unavailable"
           description={error}
@@ -217,7 +221,7 @@ export default function ProcessingScreen() {
 
   if (!status) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <ErrorState
           title="Processing unavailable"
           description="Could not load session status."
@@ -228,27 +232,42 @@ export default function ProcessingScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Processing</Text>
-      <Text style={styles.subtitle}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.kicker, { color: colors.inkMuted }]}>
+        {done ? 'Ready' : failed ? 'Needs attention' : inFlight ? 'Transcribing' : 'Process'}
+      </Text>
+      <Text style={[styles.title, { color: colors.ink }]}>{sessionTitle}</Text>
+      <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
         {done
-          ? 'Your session is ready.'
+          ? 'Your transcript and summary are ready to review.'
           : failed
             ? 'Something went wrong — your audio is still saved.'
             : inFlight
-              ? 'Working through transcription and summary…'
-              : 'Ready to process this recording.'}
+              ? 'Your recording is being processed. Safe to leave this screen.'
+              : 'We’ll transcribe speech, then format a summary.'}
       </Text>
 
       {inFlight && !done ? (
-        <View style={styles.safeBanner} accessibilityRole="text">
-          <Text style={styles.safeBannerText}>
-            Safe to leave. We’ll notify you when processing finishes (if notifications are allowed).
+        <View style={styles.waveWrap}>
+          <WaveformVisualizer active accessibilityLabel="Processing visualization" />
+        </View>
+      ) : null}
+
+      {inFlight && !done ? (
+        <View
+          style={[
+            styles.safeBanner,
+            { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+          ]}
+          accessibilityRole="text"
+        >
+          <Text style={[styles.safeBannerText, { color: colors.accentDeep }]}>
+            Safe to leave. We’ll notify you when processing finishes if notifications are allowed.
           </Text>
         </View>
       ) : null}
 
-      <View style={styles.card}>
+      <View style={styles.steps}>
         <ProcessingSteps
           status={status.status}
           hasAudio={status.hasAudio}
@@ -258,56 +277,38 @@ export default function ProcessingScreen() {
       </View>
 
       {failed && !done ? (
-        <Pressable
-          style={styles.primary}
+        <Button
+          label="Retry processing"
           onPress={() => {
             if (!id || typeof id !== 'string') return;
             startedRef.current = true;
             void kickOff(id);
           }}
-          accessibilityRole="button"
-        >
-          <Text style={styles.primaryText}>Retry processing</Text>
-        </Pressable>
+        />
       ) : null}
 
       {done ? (
         <View style={styles.actions}>
-          <Pressable
-            style={styles.primary}
+          <Button
+            label="Open session"
             onPress={() => router.replace(`/session/${id}`)}
-            accessibilityRole="button"
-          >
-            <Text style={styles.primaryText}>Open session workspace</Text>
-          </Pressable>
-          <Pressable
-            style={styles.secondary}
+          />
+          <Button
+            label="View summary"
+            variant="secondary"
             onPress={() => router.push(`/session/${id}/summary`)}
-            accessibilityRole="button"
-          >
-            <Text style={styles.secondaryText}>View AI Summary</Text>
-          </Pressable>
-          <Pressable
-            style={styles.secondary}
-            onPress={() => router.push(`/session/${id}/transcript`)}
-            accessibilityRole="button"
-          >
-            <Text style={styles.secondaryText}>View Transcript</Text>
-          </Pressable>
+          />
         </View>
       ) : null}
 
       {!done && !inFlight && !failed ? (
-        <Pressable
-          style={styles.primary}
+        <Button
+          label="Start processing"
           onPress={() => {
             if (!id || typeof id !== 'string') return;
             void kickOff(id);
           }}
-          accessibilityRole="button"
-        >
-          <Text style={styles.primaryText}>Start processing</Text>
-        </Pressable>
+        />
       ) : null}
     </View>
   );
@@ -316,73 +317,45 @@ export default function ProcessingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
     padding: spacing.lg,
     gap: spacing.md,
   },
   centered: {
     flex: 1,
-    backgroundColor: colors.background,
     padding: spacing.lg,
     justifyContent: 'center',
   },
+  kicker: {
+    ...typography.caption,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
   title: {
-    ...typography.title,
-    color: colors.ink,
+    ...typography.pageTitle,
   },
   subtitle: {
     ...typography.body,
-    color: colors.inkMuted,
     marginBottom: spacing.sm,
   },
+  waveWrap: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
   safeBanner: {
-    backgroundColor: colors.accentSoft,
     borderRadius: radii.md,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: colors.accent,
   },
   safeBannerText: {
     ...typography.body,
     fontSize: 14,
-    color: colors.brand,
     fontWeight: '600',
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
+  steps: {
+    paddingVertical: spacing.sm,
   },
   actions: {
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     gap: spacing.sm,
-  },
-  primary: {
-    backgroundColor: colors.brand,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-  },
-  primaryText: {
-    color: colors.onBrand,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  secondary: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-  },
-  secondaryText: {
-    color: colors.ink,
-    fontWeight: '600',
-    fontSize: 16,
   },
 });

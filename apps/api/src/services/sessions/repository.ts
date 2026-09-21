@@ -60,12 +60,17 @@ export class SupabaseSessionRepository implements SessionRepository {
       description: input.description?.trim() ? input.description.trim() : null,
       recorded_at: input.recordedAt ?? new Date().toISOString(),
       status: 'recording',
+      folder_id: input.folderId ?? null,
     };
 
     const { data, error } = await this.client.from('sessions').insert(payload).select('*').single();
 
     if (error) {
-      throw new AppError('DATABASE_ERROR', 'Could not create session', 500);
+      const hint =
+        error.message.includes('folder_id') || error.message.includes('folder does not belong')
+          ? ' Apply migration 202609210001_session_folders.sql in Supabase.'
+          : '';
+      throw new AppError('DATABASE_ERROR', `Could not create session.${hint}`, 500);
     }
 
     return SessionSchema.parse(mapSessionRow(data as SessionRow));
@@ -83,6 +88,7 @@ export class SupabaseSessionRepository implements SessionRepository {
     if (input.audioPath !== undefined) patch.audio_path = input.audioPath;
     if (input.status !== undefined) patch.status = input.status;
     if (input.favoritedAt !== undefined) patch.favorited_at = input.favoritedAt;
+    if (input.folderId !== undefined) patch.folder_id = input.folderId;
 
     const { data, error } = await this.client
       .from('sessions')
@@ -95,7 +101,9 @@ export class SupabaseSessionRepository implements SessionRepository {
     if (error) {
       const hint = error.message.includes('favorited_at')
         ? ' Apply migration 202609200006_session_favorites.sql in Supabase.'
-        : '';
+        : error.message.includes('folder_id')
+          ? ' Apply migration 202609210001_session_folders.sql in Supabase.'
+          : '';
       throw new AppError('DATABASE_ERROR', `Could not update session.${hint}`, 500);
     }
 
@@ -154,6 +162,7 @@ export class InMemorySessionRepository implements SessionRepository {
       audioPath: null,
       status: 'recording',
       favoritedAt: null,
+      folderId: input.folderId ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -184,6 +193,7 @@ export class InMemorySessionRepository implements SessionRepository {
       status: input.status ?? existing.status,
       favoritedAt:
         input.favoritedAt !== undefined ? input.favoritedAt : existing.favoritedAt,
+      folderId: input.folderId !== undefined ? input.folderId : existing.folderId,
       updatedAt: new Date().toISOString(),
     };
 

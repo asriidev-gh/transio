@@ -1,7 +1,8 @@
 import { Stack } from 'expo-router';
-import { colors } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
 
 export default function SessionIdLayout() {
+  const { colors } = useTheme();
   return (
     <Stack
       screenOptions={{

@@ -15,6 +15,10 @@ import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { SessionTypePicker } from '@/src/components/SessionTypePicker';
 import { ApiClientError } from '@/src/services/api';
+import {
+  listCustomSessionTypes,
+  rememberCustomSessionType,
+} from '@/src/services/custom-session-types';
 import { getSession, updateSession } from '@/src/services/sessions';
 import { colors, spacing, typography } from '@/src/theme';
 
@@ -23,6 +27,8 @@ export default function EditSessionScreen() {
   const router = useRouter();
   const [title, setTitle] = useState('');
   const [sessionType, setSessionType] = useState<SessionType>('group_discussion');
+  const [customTypeLabel, setCustomTypeLabel] = useState('');
+  const [customTypes, setCustomTypes] = useState<string[]>([]);
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,10 +44,14 @@ export default function EditSessionScreen() {
     setLoading(true);
     setLoadError(null);
     try {
-      const session = await getSession(id);
+      const [session, customs] = await Promise.all([getSession(id), listCustomSessionTypes()]);
       setTitle(session.title);
       setSessionType(session.sessionType);
+      setCustomTypes(customs);
       setDescription(session.description ?? '');
+      if (session.sessionType === 'other') {
+        setCustomTypeLabel(customs[0] ?? '');
+      }
     } catch (err) {
       setLoadError(err instanceof ApiClientError ? err.message : 'Could not load session.');
     } finally {
@@ -60,10 +70,18 @@ export default function EditSessionScreen() {
       setError('Title is required.');
       return;
     }
+    if (sessionType === 'other' && !customTypeLabel.trim()) {
+      setError('Enter a name for this session type, or pick another type.');
+      return;
+    }
 
     setSaving(true);
     setError(null);
     try {
+      if (sessionType === 'other') {
+        const next = await rememberCustomSessionType(customTypeLabel);
+        setCustomTypes(next);
+      }
       await updateSession(id, {
         title: trimmed,
         sessionType,
@@ -120,7 +138,14 @@ export default function EditSessionScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>Session Type</Text>
-          <SessionTypePicker value={sessionType} onChange={setSessionType} disabled={saving} />
+          <SessionTypePicker
+            value={sessionType}
+            onChange={setSessionType}
+            customLabel={customTypeLabel}
+            onCustomLabelChange={setCustomTypeLabel}
+            customTypes={customTypes}
+            disabled={saving}
+          />
         </View>
 
         <View style={styles.field}>

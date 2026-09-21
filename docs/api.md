@@ -65,14 +65,31 @@ Create body example:
 }
 ```
 
-New sessions start with `status: "recording"`.
+New sessions start with `status: "recording"`. Optional `folderId` files the session into a user folder.
+
+### Folders (`/folders`)
+
+One-level folders (not nested). Deleting a folder sets `sessions.folder_id` to null (recordings stay in Unfiled).
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/folders` | List current user's folders (name A–Z) |
+| `POST` | `/folders` | Create folder `{ name }` (1–80 chars) |
+| `GET` | `/folders/:id` | Get one folder |
+| `PATCH` | `/folders/:id` | Rename `{ name }` |
+| `DELETE` | `/folders/:id` | Delete folder (sessions become unfiled) |
+
+`PATCH /sessions/:id` accepts `folderId` (uuid or `null`) to move a session.
 
 ### Audio upload & signed URLs
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/sessions/:id/audio` | Multipart upload (`file` field), sets `audio_path` + `status=uploaded` |
+| `POST` | `/sessions/:id/audio` | Multipart upload (`file` field, audio or video), sets `audio_path` + `status=uploaded` |
+| `POST` | `/sessions/:id/import-url` | Fetch a **direct** media file URL (`{ url }`), then same as upload |
 | `GET` | `/sessions/:id/audio-url` | Returns a private signed URL (`expiresIn` seconds) |
+
+`import-url` refuses YouTube/Vimeo/page hosts and private IPs. Use a CDN/object-storage link to an `.mp4` / `.webm` / `.mp3`, or upload a file.
 
 Upload response:
 
@@ -97,6 +114,10 @@ Upload response:
 | `GET` | `/sessions/:id/summary` | Fetch structured AI summary |
 | `POST` | `/sessions/:id/process` | Start end-to-end pipeline (`202`) |
 | `GET` | `/sessions/:id/status` | Poll `{ status, hasAudio, hasTranscript, hasSummary }` |
+| `POST` | `/sessions/:id/ask` | Q&A over transcript/summary |
+| `POST` | `/sessions/:id/translate` | On-demand summary/transcript translation |
+| `GET` | `/sessions/:id/feedback` | Thumbs feedback for summary/transcript |
+| `PUT` | `/sessions/:id/feedback` | Set or clear thumbs (`target`, `rating`) |
 
 Requires uploaded audio for processing. Summarization-only requires a saved transcript.
 Successful uploads best-effort auto-start `/process` when STT + Claude keys are configured.

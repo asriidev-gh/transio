@@ -1,27 +1,48 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, spacing, typography } from '@/src/theme';
+import { StyleSheet, Text, View } from 'react-native';
+import { spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
+import { Button } from '@/src/components/ui/Button';
+import { Icon, type AppIconName } from '@/src/components/ui/Icon';
 
 interface EmptyStateProps {
   title: string;
   description: string;
+  variant?: 'default' | 'hero';
+  icon?: AppIconName;
   actionLabel?: string;
   onAction?: () => void;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }
 
-export function EmptyState({ title, description, actionLabel, onAction }: EmptyStateProps) {
+export function EmptyState({
+  title,
+  description,
+  variant = 'default',
+  icon,
+  actionLabel,
+  onAction,
+  secondaryLabel,
+  onSecondary,
+}: EmptyStateProps) {
+  const { colors } = useTheme();
+  const hero = variant === 'hero';
+
   return (
-    <View style={styles.container} accessibilityRole="summary">
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.description}>{description}</Text>
+    <View
+      style={[styles.container, hero && styles.hero]}
+      accessibilityRole="summary"
+    >
+      {icon ? <Icon name={icon} size={hero ? 64 : 36} /> : null}
+      <Text style={[styles.title, { color: colors.ink }, hero && styles.titleHero]}>{title}</Text>
+      <Text style={[styles.description, { color: colors.inkMuted }]}>{description}</Text>
       {actionLabel && onAction ? (
-        <Pressable
-          onPress={onAction}
-          style={styles.button}
-          accessibilityRole="button"
-          accessibilityLabel={actionLabel}
-        >
-          <Text style={styles.buttonText}>{actionLabel}</Text>
-        </Pressable>
+        <View style={styles.actions}>
+          <Button label={actionLabel} onPress={onAction} />
+          {secondaryLabel && onSecondary ? (
+            <Button label={secondaryLabel} onPress={onSecondary} variant="secondary" />
+          ) : null}
+        </View>
       ) : null}
     </View>
   );
@@ -32,26 +53,22 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xl,
     gap: spacing.sm,
   },
+  hero: {
+    paddingVertical: spacing.xxl,
+    maxWidth: 360,
+  },
   title: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.ink,
+    ...typography.section,
+  },
+  titleHero: {
+    ...typography.pageTitle,
   },
   description: {
     ...typography.body,
-    color: colors.inkMuted,
-    maxWidth: 320,
+    maxWidth: 340,
   },
-  button: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.sm,
-    backgroundColor: colors.brand,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 10,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+  actions: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
   },
 });

@@ -2,20 +2,24 @@ import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { Link } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/hooks/useAuth';
 import { AuthServiceError } from '@/src/services/auth';
 import { validateAuthForm } from '@/src/utils/auth-errors';
-import { colors, spacing, typography } from '@/src/theme';
+import { Button } from '@/src/components/ui/Button';
+import { BrandLogo } from '@/src/components/BrandLogo';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
 
 export default function LoginScreen() {
   const { signIn, isConfigured } = useAuth();
+  const { colors } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -33,168 +37,149 @@ export default function LoginScreen() {
     try {
       await signIn(email, password);
     } catch (err) {
-      const message =
+      setError(
         err instanceof AuthServiceError
           ? err.message
-          : 'Unable to sign in. Check your connection and try again.';
-      setError(message);
+          : 'Unable to sign in. Check your connection and try again.',
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.container}>
-        <Text style={styles.brand} accessibilityRole="header">
-          SessionAI
-        </Text>
-        <Text style={styles.title}>Sign In</Text>
-        <Text style={styles.subtitle}>Access your recorded sessions securely.</Text>
-
-        {!isConfigured ? (
-          <Text style={styles.configWarning} accessibilityRole="alert">
-            Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and
-            EXPO_PUBLIC_SUPABASE_ANON_KEY to apps/mobile/.env, then restart Expo.
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.container}>
+          <BrandLogo size={112} />
+          <Text style={[styles.brand, { color: colors.ink }]} accessibilityRole="header">
+            Transio
           </Text>
-        ) : null}
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            textContentType="emailAddress"
-            placeholder="you@example.com"
-            placeholderTextColor={colors.inkMuted}
-            editable={!loading}
-            accessibilityLabel="Email"
-          />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoComplete="password"
-            textContentType="password"
-            placeholder="••••••••"
-            placeholderTextColor={colors.inkMuted}
-            editable={!loading}
-            accessibilityLabel="Password"
-            onSubmitEditing={() => void onSubmit()}
-          />
-        </View>
-
-        {error ? (
-          <Text style={styles.error} accessibilityRole="alert">
-            {error}
+          <Text style={[styles.headline, { color: colors.ink }]}>Transcribe every seminar</Text>
+          <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
+            Record discussions, leave while we process, then ask and act.
           </Text>
-        ) : null}
 
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            (loading || !isConfigured) && styles.buttonDisabled,
-            pressed && !loading && isConfigured && styles.buttonPressed,
-          ]}
-          onPress={() => void onSubmit()}
-          disabled={loading || !isConfigured}
-          accessibilityRole="button"
-          accessibilityLabel="Sign In"
-        >
-          <Text style={styles.buttonText}>{loading ? 'Signing in…' : 'Sign In'}</Text>
-        </Pressable>
+          {!isConfigured ? (
+            <Text style={[styles.configWarning, { color: colors.danger, backgroundColor: colors.actionRecord }]} accessibilityRole="alert">
+              Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and
+              EXPO_PUBLIC_SUPABASE_ANON_KEY to apps/mobile/.env, then restart Expo.
+            </Text>
+          ) : null}
 
-        <Link href="/(auth)/register" style={styles.link} accessibilityRole="link">
-          Create Account
-        </Link>
-      </View>
-    </KeyboardAvoidingView>
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.inkMuted }]}>Email</Text>
+            <TextInput
+              style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.ink }]}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              textContentType="emailAddress"
+              placeholder="you@example.com"
+              placeholderTextColor={colors.tertiary}
+              editable={!loading}
+              accessibilityLabel="Email"
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.inkMuted }]}>Password</Text>
+            <TextInput
+              style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.ink }]}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="password"
+              textContentType="password"
+              placeholder="••••••••"
+              placeholderTextColor={colors.tertiary}
+              editable={!loading}
+              accessibilityLabel="Password"
+              onSubmitEditing={() => void onSubmit()}
+            />
+          </View>
+
+          {error ? (
+            <Text style={[styles.error, { color: colors.danger }]} accessibilityRole="alert">
+              {error}
+            </Text>
+          ) : null}
+
+          <Button
+            label={loading ? 'Signing in…' : 'Continue with email'}
+            onPress={() => void onSubmit()}
+            disabled={loading || !isConfigured}
+            loading={loading}
+            accessibilityLabel="Continue with email"
+          />
+
+          <Link href="/(auth)/register" style={[styles.link, { color: colors.ink }]} accessibilityRole="link">
+            Create account
+          </Link>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1 },
+  flex: { flex: 1 },
   container: {
     flex: 1,
     padding: spacing.lg,
     justifyContent: 'center',
     gap: spacing.md,
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
   },
   brand: {
     ...typography.brand,
-    fontSize: 32,
-    color: colors.brand,
   },
-  title: {
-    ...typography.title,
-    color: colors.ink,
+  headline: {
+    ...typography.pageTitle,
+    marginTop: spacing.sm,
   },
   subtitle: {
     ...typography.body,
-    color: colors.inkMuted,
     marginBottom: spacing.sm,
+    maxWidth: 320,
   },
   configWarning: {
     ...typography.caption,
-    color: colors.danger,
-    backgroundColor: colors.backgroundAlt,
     padding: spacing.md,
-    borderRadius: 10,
+    borderRadius: radii.lg,
   },
   field: {
     gap: spacing.xs,
   },
   label: {
     ...typography.caption,
-    color: colors.inkMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: Platform.OS === 'ios' ? 14 : 12,
     fontSize: 16,
-    color: colors.ink,
+    minHeight: 52,
   },
   error: {
-    color: colors.danger,
     ...typography.body,
     fontSize: 14,
   },
-  button: {
-    backgroundColor: colors.brand,
-    paddingVertical: spacing.md,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: spacing.xs,
-  },
-  buttonPressed: { opacity: 0.9 },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 16,
-  },
   link: {
-    color: colors.accent,
     fontWeight: '600',
-    fontSize: 16,
+    fontSize: 15,
+    textAlign: 'center',
     marginTop: spacing.sm,
   },
 });

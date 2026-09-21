@@ -56,6 +56,7 @@ export const SessionSchema = z.object({
   audioPath: z.string().nullable(),
   status: SessionStatusSchema,
   favoritedAt: z.string().nullable().default(null),
+  folderId: z.string().uuid().nullable().default(null),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -76,6 +77,7 @@ export const CreateSessionSchema = z.object({
     .optional()
     .nullable(),
   recordedAt: z.string().datetime().optional(),
+  folderId: z.string().uuid().optional(),
 });
 
 export type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
@@ -101,6 +103,8 @@ export const UpdateSessionSchema = z
     status: SessionStatusSchema.optional(),
     /** ISO timestamp to favorite; null to unfavorite. */
     favoritedAt: z.string().datetime().nullable().optional(),
+    /** Folder id to file the session; null to move back to Unfiled. */
+    folderId: z.string().uuid().nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field is required',

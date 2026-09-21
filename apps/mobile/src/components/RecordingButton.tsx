@@ -1,5 +1,15 @@
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, spacing } from '@/src/theme';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  cancelAnimation,
+} from 'react-native-reanimated';
+import { spacing } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
+import { Icon } from '@/src/components/ui/Icon';
 
 interface RecordingButtonProps {
   recording: boolean;
@@ -8,12 +18,25 @@ interface RecordingButtonProps {
   onPress: () => void;
 }
 
-/**
- * Large primary control for stop (while recording) or start (idle).
- * Pause/resume are separate secondary controls on the recording screen.
- */
 export function RecordingButton({ recording, paused, disabled, onPress }: RecordingButtonProps) {
+  const { colors, reduceMotion } = useTheme();
+  const live = recording && !paused;
+  const pulse = useSharedValue(1);
   const label = !recording ? 'Start recording' : paused ? 'Resume recording' : 'Stop recording';
+
+  useEffect(() => {
+    if (live && !reduceMotion) {
+      pulse.value = withRepeat(withTiming(1.12, { duration: 900 }), -1, true);
+      return;
+    }
+    cancelAnimation(pulse);
+    pulse.value = withTiming(1, { duration: 180 });
+  }, [live, pulse, reduceMotion]);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+    opacity: 2 - pulse.value,
+  }));
 
   return (
     <Pressable
@@ -21,16 +44,34 @@ export function RecordingButton({ recording, paused, disabled, onPress }: Record
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [
-        styles.outer,
-        pressed && !disabled && styles.pressed,
-        disabled && styles.disabled,
-      ]}
+      style={({ pressed }) => [styles.outer, pressed && !disabled && styles.pressed, disabled && styles.disabled]}
     >
-      <View style={[styles.inner, recording && !paused ? styles.innerStop : styles.innerRecord]}>
-        {recording && !paused ? <View style={styles.stopSquare} /> : <View style={styles.recordDot} />}
+      <View style={styles.stack}>
+        {live ? (
+          <Animated.View
+            style={[styles.ring, { borderColor: colors.recording }, ringStyle]}
+            pointerEvents="none"
+          />
+        ) : null}
+        <View
+          style={[
+            styles.inner,
+            {
+              backgroundColor: live ? colors.recording : colors.surface,
+              borderColor: colors.recording,
+            },
+          ]}
+        >
+          {recording && !paused ? (
+            <View style={[styles.stopSquare, { backgroundColor: colors.onBrand }]} />
+          ) : paused ? (
+            <Icon name="play" size={40} />
+          ) : (
+            <Icon name="microphone" size={44} />
+          )}
+        </View>
       </View>
-      <Text style={styles.caption}>{label}</Text>
+      <Text style={[styles.caption, { color: colors.inkMuted }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -40,44 +81,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  pressed: {
-    opacity: 0.85,
-  },
-  disabled: {
-    opacity: 0.45,
-  },
-  inner: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+  pressed: { opacity: 0.88 },
+  disabled: { opacity: 0.45 },
+  stack: {
+    width: 104,
+    height: 104,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
   },
-  innerRecord: {
-    borderColor: colors.recording,
+  ring: {
+    position: 'absolute',
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    borderWidth: 2,
   },
-  innerStop: {
-    borderColor: colors.recording,
-    backgroundColor: '#F8D5DA',
-  },
-  recordDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.recording,
+  inner: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    overflow: 'visible',
   },
   stopSquare: {
-    width: 28,
-    height: 28,
-    borderRadius: 4,
-    backgroundColor: colors.recording,
+    width: 26,
+    height: 26,
+    borderRadius: 6,
   },
   caption: {
-    color: colors.inkMuted,
+    fontSize: 13,
     fontWeight: '600',
-    fontSize: 14,
   },
 });

@@ -2,20 +2,24 @@ import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { Link } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/hooks/useAuth';
 import { AuthServiceError } from '@/src/services/auth';
 import { validateAuthForm } from '@/src/utils/auth-errors';
-import { colors, spacing, typography } from '@/src/theme';
+import { BrandLogo } from '@/src/components/BrandLogo';
+import { Button } from '@/src/components/ui/Button';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
 
 export default function RegisterScreen() {
   const { signUp, isConfigured } = useAuth();
+  const { colors } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -50,93 +54,102 @@ export default function RegisterScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.container}>
-        <Text style={styles.brand} accessibilityRole="header">
-          SessionAI
-        </Text>
-        <Text style={styles.title}>Create Account</Text>
-        <Text style={styles.subtitle}>Start saving and summarizing your sessions.</Text>
-
-        {!isConfigured ? (
-          <Text style={styles.configWarning} accessibilityRole="alert">
-            Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and
-            EXPO_PUBLIC_SUPABASE_ANON_KEY to apps/mobile/.env, then restart Expo.
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.container}>
+          <BrandLogo size={88} />
+          <Text style={[styles.brand, { color: colors.ink }]} accessibilityRole="header">
+            Transio
           </Text>
-        ) : null}
+          <Text style={[styles.title, { color: colors.ink }]}>Create account</Text>
+          <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
+            Start saving and summarizing your sessions.
+          </Text>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            textContentType="emailAddress"
-            placeholder="you@example.com"
-            placeholderTextColor={colors.inkMuted}
-            editable={!loading}
-            accessibilityLabel="Email"
+          {!isConfigured ? (
+            <Text
+              style={[styles.configWarning, { color: colors.danger, backgroundColor: colors.actionRecord }]}
+              accessibilityRole="alert"
+            >
+              Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and
+              EXPO_PUBLIC_SUPABASE_ANON_KEY to apps/mobile/.env, then restart Expo.
+            </Text>
+          ) : null}
+
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.inkMuted }]}>Email</Text>
+            <TextInput
+              style={[
+                styles.input,
+                { borderColor: colors.border, backgroundColor: colors.surface, color: colors.ink },
+              ]}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              textContentType="emailAddress"
+              placeholder="you@example.com"
+              placeholderTextColor={colors.tertiary}
+              editable={!loading}
+              accessibilityLabel="Email"
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.inkMuted }]}>Password</Text>
+            <TextInput
+              style={[
+                styles.input,
+                { borderColor: colors.border, backgroundColor: colors.surface, color: colors.ink },
+              ]}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="new-password"
+              textContentType="newPassword"
+              placeholder="At least 8 characters"
+              placeholderTextColor={colors.tertiary}
+              editable={!loading}
+              accessibilityLabel="Password"
+              onSubmitEditing={() => void onSubmit()}
+            />
+          </View>
+
+          {error ? (
+            <Text style={[styles.error, { color: colors.danger }]} accessibilityRole="alert">
+              {error}
+            </Text>
+          ) : null}
+          {info ? (
+            <Text style={[styles.info, { color: colors.success }]} accessibilityRole="text">
+              {info}
+            </Text>
+          ) : null}
+
+          <Button
+            label={loading ? 'Creating…' : 'Create account'}
+            onPress={() => void onSubmit()}
+            disabled={loading || !isConfigured}
+            loading={loading}
+            accessibilityLabel="Create account"
           />
+
+          <Link href="/(auth)/login" style={[styles.link, { color: colors.accent }]} accessibilityRole="link">
+            Already have an account? Sign in
+          </Link>
         </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoComplete="new-password"
-            textContentType="newPassword"
-            placeholder="At least 8 characters"
-            placeholderTextColor={colors.inkMuted}
-            editable={!loading}
-            accessibilityLabel="Password"
-            onSubmitEditing={() => void onSubmit()}
-          />
-        </View>
-
-        {error ? (
-          <Text style={styles.error} accessibilityRole="alert">
-            {error}
-          </Text>
-        ) : null}
-        {info ? (
-          <Text style={styles.info} accessibilityRole="text">
-            {info}
-          </Text>
-        ) : null}
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            (loading || !isConfigured) && styles.buttonDisabled,
-            pressed && !loading && isConfigured && styles.buttonPressed,
-          ]}
-          onPress={() => void onSubmit()}
-          disabled={loading || !isConfigured}
-          accessibilityRole="button"
-          accessibilityLabel="Create Account"
-        >
-          <Text style={styles.buttonText}>{loading ? 'Creating…' : 'Create Account'}</Text>
-        </Pressable>
-
-        <Link href="/(auth)/login" style={styles.link} accessibilityRole="link">
-          Already have an account? Sign In
-        </Link>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1 },
+  flex: { flex: 1 },
   container: {
     flex: 1,
     padding: spacing.lg,
@@ -145,72 +158,47 @@ const styles = StyleSheet.create({
   },
   brand: {
     ...typography.brand,
-    fontSize: 32,
-    color: colors.brand,
   },
   title: {
     ...typography.title,
-    color: colors.ink,
   },
   subtitle: {
     ...typography.body,
-    color: colors.inkMuted,
     marginBottom: spacing.sm,
   },
   configWarning: {
     ...typography.caption,
-    color: colors.danger,
-    backgroundColor: colors.backgroundAlt,
     padding: spacing.md,
-    borderRadius: 10,
+    borderRadius: radii.lg,
   },
   field: {
     gap: spacing.xs,
   },
   label: {
     ...typography.caption,
-    color: colors.inkMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: Platform.OS === 'ios' ? 14 : 12,
     fontSize: 16,
-    color: colors.ink,
+    minHeight: 52,
   },
   error: {
-    color: colors.danger,
     ...typography.body,
     fontSize: 14,
   },
   info: {
-    color: colors.success,
     ...typography.body,
     fontSize: 14,
   },
-  button: {
-    backgroundColor: colors.brand,
-    paddingVertical: spacing.md,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: spacing.xs,
-  },
-  buttonPressed: { opacity: 0.9 },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 16,
-  },
   link: {
-    color: colors.accent,
     fontWeight: '600',
-    fontSize: 16,
+    fontSize: 15,
+    textAlign: 'center',
     marginTop: spacing.sm,
   },
 });

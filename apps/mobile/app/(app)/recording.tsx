@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   AppState,
   type AppStateStatus,
   Pressable,
@@ -24,7 +23,9 @@ import { WaveformVisualizer } from '@/src/components/WaveformVisualizer';
 import { ApiClientError } from '@/src/services/api';
 import { saveLocalAudioUri } from '@/src/services/local-audio';
 import { getSession, updateSession } from '@/src/services/sessions';
-import { colors, radii, spacing, typography } from '@/src/theme';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
+import { confirmAction } from '@/src/utils/confirm';
 
 type PermissionState = 'checking' | 'granted' | 'denied' | 'unavailable';
 
@@ -55,6 +56,7 @@ export default function RecordingScreen() {
   const startedRef = useRef(false);
   const activeRef = useRef(false);
 
+  const { colors } = useTheme();
   const elapsedSeconds = Math.max(0, Math.floor((recorderState.durationMillis ?? 0) / 1000));
   const isRecording = recorderState.isRecording;
   const blockingNavigation = (isRecording || isPaused) && !stopping;
@@ -153,21 +155,17 @@ export default function RecordingScreen() {
         return;
       }
       event.preventDefault();
-      Alert.alert(
-        'Stop recording?',
-        'You have an active recording. Stop and save it before leaving.',
-        [
-          { text: 'Keep recording', style: 'cancel' },
-          {
-            text: 'Discard and leave',
-            style: 'destructive',
-            onPress: () => {
-              activeRef.current = false;
-              navigation.dispatch(event.data.action);
-            },
-          },
-        ],
-      );
+      void (async () => {
+        const ok = await confirmAction(
+          'Stop recording?',
+          'You have an active recording. Stop and save it before leaving.',
+          'Discard and leave',
+          { cancelLabel: 'Keep recording', destructive: true },
+        );
+        if (!ok) return;
+        activeRef.current = false;
+        navigation.dispatch(event.data.action);
+      })();
     });
     return unsubscribe;
   }, [navigation, blockingNavigation]);
@@ -236,7 +234,7 @@ export default function RecordingScreen() {
 
   if (bootError) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <ErrorState
           title="Cannot record"
           description={bootError}
@@ -249,15 +247,19 @@ export default function RecordingScreen() {
 
   if (permission === 'checking' || starting) {
     return (
-      <View style={styles.centered}>
-        <LoadingState message={permission === 'checking' ? 'Checking microphone…' : 'Starting…'} />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <LoadingState
+          message={
+            permission === 'checking' ? 'Checking microphone…' : 'Preparing to record…'
+          }
+        />
       </View>
     );
   }
 
   if (permission === 'denied' || permission === 'unavailable') {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <ErrorState
           title="Microphone permission needed"
           description={
@@ -272,8 +274,9 @@ export default function RecordingScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title} accessibilityRole="header">
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.kicker, { color: colors.inkMuted }]}>Recording</Text>
+      <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
         {title}
       </Text>
 
@@ -283,15 +286,24 @@ export default function RecordingScreen() {
 
       <View style={styles.statusRow}>
         <View
-          style={[styles.dot, isRecording ? styles.dotLive : isPaused ? styles.dotPaused : styles.dotIdle]}
+          style={[
+            styles.dot,
+            {
+              backgroundColor: isRecording
+                ? colors.recording
+                : isPaused
+                  ? colors.warning
+                  : colors.border,
+            },
+          ]}
         />
-        <Text style={styles.statusText}>
-          {stopping ? 'Saving…' : isRecording ? 'Recording' : isPaused ? 'Paused' : 'Ready'}
+        <Text style={[styles.statusText, { color: colors.ink }]}>
+          {stopping ? 'Saving…' : isRecording ? 'Listening' : isPaused ? 'Paused' : 'Ready'}
         </Text>
       </View>
 
       {recordError ? (
-        <Text style={styles.error} accessibilityRole="alert">
+        <Text style={[styles.error, { color: colors.danger }]} accessibilityRole="alert">
           {recordError}
         </Text>
       ) : null}
@@ -302,12 +314,15 @@ export default function RecordingScreen() {
           disabled={stopping || (!isRecording && !isPaused)}
           style={[
             styles.secondaryButton,
+            { borderColor: colors.border, backgroundColor: colors.surface },
             (stopping || (!isRecording && !isPaused)) && styles.disabled,
           ]}
           accessibilityRole="button"
           accessibilityLabel={isPaused ? 'Resume' : 'Pause'}
         >
-          <Text style={styles.secondaryText}>{isPaused ? 'Resume' : 'Pause'}</Text>
+          <Text style={[styles.secondaryText, { color: colors.ink }]}>
+            {isPaused ? 'Resume' : 'Pause'}
+          </Text>
         </Pressable>
 
         <RecordingButton
@@ -324,9 +339,18 @@ export default function RecordingScreen() {
         />
       </View>
 
-      <Text style={styles.hint}>
-        Recording continues offline. When you stop, review locally, then Proceed to upload and
-        process.
+      <Pressable
+        onPress={() => router.back()}
+        disabled={stopping}
+        accessibilityRole="button"
+        accessibilityLabel="Cancel"
+        style={styles.cancel}
+      >
+        <Text style={[styles.cancelText, { color: colors.inkMuted }]}>Cancel</Text>
+      </Pressable>
+
+      <Text style={[styles.hint, { color: colors.inkMuted }]}>
+        Recording continues offline. When you stop, review locally, then proceed to transcribe.
       </Text>
     </View>
   );
@@ -335,7 +359,6 @@ export default function RecordingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
     padding: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -343,13 +366,16 @@ const styles = StyleSheet.create({
   },
   centered: {
     flex: 1,
-    backgroundColor: colors.background,
     padding: spacing.lg,
     justifyContent: 'center',
   },
+  kicker: {
+    ...typography.caption,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
   title: {
     ...typography.title,
-    color: colors.ink,
     textAlign: 'center',
   },
   statusRow: {
@@ -358,26 +384,15 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  dotLive: {
-    backgroundColor: colors.recording,
-  },
-  dotPaused: {
-    backgroundColor: colors.accent,
-  },
-  dotIdle: {
-    backgroundColor: colors.border,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   statusText: {
     ...typography.body,
     fontWeight: '600',
-    color: colors.ink,
   },
   error: {
-    color: colors.danger,
     textAlign: 'center',
     ...typography.body,
     fontSize: 14,
@@ -390,27 +405,32 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
-    borderRadius: radii.md,
+    borderRadius: radii.pill,
     minWidth: 140,
+    minHeight: 44,
     alignItems: 'center',
   },
   secondaryText: {
-    color: colors.ink,
     fontWeight: '600',
     fontSize: 16,
   },
   disabled: {
     opacity: 0.45,
   },
+  cancel: {
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  cancelText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
   hint: {
     ...typography.caption,
-    color: colors.inkMuted,
     textAlign: 'center',
-    marginTop: spacing.xl,
+    marginTop: spacing.md,
     maxWidth: 320,
   },
 });

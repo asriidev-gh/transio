@@ -4,108 +4,120 @@ import {
   SESSION_TYPE_LABELS,
   type Session,
 } from '@sessionai/shared';
-import { colors, radii, spacing, typography } from '@/src/theme';
-import { formatDurationHuman, formatSessionDate } from '@/src/utils/format';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
+import { Icon } from '@/src/components/ui/Icon';
+import { formatDurationHuman, formatRelativeSessionDate } from '@/src/utils/format';
+import { sessionTopicVisual } from '@/src/utils/session-topic';
 
 interface SessionCardProps {
   session: Session;
   onPress: () => void;
+  onDelete?: () => void;
 }
 
-export function SessionCard({ session, onPress }: SessionCardProps) {
+export function SessionCard({ session, onPress, onDelete }: SessionCardProps) {
+  const { colors, scheme } = useTheme();
   const statusLabel = SESSION_STATUS_LABELS[session.status];
   const completed = session.status === 'completed';
   const failed = session.status === 'failed';
   const favorited = Boolean(session.favoritedAt);
-  const initials = session.title
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('');
+  const preview = session.description?.trim();
+  const topic = sessionTopicVisual(session);
+  const markColor = failed
+    ? colors.actionRecord
+    : scheme === 'dark'
+      ? topic.dark
+      : topic.light;
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.card, failed && styles.cardFailed, pressed && styles.pressed]}
-      accessibilityRole="button"
-      accessibilityLabel={`${session.title}, ${SESSION_TYPE_LABELS[session.sessionType]}, ${statusLabel}${favorited ? ', favorite' : ''}`}
-    >
-      <View style={[styles.avatar, failed && styles.avatarFailed, favorited && styles.avatarFav]}>
-        <Text style={[styles.avatarText, failed && styles.avatarTextFailed]}>
-          {initials || 'S'}
-        </Text>
-      </View>
-      <View style={styles.body}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={1}>
-            {session.title}
-          </Text>
-          {favorited ? <Text style={styles.heart}>★</Text> : null}
+    <View style={styles.row}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [styles.main, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel={`${session.title}, ${SESSION_TYPE_LABELS[session.sessionType]}, ${statusLabel}${favorited ? ', favorite' : ''}`}
+      >
+        <View style={[styles.mark, { backgroundColor: markColor }]}>
+          <Icon name={topic.icon} size={32} />
         </View>
-        <Text style={styles.meta}>
-          {SESSION_TYPE_LABELS[session.sessionType]} · {formatSessionDate(session.recordedAt)} ·{' '}
-          {formatDurationHuman(session.durationSeconds)}
-        </Text>
-        <Text
-          style={[
-            styles.status,
-            completed ? styles.statusOk : failed ? styles.statusFailed : styles.statusPending,
-          ]}
+        <View style={styles.body}>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: colors.ink }]} numberOfLines={1}>
+              {session.title}
+            </Text>
+            {favorited ? <Icon name="star" size={18} color={colors.warning} /> : null}
+          </View>
+          <Text style={[styles.meta, { color: colors.inkMuted }]} numberOfLines={1}>
+            {formatRelativeSessionDate(session.recordedAt)} · {formatDurationHuman(session.durationSeconds)}
+            {' · '}
+            {SESSION_TYPE_LABELS[session.sessionType]}
+          </Text>
+          {preview ? (
+            <Text style={[styles.snippet, { color: colors.tertiary }]} numberOfLines={1}>
+              “{preview}”
+            </Text>
+          ) : (
+            <Text
+              style={[
+                styles.snippet,
+                {
+                  color: completed ? colors.success : failed ? colors.danger : colors.accent,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {completed ? 'Ready to review' : failed ? 'Needs attention' : statusLabel}
+            </Text>
+          )}
+        </View>
+      </Pressable>
+      {onDelete ? (
+        <Pressable
+          onPress={onDelete}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Delete ${session.title}`}
+          style={styles.deleteHit}
         >
-          {completed ? `✓ ${statusLabel}` : failed ? `⚠ ${statusLabel} — tap to recover` : statusLabel}
-        </Text>
-      </View>
-      {completed ? <View style={styles.dot} accessibilityLabel="Completed" /> : null}
-    </Pressable>
+          <Icon name="close" size={16} color={colors.inkMuted} />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    alignItems: 'flex-start',
+    gap: spacing.smd,
   },
-  cardFailed: {
-    backgroundColor: '#F8D5DA',
-    marginHorizontal: -spacing.sm,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.sm,
-    borderBottomColor: 'transparent',
+  main: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.smd,
+    paddingVertical: spacing.md,
   },
   pressed: {
     opacity: 0.7,
   },
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: radii.sm,
-    backgroundColor: colors.accentSoft,
+  mark: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatarFav: {
-    borderWidth: 2,
-    borderColor: colors.accent,
-  },
-  avatarFailed: {
-    backgroundColor: '#F4B4BC',
-  },
-  avatarText: {
-    color: colors.brand,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  avatarTextFailed: {
-    color: colors.danger,
+    marginTop: 1,
+    overflow: 'visible',
   },
   body: {
     flex: 1,
     gap: 2,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'transparent',
   },
   titleRow: {
     flexDirection: 'row',
@@ -115,38 +127,20 @@ const styles = StyleSheet.create({
   title: {
     ...typography.body,
     fontWeight: '600',
-    color: colors.ink,
-    fontSize: 17,
     flexShrink: 1,
   },
-  heart: {
-    color: colors.accent,
-    fontSize: 14,
-    fontWeight: '700',
-  },
   meta: {
-    ...typography.body,
-    fontSize: 13,
-    color: colors.inkMuted,
+    ...typography.meta,
   },
-  status: {
-    ...typography.caption,
-    fontWeight: '600',
-    marginTop: 2,
+  snippet: {
+    ...typography.meta,
+    fontStyle: 'italic',
   },
-  statusOk: {
-    color: colors.success,
-  },
-  statusPending: {
-    color: colors.accent,
-  },
-  statusFailed: {
-    color: colors.danger,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.accent,
+  deleteHit: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
   },
 });

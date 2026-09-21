@@ -1,7 +1,8 @@
 import { Stack } from 'expo-router';
-import { colors } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
 
 export default function AuthLayout() {
+  const { colors } = useTheme();
   return (
     <Stack
       screenOptions={{
@@ -11,7 +12,7 @@ export default function AuthLayout() {
         headerShadowVisible: false,
       }}
     >
-      <Stack.Screen name="login" options={{ title: 'Sign In' }} />
+      <Stack.Screen name="login" options={{ title: 'Sign In', headerShown: false }} />
       <Stack.Screen name="register" options={{ title: 'Create Account' }} />
     </Stack>
   );

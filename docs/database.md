@@ -19,6 +19,8 @@ Phase 3 introduces the `sessions` table with Row Level Security.
 | `duration_seconds` | INTEGER | nullable, ≥ 0 |
 | `audio_path` | TEXT | private storage path (Phase 5) |
 | `status` | TEXT NOT NULL | recording → … → completed / failed |
+| `favorited_at` | TIMESTAMPTZ | nullable; set when the user stars the session |
+| `folder_id` | UUID | nullable FK → `session_folders(id)` ON DELETE SET NULL |
 | `created_at` / `updated_at` | TIMESTAMPTZ | `updated_at` maintained by trigger |
 
 Migration file:
@@ -60,6 +62,19 @@ RLS: access only when the related `sessions.user_id = auth.uid()`.
 
 Migration: `202609200004_create_summaries.sql`
 
+### `session_folders`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID PK | `gen_random_uuid()` |
+| `user_id` | UUID NOT NULL | FK → `auth.users(id)` ON DELETE CASCADE |
+| `name` | TEXT NOT NULL | non-empty after trim |
+| `created_at` / `updated_at` | TIMESTAMPTZ | `updated_at` maintained by trigger |
+
+RLS: owner-only select/insert/update/delete. `sessions.folder_id` may only point at a folder with the same `user_id` (trigger). Deleting a folder sets `folder_id` to null.
+
+Migration: `202609210001_session_folders.sql`
+
 ## Row Level Security
 
 Enabled on `sessions`. Policies for the `authenticated` role:
@@ -93,11 +108,15 @@ Private bucket created in `202609200002_session_audio_bucket.sql`.
 # With Supabase CLI linked to your project:
 npx supabase db push
 
-# Or run the SQL in the Supabase SQL editor:
+# Or run the SQL in the Supabase SQL editor (in order):
 # supabase/migrations/202609200001_create_sessions.sql
 # supabase/migrations/202609200002_session_audio_bucket.sql
 # supabase/migrations/202609200003_create_transcripts.sql
 # supabase/migrations/202609200004_create_summaries.sql
+# supabase/migrations/202609200005_transcript_segments.sql
+# supabase/migrations/202609200006_session_favorites.sql
+# supabase/migrations/202609200007_session_content_feedback.sql
+# supabase/migrations/202609210001_session_folders.sql
 ```
 
 Never mutate production schema from application code.

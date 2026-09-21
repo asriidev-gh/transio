@@ -29,13 +29,15 @@ function testAuthenticate(req: Request, _res: Response, next: NextFunction): voi
   next(new AppError('UNAUTHORIZED', 'Authentication required', 401));
 }
 
-function createAudioTestApp() {
+function createAudioTestApp(overrides: Parameters<typeof createApp>[0] = {}) {
   const repo = new InMemorySessionRepository();
   const storage = new InMemoryAudioStorage();
   const app = createApp({
     authenticate: testAuthenticate,
-    createSessionRepository: () => repo,
-    createAudioStorage: () => storage,
+    prepareMedia: async (input) => input,
+    ...overrides,
+    createSessionRepository: overrides.createSessionRepository ?? (() => repo),
+    createAudioStorage: overrides.createAudioStorage ?? (() => storage),
   });
   return { app, repo, storage };
 }
@@ -51,6 +53,7 @@ describe('audio storage helpers', () => {
   it('maps mime types to extensions', () => {
     assert.equal(extensionFromMimeType('audio/webm'), 'webm');
     assert.equal(extensionFromMimeType('audio/mp4'), 'm4a');
+    assert.equal(extensionFromMimeType('video/mp4'), 'mp4');
     assert.equal(extensionFromMimeType('audio/mpeg'), 'mp3');
   });
 });
@@ -166,5 +169,80 @@ describe('session audio API', () => {
 
     assert.equal(res.status, 400);
     assert.equal(res.body.error?.code, 'VALIDATION_ERROR');
+  });
+
+  it('accepts an mp4 video upload', async () => {
+    const { app, storage } = createAudioTestApp();
+    const created = await request(app).post(
+      '/sessions',
+      { title: 'Video talk', sessionType: 'lecture' },
+      { Authorization: 'Bearer token-a' },
+    );
+    const id = (created.body.data as { id: string }).id;
+    const multipart = buildMultipartBody(
+      'file',
+      'talk.mp4',
+      'video/mp4',
+      Buffer.from('fake-mp4-bytes'),
+    );
+
+    const res = await request(app).postRaw(`/sessions/${id}/audio`, multipart.body, {
+      Authorization: 'Bearer token-a',
+      'Content-Type': multipart.contentType,
+    });
+
+    assert.equal(res.status, 200);
+    const data = res.body.data as { audioPath: string; status: string };
+    assert.equal(data.status, 'uploaded');
+    assert.equal(data.audioPath, `${USER_A}/${id}/audio.mp4`);
+    assert.equal(storage.files.has(data.audioPath), true);
+  });
+
+  it('imports a direct media URL through the injected fetcher', async () => {
+    const { app, storage } = createAudioTestApp({
+      fetchRemoteMedia: async () => ({
+        data: Buffer.from('remote-mp3'),
+        mimeType: 'audio/mpeg',
+        fileName: 'remote.mp3',
+      }),
+    });
+    const created = await request(app).post(
+      '/sessions',
+      { title: 'From URL', sessionType: 'seminar' },
+      { Authorization: 'Bearer token-a' },
+    );
+    const id = (created.body.data as { id: string }).id;
+
+    const res = await request(app).post(
+      `/sessions/${id}/import-url`,
+      { url: 'https://cdn.example.com/lectures/week-1.mp3' },
+      { Authorization: 'Bearer token-a' },
+    );
+
+    assert.equal(res.status, 200);
+    const data = res.body.data as { audioPath: string; status: string };
+    assert.equal(data.status, 'uploaded');
+    assert.equal(data.audioPath, `${USER_A}/${id}/audio.mp3`);
+    assert.equal(storage.files.get(data.audioPath)?.data.equals(Buffer.from('remote-mp3')), true);
+  });
+
+  it('rejects YouTube page links', async () => {
+    const { app } = createAudioTestApp();
+    const created = await request(app).post(
+      '/sessions',
+      { title: 'YouTube', sessionType: 'lecture' },
+      { Authorization: 'Bearer token-a' },
+    );
+    const id = (created.body.data as { id: string }).id;
+
+    const res = await request(app).post(
+      `/sessions/${id}/import-url`,
+      { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      { Authorization: 'Bearer token-a' },
+    );
+
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error?.code, 'VALIDATION_ERROR');
+    assert.match(String(res.body.error?.message), /video page/i);
   });
 });

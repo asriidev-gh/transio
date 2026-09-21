@@ -46,6 +46,16 @@ and timed transcript segments with Claude context speaker labels (plus rename) a
 
 Processing completion adds an optional browser notification plus a home “Ready to review”
 banner so users can leave during the pipeline and return to the finished session.
+Audio import lets users attach an existing audio or video file, or paste a direct
+media-file URL (not YouTube/Vimeo pages). On-demand Translate
+covers summary and transcript via a language select (English, Filipino, Cebuano, Spanish,
+Chinese, Japanese, Korean, and other common targets).
+
+First-launch onboarding (AsyncStorage-gated slider) introduces capture → process → review.
+Home uses a calm greeting (“Ready to capture your thoughts?”), one-level folders plus an Unfiled remainder (search flattens across folders), list-level delete, and a floating pill tab bar (Home · Favorites · mic Record · Import · Settings).
+Settings includes grouped Account / Appearance / Notifications. Light and dark palettes live in
+design tokens; appearance defaults to the Transio dark slate canvas (mint accent). Soft claymorphism
+shadows and pill radii shape buttons, tab bar, and search. Login/onboarding use the Transio logo.
 
 ## Design principles
 
@@ -60,6 +70,7 @@ banner so users can leave during the pipeline and return to the finished session
 ```text
 apps/mobile/
   app/                 Expo Router screens
+    onboarding.tsx     First-launch slider (pre-auth)
     (auth)/            Login / register
     (app)/             Protected app shell
   src/
@@ -67,7 +78,7 @@ apps/mobile/
     contexts/          AuthProvider
     hooks/             useAuth
     lib/               Env, Supabase client
-    services/          API + auth clients
+    services/          API + auth + onboarding
     theme/             Colors, typography
     utils/             Pure helpers
 ```

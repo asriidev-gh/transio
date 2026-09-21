@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, spacing, typography } from '@/src/theme';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
 
 interface ConnectivityBannerProps {
   reachable: boolean | null;
@@ -7,16 +8,20 @@ interface ConnectivityBannerProps {
 }
 
 export function ConnectivityBanner({ reachable, onRetry }: ConnectivityBannerProps) {
-  if (reachable !== false) {
-    return null;
-  }
+  const { colors } = useTheme();
+  if (reachable !== false) return null;
 
   return (
-    <View style={styles.banner} accessibilityRole="alert">
-      <Text style={styles.text}>Can't reach the SessionAI API. Check your connection.</Text>
+    <View
+      style={[styles.banner, { backgroundColor: colors.actionRecord, borderColor: colors.danger }]}
+      accessibilityRole="alert"
+    >
+      <Text style={[styles.text, { color: colors.danger }]}>
+        Can’t reach the SessionAI API. Check your connection.
+      </Text>
       {onRetry ? (
         <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry connection">
-          <Text style={styles.retry}>Retry</Text>
+          <Text style={[styles.retry, { color: colors.ink }]}>Retry</Text>
         </Pressable>
       ) : null}
     </View>
@@ -25,10 +30,8 @@ export function ConnectivityBanner({ reachable, onRetry }: ConnectivityBannerPro
 
 const styles = StyleSheet.create({
   banner: {
-    backgroundColor: '#F8E8E4',
     borderWidth: 1,
-    borderColor: colors.danger,
-    borderRadius: 10,
+    borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     flexDirection: 'row',
@@ -37,14 +40,12 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   text: {
-    ...typography.caption,
-    color: colors.danger,
+    ...typography.meta,
     flex: 1,
     fontWeight: '600',
   },
   retry: {
-    ...typography.caption,
-    color: colors.brandSoft,
+    ...typography.meta,
     fontWeight: '700',
   },
 });

@@ -24,13 +24,25 @@ export {
 } from './session.js';
 
 export {
+  SessionFolderSchema,
+  CreateFolderSchema,
+  UpdateFolderSchema,
+  FolderIdParamSchema,
+  type SessionFolder,
+  type CreateFolderInput,
+  type UpdateFolderInput,
+} from './folder.js';
+
+export {
   SESSION_AUDIO_BUCKET,
   AudioUploadResultSchema,
   SignedAudioUrlSchema,
+  ImportMediaUrlSchema,
   buildSessionAudioPath,
   extensionFromMimeType,
   type AudioUploadResult,
   type SignedAudioUrl,
+  type ImportMediaUrlInput,
 } from './storage.js';
 
 export {
@@ -67,6 +79,34 @@ export {
   type AskQuestionInput,
   type AskAnswer,
 } from './ask.js';
+
+export {
+  TranslateLanguageSchema,
+  TranslateScopeSchema,
+  TranslateRequestSchema,
+  TranslatedSummarySchema,
+  TranslatedTranscriptSchema,
+  TranslateResultSchema,
+  TRANSLATE_LANGUAGE_LABELS,
+  TRANSLATE_LANGUAGE_OPTIONS,
+  type TranslateLanguage,
+  type TranslateScope,
+  type TranslateRequest,
+  type TranslatedSummary,
+  type TranslatedTranscript,
+  type TranslateResult,
+} from './translate.js';
+
+export {
+  FeedbackTargetSchema,
+  FeedbackRatingSchema,
+  SessionFeedbackSchema,
+  UpsertFeedbackSchema,
+  type FeedbackTarget,
+  type FeedbackRating,
+  type SessionFeedback,
+  type UpsertFeedbackInput,
+} from './feedback.js';
 
 /** Standard API success envelope. */
 export const ApiSuccessSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>

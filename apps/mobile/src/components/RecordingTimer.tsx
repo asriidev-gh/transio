@@ -1,16 +1,17 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, spacing, typography } from '@/src/theme';
+import { fonts, spacing } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
 import { formatDuration } from '@/src/utils/format';
 
 interface RecordingTimerProps {
-  /** Elapsed recording time in seconds. */
   seconds: number;
 }
 
 export function RecordingTimer({ seconds }: RecordingTimerProps) {
+  const { colors } = useTheme();
   return (
     <View style={styles.wrap} accessibilityLabel={`Recording time ${formatDuration(seconds)}`}>
-      <Text style={styles.time}>{formatDuration(seconds)}</Text>
+      <Text style={[styles.time, { color: colors.ink }]}>{formatDuration(seconds)}</Text>
     </View>
   );
 }
@@ -18,14 +19,13 @@ export function RecordingTimer({ seconds }: RecordingTimerProps) {
 const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
   },
   time: {
-    ...typography.mono,
-    fontSize: 48,
-    fontWeight: '600',
+    fontFamily: fonts.mono,
+    fontSize: 44,
+    fontWeight: '500',
     fontVariant: ['tabular-nums'],
-    color: colors.ink,
     letterSpacing: 1,
   },
 });

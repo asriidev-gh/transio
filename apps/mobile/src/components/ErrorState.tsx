@@ -1,5 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, spacing, typography } from '@/src/theme';
+import { StyleSheet, Text, View } from 'react-native';
+import { spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
+import { Button } from '@/src/components/ui/Button';
+import { Icon } from '@/src/components/ui/Icon';
 
 interface ErrorStateProps {
   title: string;
@@ -8,21 +11,19 @@ interface ErrorStateProps {
   onRetry?: () => void;
 }
 
-export function ErrorState({ title, description, actionLabel = 'Try Again', onRetry }: ErrorStateProps) {
+export function ErrorState({
+  title,
+  description,
+  actionLabel = 'Try again',
+  onRetry,
+}: ErrorStateProps) {
+  const { colors } = useTheme();
   return (
     <View style={styles.container} accessibilityRole="alert">
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.description}>{description}</Text>
-      {onRetry ? (
-        <Pressable
-          onPress={onRetry}
-          style={styles.button}
-          accessibilityRole="button"
-          accessibilityLabel={actionLabel}
-        >
-          <Text style={styles.buttonText}>{actionLabel}</Text>
-        </Pressable>
-      ) : null}
+      <Icon name="alert" size={36} />
+      <Text style={[styles.title, { color: colors.danger }]}>{title}</Text>
+      <Text style={[styles.description, { color: colors.inkMuted }]}>{description}</Text>
+      {onRetry ? <Button label={actionLabel} onPress={onRetry} variant="secondary" /> : null}
     </View>
   );
 }
@@ -33,24 +34,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   title: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.danger,
+    ...typography.section,
   },
   description: {
     ...typography.body,
-    color: colors.inkMuted,
-  },
-  button: {
-    alignSelf: 'flex-start',
-    marginTop: spacing.xs,
-    backgroundColor: colors.brand,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 10,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
   },
 });

@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
-import { colors, radii, spacing, typography } from '@/src/theme';
+import { Icon } from '@/src/components/ui/Icon';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
 import { formatDuration } from '@/src/utils/format';
 
 interface AudioPlayerProps {
@@ -15,8 +17,11 @@ interface AudioPlayerProps {
   seekRequest?: { id: number; sec: number } | null;
 }
 
-const LOAD_TIMEOUT_MS = 12000;
 const SPEEDS = [1, 1.25, 1.5, 2] as const;
+
+function isRemoteUri(uri: string): boolean {
+  return /^https?:\/\//i.test(uri);
+}
 
 export function AudioPlayer({
   uri,
@@ -25,20 +30,33 @@ export function AudioPlayer({
   onProgress,
   seekRequest,
 }: AudioPlayerProps) {
-  const player = useAudioPlayer({ uri }, { updateInterval: 250 });
+  const { colors } = useTheme();
+  const remote = isRemoteUri(uri);
+  // downloadFirst makes remote signed URLs reliably seekable (full file, not range stream).
+  const player = useAudioPlayer({ uri }, { updateInterval: 250, downloadFirst: remote });
   const status = useAudioPlayerStatus(player);
   const [error, setError] = useState<string | null>(null);
+  const [seekHint, setSeekHint] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [speedIndex, setSpeedIndex] = useState(0);
   const trackWidthRef = useRef(0);
   const lastSeekIdRef = useRef<number | null>(null);
+  const seekHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dock = variant === 'dock';
+
+  const duration = status.duration > 0 ? status.duration : 0;
+  const position = status.currentTime > 0 ? status.currentTime : 0;
+  const progress = duration > 0 ? Math.min(1, position / duration) : 0;
+  const loading = !error && (!ready || !status.isLoaded);
+  const speed = SPEEDS[speedIndex];
+  const controlsDisabled = Boolean(error) || loading;
 
   useEffect(() => {
     let cancelled = false;
     setReady(false);
     setError(null);
+    setSeekHint(null);
 
     async function prepare() {
       try {
@@ -69,13 +87,14 @@ export function AudioPlayer({
 
   useEffect(() => {
     if (status.isLoaded || error) return;
+    const timeoutMs = remote ? 45000 : 12000;
     const timeout = setTimeout(() => {
       if (!status.isLoaded) {
         setError('Audio took too long to load. The file may be missing or unreadable.');
       }
-    }, LOAD_TIMEOUT_MS);
+    }, timeoutMs);
     return () => clearTimeout(timeout);
-  }, [status.isLoaded, error, reloadKey, uri]);
+  }, [status.isLoaded, error, reloadKey, uri, remote]);
 
   useEffect(() => {
     const state = (status.playbackState || '').toLowerCase();
@@ -86,7 +105,6 @@ export function AudioPlayer({
 
   useEffect(() => {
     try {
-      // expo-audio player rate API varies by platform; ignore if unavailable.
       const maybePlayer = player as { setPlaybackRate?: (rate: number) => void };
       maybePlayer.setPlaybackRate?.(SPEEDS[speedIndex]);
     } catch {
@@ -94,48 +112,94 @@ export function AudioPlayer({
     }
   }, [player, speedIndex]);
 
-  const duration = status.duration > 0 ? status.duration : 0;
-  const position = status.currentTime > 0 ? status.currentTime : 0;
-  const progress = duration > 0 ? Math.min(1, position / duration) : 0;
-  const loading = !error && (!ready || !status.isLoaded);
-  const speed = SPEEDS[speedIndex];
+  useEffect(() => {
+    return () => {
+      if (seekHintTimerRef.current) clearTimeout(seekHintTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     onProgress?.(position);
   }, [onProgress, position]);
 
+  const showSeekHint = useCallback((message: string) => {
+    setSeekHint(message);
+    if (seekHintTimerRef.current) clearTimeout(seekHintTimerRef.current);
+    seekHintTimerRef.current = setTimeout(() => setSeekHint(null), 2800);
+  }, []);
+
+  const seekToSeconds = useCallback(
+    async (seconds: number): Promise<boolean> => {
+      if (!status.isLoaded) {
+        showSeekHint('Audio is still loading — try again in a moment.');
+        return false;
+      }
+
+      const target =
+        duration > 0 ? Math.max(0, Math.min(duration, seconds)) : Math.max(0, seconds);
+
+      try {
+        const result = player.seekTo(target) as void | Promise<void>;
+        if (result && typeof (result as Promise<void>).then === 'function') {
+          await result;
+        }
+        setSeekHint(null);
+        return true;
+      } catch {
+        try {
+          const writable = player as { currentTime?: number };
+          if (typeof writable.currentTime === 'number') {
+            writable.currentTime = target;
+            setSeekHint(null);
+            return true;
+          }
+        } catch {
+          // fall through
+        }
+        showSeekHint('Could not seek in this recording.');
+        return false;
+      }
+    },
+    [duration, player, showSeekHint, status.isLoaded],
+  );
+
   useEffect(() => {
     if (!seekRequest) return;
     if (lastSeekIdRef.current === seekRequest.id) return;
+    if (!status.isLoaded) return;
+
     lastSeekIdRef.current = seekRequest.id;
     void (async () => {
-      try {
-        await player.seekTo(Math.max(0, seekRequest.sec));
-        if (!status.playing) {
+      const ok = await seekToSeconds(seekRequest.sec);
+      if (!ok) return;
+      if (!status.playing) {
+        try {
           player.play();
+        } catch {
+          // Autoplay may be blocked; seek still succeeded.
         }
-      } catch {
-        setError('Could not seek in this recording.');
       }
     })();
-  }, [player, seekRequest, status.playing]);
+  }, [player, seekRequest, seekToSeconds, status.isLoaded, status.playing]);
 
   const statusLabel = useMemo(() => {
     if (error) return error;
-    if (loading) return 'Loading audio…';
+    if (seekHint) return seekHint;
+    if (loading) return remote ? 'Loading audio (preparing seek)…' : 'Loading audio…';
     if (status.playing) return 'Playing';
     return 'Paused';
-  }, [error, loading, status.playing]);
+  }, [error, loading, remote, seekHint, status.playing]);
 
   async function togglePlay() {
     setError(null);
+    setSeekHint(null);
     try {
       if (status.playing) {
         player.pause();
         return;
       }
       if (duration > 0 && position >= duration - 0.25) {
-        await player.seekTo(0);
+        await seekToSeconds(0);
       }
       player.play();
     } catch {
@@ -144,25 +208,17 @@ export function AudioPlayer({
   }
 
   async function seekBy(deltaSeconds: number) {
-    try {
-      const next = Math.max(0, Math.min(duration, position + deltaSeconds));
-      await player.seekTo(next);
-    } catch {
-      setError('Could not seek in this recording.');
-    }
+    await seekToSeconds(position + deltaSeconds);
   }
 
   async function seekToRatio(ratio: number) {
     if (duration <= 0) return;
-    try {
-      await player.seekTo(Math.max(0, Math.min(duration, duration * ratio)));
-    } catch {
-      setError('Could not seek in this recording.');
-    }
+    await seekToSeconds(duration * ratio);
   }
 
   function onRetryLoad() {
     setError(null);
+    setSeekHint(null);
     setReady(false);
     setReloadKey((k) => k + 1);
     try {
@@ -178,39 +234,56 @@ export function AudioPlayer({
 
   return (
     <View
-      style={[styles.container, dock && styles.containerDock]}
+      style={[
+        styles.container,
+        {
+          borderColor: dock ? colors.border : colors.border,
+          backgroundColor: dock ? colors.player : colors.surface,
+        },
+      ]}
       accessibilityLabel={title ? `Audio player for ${title}` : 'Audio player'}
     >
-      {!dock ? <Text style={styles.heading}>Recording</Text> : null}
+      {!dock ? (
+        <Text style={[styles.heading, { color: colors.ink }]}>Recording</Text>
+      ) : null}
       <View style={styles.topRow}>
         <Pressable
           onPress={cycleSpeed}
-          style={[styles.speed, dock && styles.speedDock]}
+          style={[styles.speed, { borderColor: dock ? 'rgba(232,240,242,0.25)' : colors.border }]}
           accessibilityRole="button"
           accessibilityLabel={`Playback speed ${speed}x`}
         >
-          <Text style={[styles.speedText, dock && styles.speedTextDock]}>{speed.toFixed(2).replace(/\.00$/, '.0')}x</Text>
+          <Text style={[styles.speedText, { color: dock ? colors.playerText : colors.ink }]}>
+            {speed.toFixed(2).replace(/\.00$/, '.0')}x
+          </Text>
         </Pressable>
-        <Text style={[styles.status, dock && styles.statusDock, error ? styles.statusError : null]}>
+        <Text
+          style={[
+            styles.status,
+            { color: error || seekHint ? colors.danger : dock ? colors.playerMuted : colors.inkMuted },
+          ]}
+        >
           {statusLabel}
         </Text>
       </View>
 
       {loading ? (
         <View style={styles.loadingRow}>
-          <ActivityIndicator color={dock ? colors.accent : colors.brand} />
-          <Text style={[styles.loadingText, dock && styles.statusDock]}>Loading…</Text>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={[styles.loadingText, { color: dock ? colors.playerMuted : colors.inkMuted }]}>
+            Loading…
+          </Text>
         </View>
       ) : null}
 
       {error ? (
         <Pressable
           onPress={onRetryLoad}
-          style={[styles.retry, dock && styles.retryDock]}
+          style={[styles.retry, { backgroundColor: colors.accent }]}
           accessibilityRole="button"
           accessibilityLabel="Retry loading audio"
         >
-          <Text style={[styles.retryText, dock && styles.retryTextDock]}>Retry playback</Text>
+          <Text style={[styles.retryText, { color: colors.onBrand }]}>Retry playback</Text>
         </Pressable>
       ) : null}
 
@@ -221,64 +294,86 @@ export function AudioPlayer({
         }}
         onPress={(event) => {
           const width = trackWidthRef.current;
-          if (width <= 0 || duration <= 0 || error) return;
+          if (width <= 0 || duration <= 0 || controlsDisabled) return;
           const locationX = event.nativeEvent.locationX;
           void seekToRatio(Math.max(0, Math.min(1, locationX / width)));
         }}
         accessibilityRole="adjustable"
         accessibilityLabel="Seek"
       >
-        <View style={[styles.trackBackground, dock && styles.trackBackgroundDock]}>
+        <View
+          style={[
+            styles.trackBackground,
+            { backgroundColor: dock ? 'rgba(255,255,255,0.18)' : colors.backgroundAlt },
+          ]}
+        >
           <View
             style={[
               styles.trackFill,
-              dock && styles.trackFillDock,
-              { width: `${progress * 100}%` },
+              { backgroundColor: colors.accent, width: `${progress * 100}%` },
             ]}
           />
         </View>
       </Pressable>
 
       <View style={styles.times}>
-        <Text style={[styles.time, dock && styles.timeDock]}>{formatDuration(position)}</Text>
-        <Text style={[styles.time, dock && styles.timeDock]}>{formatDuration(duration)}</Text>
+        <Text
+          style={[styles.time, { color: dock ? colors.playerMuted : colors.inkMuted }]}
+        >
+          {formatDuration(position)}
+        </Text>
+        <Text
+          style={[styles.time, { color: dock ? colors.playerMuted : colors.inkMuted }]}
+        >
+          {formatDuration(duration)}
+        </Text>
       </View>
 
       <View style={styles.controls}>
         <Pressable
           onPress={() => void seekBy(-15)}
-          style={[styles.secondary, dock && styles.secondaryDock]}
+          style={[
+            styles.secondary,
+            { borderColor: dock ? 'rgba(232,240,242,0.28)' : colors.border },
+            controlsDisabled && styles.disabled,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Seek back 15 seconds"
-          disabled={Boolean(error) || loading}
+          disabled={controlsDisabled}
         >
-          <Text style={[styles.secondaryText, dock && styles.secondaryTextDock]}>−15s</Text>
+          <Text style={[styles.secondaryText, { color: dock ? colors.playerText : colors.ink }]}>
+            −15s
+          </Text>
         </Pressable>
 
         <Pressable
           onPress={() => void togglePlay()}
           style={[
             styles.primary,
-            dock && styles.primaryDock,
-            (loading || Boolean(error)) && styles.disabled,
+            { backgroundColor: colors.accent },
+            controlsDisabled && styles.disabled,
           ]}
           accessibilityRole="button"
           accessibilityLabel={status.playing ? 'Pause' : 'Play'}
-          disabled={Boolean(error) || loading}
+          disabled={controlsDisabled}
         >
-          <Text style={[styles.primaryText, dock && styles.primaryTextDock]}>
-            {status.playing ? 'Pause' : 'Play'}
-          </Text>
+          <Icon name={status.playing ? 'pause' : 'play'} size={28} />
         </Pressable>
 
         <Pressable
           onPress={() => void seekBy(15)}
-          style={[styles.secondary, dock && styles.secondaryDock]}
+          style={[
+            styles.secondary,
+            { borderColor: dock ? 'rgba(232,240,242,0.28)' : colors.border },
+            controlsDisabled && styles.disabled,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Seek forward 15 seconds"
-          disabled={Boolean(error) || loading}
+          disabled={controlsDisabled}
         >
-          <Text style={[styles.secondaryText, dock && styles.secondaryTextDock]}>+15s</Text>
+          <Text style={[styles.secondaryText, { color: dock ? colors.playerText : colors.ink }]}>
+            +15s
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -288,20 +383,13 @@ export function AudioPlayer({
 const styles = StyleSheet.create({
   container: {
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     padding: spacing.md,
     gap: spacing.sm,
-  },
-  containerDock: {
-    backgroundColor: colors.player,
-    borderColor: colors.brandSoft,
   },
   heading: {
     ...typography.body,
     fontWeight: '600',
-    color: colors.ink,
   },
   topRow: {
     flexDirection: 'row',
@@ -311,34 +399,18 @@ const styles = StyleSheet.create({
   },
   speed: {
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 4,
   },
-  speedDock: {
-    borderColor: 'rgba(232,240,242,0.25)',
-  },
   speedText: {
     ...typography.caption,
-    color: colors.ink,
     fontWeight: '700',
-  },
-  speedTextDock: {
-    color: colors.playerText,
   },
   status: {
     ...typography.caption,
-    color: colors.inkMuted,
     flexShrink: 1,
     textAlign: 'right',
-  },
-  statusDock: {
-    color: colors.playerMuted,
-  },
-  statusError: {
-    color: colors.danger,
-    fontWeight: '600',
   },
   loadingRow: {
     flexDirection: 'row',
@@ -347,24 +419,15 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     ...typography.caption,
-    color: colors.inkMuted,
   },
   retry: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.brand,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radii.sm,
-  },
-  retryDock: {
-    backgroundColor: colors.accent,
+    borderRadius: radii.pill,
   },
   retryText: {
-    color: colors.onBrand,
     fontWeight: '600',
-  },
-  retryTextDock: {
-    color: colors.brand,
   },
   track: {
     paddingVertical: spacing.xs,
@@ -372,18 +435,10 @@ const styles = StyleSheet.create({
   trackBackground: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.backgroundAlt,
     overflow: 'hidden',
-  },
-  trackBackgroundDock: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   trackFill: {
     height: 8,
-    backgroundColor: colors.brand,
-  },
-  trackFillDock: {
-    backgroundColor: colors.accent,
   },
   times: {
     flexDirection: 'row',
@@ -392,10 +447,6 @@ const styles = StyleSheet.create({
   time: {
     ...typography.caption,
     fontVariant: ['tabular-nums'],
-    color: colors.inkMuted,
-  },
-  timeDock: {
-    color: colors.playerMuted,
   },
   controls: {
     flexDirection: 'row',
@@ -405,39 +456,22 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   primary: {
-    backgroundColor: colors.brand,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.sm,
-    minWidth: 96,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
-  },
-  primaryDock: {
-    backgroundColor: colors.accent,
-  },
-  primaryText: {
-    color: colors.onBrand,
-    fontWeight: '600',
-  },
-  primaryTextDock: {
-    color: colors.brand,
+    justifyContent: 'center',
   },
   secondary: {
     borderWidth: 1,
-    borderColor: colors.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radii.sm,
-  },
-  secondaryDock: {
-    borderColor: 'rgba(232,240,242,0.28)',
+    borderRadius: radii.pill,
+    minWidth: 72,
+    alignItems: 'center',
   },
   secondaryText: {
-    color: colors.ink,
     fontWeight: '600',
-  },
-  secondaryTextDock: {
-    color: colors.playerText,
   },
   disabled: {
     opacity: 0.45,

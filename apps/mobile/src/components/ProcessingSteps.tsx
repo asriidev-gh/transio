@@ -1,20 +1,30 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { SessionStatus } from '@sessionai/shared';
-import { colors, spacing, typography } from '@/src/theme';
+import { spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
+
+interface Flags {
+  hasAudio: boolean;
+  hasTranscript: boolean;
+  hasSummary: boolean;
+}
 
 const STEPS: Array<{
   key: string;
   label: string;
+  hint: string;
   matches: (status: SessionStatus, flags: Flags) => 'done' | 'active' | 'pending' | 'failed';
 }> = [
   {
     key: 'uploaded',
-    label: 'Uploaded',
+    label: 'Audio ready',
+    hint: 'File is on the server',
     matches: (_status, flags) => (flags.hasAudio ? 'done' : 'pending'),
   },
   {
     key: 'transcribing',
-    label: 'Transcribing',
+    label: 'Detecting speech',
+    hint: 'Listening for words and speakers',
     matches: (status, flags) => {
       if (flags.hasTranscript || status === 'transcribed' || status === 'summarizing' || status === 'completed') {
         return 'done';
@@ -26,7 +36,8 @@ const STEPS: Array<{
   },
   {
     key: 'transcript',
-    label: 'Transcript + speakers',
+    label: 'Converting audio to text',
+    hint: 'Building a readable transcript',
     matches: (status, flags) => {
       if (flags.hasTranscript || status === 'transcribed' || status === 'summarizing' || status === 'completed') {
         return 'done';
@@ -36,7 +47,8 @@ const STEPS: Array<{
   },
   {
     key: 'summarizing',
-    label: 'Summarizing',
+    label: 'Formatting insights',
+    hint: 'Summary and action items',
     matches: (status, flags) => {
       if (flags.hasSummary || status === 'completed') return 'done';
       if (status === 'summarizing') return 'active';
@@ -47,18 +59,13 @@ const STEPS: Array<{
   {
     key: 'completed',
     label: 'Finishing up',
+    hint: 'Almost ready to review',
     matches: (status, flags) => {
       if (status === 'completed' || flags.hasSummary) return 'done';
       return 'pending';
     },
   },
 ];
-
-interface Flags {
-  hasAudio: boolean;
-  hasTranscript: boolean;
-  hasSummary: boolean;
-}
 
 interface ProcessingStepsProps {
   status: SessionStatus;
@@ -73,6 +80,7 @@ export function ProcessingSteps({
   hasTranscript,
   hasSummary,
 }: ProcessingStepsProps) {
+  const { colors } = useTheme();
   const flags = { hasAudio, hasTranscript, hasSummary };
 
   return (
@@ -85,16 +93,18 @@ export function ProcessingSteps({
               <View
                 style={[
                   styles.dot,
-                  state === 'done' && styles.dotDone,
-                  state === 'active' && styles.dotActive,
-                  state === 'failed' && styles.dotFailed,
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  state === 'done' && { borderColor: colors.success, backgroundColor: colors.success },
+                  state === 'active' && { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+                  state === 'failed' && { borderColor: colors.danger, backgroundColor: colors.danger },
                 ]}
               />
               {index < STEPS.length - 1 ? (
                 <View
                   style={[
                     styles.line,
-                    (state === 'done' || state === 'active') && styles.lineActive,
+                    { backgroundColor: colors.border },
+                    (state === 'done' || state === 'active') && { backgroundColor: colors.accent },
                   ]}
                 />
               ) : null}
@@ -103,15 +113,20 @@ export function ProcessingSteps({
               <Text
                 style={[
                   styles.label,
-                  state === 'active' && styles.labelActive,
-                  state === 'failed' && styles.labelFailed,
-                  state === 'pending' && styles.labelPending,
+                  { color: colors.ink },
+                  state === 'active' && { color: colors.accent },
+                  state === 'failed' && { color: colors.danger },
+                  state === 'pending' && { color: colors.inkMuted, fontWeight: '500' },
                 ]}
               >
                 {step.label}
               </Text>
-              {state === 'active' ? <Text style={styles.hint}>In progress…</Text> : null}
-              {state === 'failed' ? <Text style={styles.hintFailed}>Failed</Text> : null}
+              {state === 'active' ? (
+                <Text style={[styles.hint, { color: colors.inkMuted }]}>{step.hint}</Text>
+              ) : null}
+              {state === 'failed' ? (
+                <Text style={[styles.hint, { color: colors.danger }]}>Failed — you can retry</Text>
+              ) : null}
             </View>
           </View>
         );
@@ -134,34 +149,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     borderWidth: 2,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     marginTop: 4,
-  },
-  dotDone: {
-    borderColor: colors.success,
-    backgroundColor: colors.success,
-  },
-  dotActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSoft,
-  },
-  dotFailed: {
-    borderColor: colors.danger,
-    backgroundColor: colors.danger,
   },
   line: {
     flex: 1,
-    width: 2,
-    backgroundColor: colors.border,
+    width: 1.5,
     marginVertical: 4,
-  },
-  lineActive: {
-    backgroundColor: colors.accent,
   },
   labelWrap: {
     flex: 1,
@@ -170,26 +167,9 @@ const styles = StyleSheet.create({
   label: {
     ...typography.body,
     fontWeight: '600',
-    color: colors.ink,
-  },
-  labelActive: {
-    color: colors.accent,
-  },
-  labelFailed: {
-    color: colors.danger,
-  },
-  labelPending: {
-    color: colors.inkMuted,
-    fontWeight: '500',
   },
   hint: {
     ...typography.caption,
-    color: colors.inkMuted,
-    marginTop: 2,
-  },
-  hintFailed: {
-    ...typography.caption,
-    color: colors.danger,
     marginTop: 2,
   },
 });

@@ -20,11 +20,19 @@ import {
   createSupabaseAudioDownloader,
 } from '../services/transcription/job.js';
 import { SupabaseTranscriptRepository } from '../services/transcripts/repository.js';
-import { registerAudioRoutes, type AudioStorageFactory } from './audio.js';
+import { registerAudioRoutes, type AudioStorageFactory, type MediaPreparer, type RemoteMediaFetcher } from './audio.js';
 import {
   registerAskRoutes,
   type AskProviderFactory,
 } from './ask.js';
+import {
+  registerFeedbackRoutes,
+  type FeedbackRepoFactory,
+} from './feedback.js';
+import {
+  registerTranslateRoutes,
+  type TranslateProviderFactory,
+} from './translate.js';
 import {
   registerProcessRoutes,
   tryStartProcessingAfterUpload,
@@ -87,12 +95,16 @@ function createDefaultProcessJobRunner(
 export function createSessionsRouter(options: {
   createRepository?: SessionRepoFactory;
   createAudioStorage?: AudioStorageFactory;
+  prepareMedia?: MediaPreparer;
+  fetchRemoteMedia?: RemoteMediaFetcher;
   createTranscriptRepository?: TranscriptRepoFactory;
   createTranscriptionProvider?: TranscriptionProviderFactory;
   runTranscriptionJob?: JobRunner;
   createSummaryRepository?: SummaryRepoFactory;
   createSummaryProvider?: SummaryProviderFactory;
   createAskProvider?: AskProviderFactory;
+  createTranslateProvider?: TranslateProviderFactory;
+  createFeedbackRepository?: FeedbackRepoFactory;
   runSummaryJob?: SummaryJobRunner;
   runProcessJob?: ProcessJobRunner;
   authenticate?: RequestHandler;
@@ -141,6 +153,8 @@ export function createSessionsRouter(options: {
   registerAudioRoutes(router, {
     createRepository,
     createAudioStorage: options.createAudioStorage,
+    prepareMedia: options.prepareMedia,
+    fetchRemoteMedia: options.fetchRemoteMedia,
     onUploaded: (sessionId, req) => {
       tryStartProcessingAfterUpload(sessionId, req, {
         createRepository,
@@ -181,6 +195,18 @@ export function createSessionsRouter(options: {
     createTranscriptRepository: options.createTranscriptRepository,
     createSummaryRepository: options.createSummaryRepository,
     createAskProvider: options.createAskProvider,
+  });
+
+  registerTranslateRoutes(router, {
+    createRepository,
+    createTranscriptRepository: options.createTranscriptRepository,
+    createSummaryRepository: options.createSummaryRepository,
+    createTranslateProvider: options.createTranslateProvider,
+  });
+
+  registerFeedbackRoutes(router, {
+    createRepository,
+    createFeedbackRepository: options.createFeedbackRepository,
   });
 
   router.get('/:id', async (req, res, next) => {

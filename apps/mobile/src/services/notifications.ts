@@ -1,4 +1,5 @@
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import { showAlert } from '@/src/utils/confirm';
 
 export type NotificationPermission = 'granted' | 'denied' | 'default' | 'unsupported';
 
@@ -53,6 +54,6 @@ export async function notifyProcessingComplete(input: {
 
   // Foreground / native fallback — only when permission wasn't used.
   if (Platform.OS !== 'web') {
-    Alert.alert('Processing complete', body);
+    await showAlert('Processing complete', body);
   }
 }

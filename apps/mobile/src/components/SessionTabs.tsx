@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radii, spacing, typography } from '@/src/theme';
+import { radii, spacing } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
 
 export type SessionTabKey = 'summary' | 'transcript' | 'ask' | 'actions';
 
@@ -16,8 +17,13 @@ interface SessionTabsProps {
 }
 
 export function SessionTabs({ value, onChange }: SessionTabsProps) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.wrap} accessibilityRole="tablist" accessibilityLabel="Session views">
+    <View
+      style={[styles.wrap, { backgroundColor: colors.backgroundAlt }]}
+      accessibilityRole="tablist"
+      accessibilityLabel="Session views"
+    >
       {TABS.map((tab) => {
         const selected = tab.key === value;
         return (
@@ -27,9 +33,15 @@ export function SessionTabs({ value, onChange }: SessionTabsProps) {
             accessibilityState={{ selected }}
             accessibilityLabel={tab.label}
             onPress={() => onChange(tab.key)}
-            style={[styles.tab, selected && styles.tabSelected]}
+            style={[
+              styles.tab,
+              selected && { backgroundColor: colors.surface },
+            ]}
           >
-            <Text style={[styles.label, selected && styles.labelSelected]} numberOfLines={1}>
+            <Text
+              style={[styles.label, { color: selected ? colors.ink : colors.inkMuted }]}
+              numberOfLines={1}
+            >
               {tab.label}
             </Text>
           </Pressable>
@@ -44,7 +56,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 2,
     padding: 4,
-    backgroundColor: 'rgba(11, 31, 42, 0.08)',
     borderRadius: radii.md,
   },
   tab: {
@@ -53,20 +64,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     paddingHorizontal: 2,
     borderRadius: radii.sm,
-  },
-  tabSelected: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    minHeight: 40,
+    justifyContent: 'center',
   },
   label: {
-    ...typography.caption,
-    fontFamily: undefined,
     fontSize: 12,
     fontWeight: '600',
-    color: colors.inkMuted,
-  },
-  labelSelected: {
-    color: colors.brand,
   },
 });

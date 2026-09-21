@@ -23,7 +23,7 @@ interface ApiErrorBody {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   /** When true, requires a Supabase access token. */
   auth?: boolean;

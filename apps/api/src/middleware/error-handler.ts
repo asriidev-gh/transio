@@ -36,7 +36,7 @@ export function errorHandler(
     if (err.code === 'LIMIT_FILE_SIZE') {
       res
         .status(400)
-        .json(apiError('VALIDATION_ERROR', 'Audio file is too large (max 100 MB)'));
+        .json(apiError('VALIDATION_ERROR', 'File is too large (max 100 MB)'));
       return;
     }
     res.status(400).json(apiError('VALIDATION_ERROR', err.message));

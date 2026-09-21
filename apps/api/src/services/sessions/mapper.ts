@@ -12,6 +12,7 @@ export interface SessionRow {
   audio_path: string | null;
   status: string;
   favorited_at?: string | null;
+  folder_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +29,7 @@ export function mapSessionRow(row: SessionRow) {
     audioPath: row.audio_path,
     status: row.status,
     favoritedAt: row.favorited_at ?? null,
+    folderId: row.folder_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

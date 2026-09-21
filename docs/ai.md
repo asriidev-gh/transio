@@ -94,6 +94,14 @@ pipeline stages from backend status (`hasAudio`, `hasTranscript`, `hasSummary`).
 `{ answer, suggestedFollowUps }` using Claude grounded in the session transcript
 (and summary when available). Requires `ANTHROPIC_API_KEY` on the API.
 
+## Translate
+
+`POST /sessions/:id/translate` with `{ "language": "<code>", "scope": "summary"|"transcript" }`
+returns an on-demand Claude translation (not persisted). Uses a fast Haiku model by
+default (`ANTHROPIC_TRANSLATE_MODEL`, separate from Sonnet used for summaries). Language is
+chosen from a curated select list. Transcript segments use compact parallel batches.
+Requires `ANTHROPIC_API_KEY` on the API.
+
 ## Transcript segments
 
 Whisper `verbose_json` segments are stored on `transcripts.segments` as

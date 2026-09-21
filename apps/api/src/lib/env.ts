@@ -12,6 +12,8 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().default(''),
   ANTHROPIC_API_KEY: z.string().optional().default(''),
   ANTHROPIC_MODEL: z.string().optional().default('claude-sonnet-4-5'),
+  /** Faster model for on-demand Translate (defaults to Haiku). */
+  ANTHROPIC_TRANSLATE_MODEL: z.string().optional().default('claude-haiku-4-5'),
   TRANSCRIPTION_API_KEY: z.string().optional().default(''),
   TRANSCRIPTION_BASE_URL: z.string().default(''),
   LOG_SENSITIVE: z

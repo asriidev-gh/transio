@@ -9,7 +9,9 @@ import {
   View,
 } from 'react-native';
 import type { TranscriptSegment } from '@sessionai/shared';
-import { colors, radii, spacing, typography } from '@/src/theme';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
+import { showAlert } from '@/src/utils/confirm';
 import { formatDuration } from '@/src/utils/format';
 
 interface TranscriptViewerProps {
@@ -65,7 +67,7 @@ async function promptRename(current: string): Promise<string | null> {
       return;
     }
 
-    Alert.alert('Rename speaker', 'Speaker rename is available on iOS and web for now.');
+    void showAlert('Rename speaker', 'Speaker rename is available on iOS and web for now.');
     resolve(null);
   });
 }
@@ -78,6 +80,7 @@ export function TranscriptViewer({
   onSeekMs,
   onRenameSpeaker,
 }: TranscriptViewerProps) {
+  const { colors } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const rowOffsets = useRef<Record<number, number>>({});
   const [busySpeaker, setBusySpeaker] = useState<string | null>(null);
@@ -107,9 +110,11 @@ export function TranscriptViewer({
 
   return (
     <View style={styles.wrap}>
-      {language ? <Text style={styles.language}>Language: {language}</Text> : null}
+      {language ? (
+        <Text style={[styles.language, { color: colors.inkMuted }]}>Language: {language}</Text>
+      ) : null}
       {hasSegments && onRenameSpeaker ? (
-        <Text style={styles.hint}>Tap a speaker name to rename.</Text>
+        <Text style={[styles.hint, { color: colors.inkMuted }]}>Tap a speaker name to rename.</Text>
       ) : null}
       <ScrollView
         ref={scrollRef}
@@ -121,46 +126,74 @@ export function TranscriptViewer({
           ? segments.map((seg, index) => {
               const active = index === activeIndex;
               return (
-                <Pressable
+                <View
                   key={`${seg.startMs}-${index}`}
                   onLayout={(e) => {
                     rowOffsets.current[index] = e.nativeEvent.layout.y;
                   }}
-                  onPress={() => onSeekMs?.(seg.startMs)}
-                  style={[styles.segment, active && styles.segmentActive]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${seg.speaker ?? 'Segment'} at ${formatDuration(seg.startMs / 1000)}`}
+                  style={[
+                    styles.segment,
+                    active && { backgroundColor: colors.accentSoft },
+                  ]}
                   accessibilityState={{ selected: active }}
                 >
                   <View style={styles.segmentMeta}>
-                    <Text style={[styles.time, active && styles.timeActive]}>
-                      {formatDuration(seg.startMs / 1000)}
-                    </Text>
+                    <Pressable
+                      onPress={() => onSeekMs?.(seg.startMs)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Seek to ${formatDuration(seg.startMs / 1000)}`}
+                    >
+                      <Text
+                        style={[
+                          styles.time,
+                          { color: colors.inkMuted },
+                          active && { color: colors.accentDeep },
+                        ]}
+                      >
+                        {formatDuration(seg.startMs / 1000)}
+                      </Text>
+                    </Pressable>
                     {seg.speaker ? (
                       <Pressable
-                        onPress={(e) => {
-                          e.stopPropagation?.();
-                          void handleRename(seg.speaker!);
-                        }}
+                        onPress={() => void handleRename(seg.speaker!)}
                         disabled={busySpeaker === seg.speaker}
                         hitSlop={8}
                         accessibilityRole="button"
                         accessibilityLabel={`Rename ${seg.speaker}`}
                       >
-                        <Text style={[styles.speaker, active && styles.speakerActive]}>
+                        <Text
+                          style={[
+                            styles.speaker,
+                            { color: colors.inkMuted },
+                            active && { color: colors.accentDeep },
+                          ]}
+                        >
                           {busySpeaker === seg.speaker ? 'Saving…' : seg.speaker}
                         </Text>
                       </Pressable>
                     ) : null}
                   </View>
-                  <Text style={[styles.segmentText, active && styles.segmentTextActive]} selectable>
-                    {seg.text}
-                  </Text>
-                </Pressable>
+                  <Pressable
+                    onPress={() => onSeekMs?.(seg.startMs)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${seg.speaker ?? 'Segment'} at ${formatDuration(seg.startMs / 1000)}`}
+                  >
+                    <Text
+                      style={[
+                        styles.segmentText,
+                        { color: colors.ink },
+                        active && styles.segmentTextActive,
+                      ]}
+                      selectable
+                    >
+                      {seg.text}
+                    </Text>
+                  </Pressable>
+                </View>
               );
             })
           : (
-            <Text style={styles.text} selectable>
+            <Text style={[styles.text, { color: colors.ink }]} selectable>
               {text}
             </Text>
           )}
@@ -177,13 +210,11 @@ const styles = StyleSheet.create({
   },
   language: {
     ...typography.caption,
-    color: colors.inkMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   hint: {
     ...typography.caption,
-    color: colors.inkMuted,
     fontFamily: undefined,
   },
   scroll: {
@@ -194,18 +225,13 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   text: {
-    fontSize: 17,
-    lineHeight: 28,
-    color: colors.ink,
+    ...typography.transcript,
   },
   segment: {
     borderRadius: radii.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
     gap: 4,
-  },
-  segmentActive: {
-    backgroundColor: colors.accentSoft,
   },
   segmentMeta: {
     flexDirection: 'row',
@@ -214,27 +240,17 @@ const styles = StyleSheet.create({
   },
   time: {
     ...typography.caption,
-    color: colors.inkMuted,
     fontVariant: ['tabular-nums'],
     fontWeight: '700',
   },
-  timeActive: {
-    color: colors.accent,
-  },
   speaker: {
     ...typography.caption,
-    color: colors.brandSoft,
     fontFamily: undefined,
     fontWeight: '700',
     textDecorationLine: 'underline',
   },
-  speakerActive: {
-    color: colors.brand,
-  },
   segmentText: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: colors.ink,
+    ...typography.transcript,
   },
   segmentTextActive: {
     fontWeight: '600',

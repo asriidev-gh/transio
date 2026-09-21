@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
 import {
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -8,26 +7,36 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   SESSION_STATUS_LABELS,
   SESSION_TYPE_LABELS,
   type Session,
+  type SessionFolder,
 } from '@sessionai/shared';
 import { AudioPlayer } from '@/src/components/AudioPlayer';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { SessionWorkspace } from '@/src/components/SessionWorkspace';
+import { FolderPicker } from '@/src/components/FolderPicker';
+import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
 import { UploadProgress } from '@/src/components/UploadProgress';
+import { Button } from '@/src/components/ui/Button';
+import { Icon } from '@/src/components/ui/Icon';
 import { ApiClientError } from '@/src/services/api';
 import { getSignedAudioUrl, uploadSessionAudio } from '@/src/services/audio-upload';
 import {
   clearLocalAudioUri,
   getLocalAudioUri,
   isLocalAudioReadable,
+  saveLocalAudioUri,
 } from '@/src/services/local-audio';
+import { pickAudioFile } from '@/src/services/pick-audio';
+import { listFolders } from '@/src/services/folders';
 import { deleteSession, getSession, updateSession } from '@/src/services/sessions';
-import { colors, radii, spacing, typography } from '@/src/theme';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
+import { confirmAction, confirmDestructive } from '@/src/utils/confirm';
 import { formatDurationHuman, formatSessionDate } from '@/src/utils/format';
 import { shareSessionContent } from '@/src/utils/share-session';
 import type { SummaryRecord, Transcript } from '@sessionai/shared';
@@ -37,6 +46,7 @@ type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 export default function SessionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { colors, shadows } = useTheme();
   const [session, setSession] = useState<Session | null>(null);
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [playbackUri, setPlaybackUri] = useState<string | null>(null);
@@ -53,6 +63,10 @@ export default function SessionDetailsScreen() {
   const [seekRequest, setSeekRequest] = useState<{ id: number; sec: number } | null>(null);
   const [favoriting, setFavoriting] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [folders, setFolders] = useState<SessionFolder[]>([]);
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [movingFolder, setMovingFolder] = useState(false);
   const [shareSummary, setShareSummary] = useState<SummaryRecord | null>(null);
   const [shareTranscript, setShareTranscript] = useState<Transcript | null>(null);
   const seekIdRef = useRef(0);
@@ -111,62 +125,94 @@ export default function SessionDetailsScreen() {
 
   const onReRecord = useCallback(() => {
     if (!id || typeof id !== 'string') return;
-    Alert.alert(
-      'Re-record this session?',
-      'The current local take will be discarded. Cloud audio (if already uploaded) is kept until you upload a new recording.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Re-record',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              await clearLocalAudioUri(id);
-              setLocalUri(null);
-              setPlaybackUri(null);
-              setShowPlayer(false);
-              setUploadStatus('idle');
-              setUploadMessage(undefined);
-              router.push(`/recording?id=${id}`);
-            })();
-          },
-        },
-      ],
-    );
+    void (async () => {
+      const ok = await confirmAction(
+        'Re-record this session?',
+        'The current local take will be discarded. Cloud audio (if already uploaded) is kept until you upload a new recording.',
+        'Re-record',
+        { destructive: true },
+      );
+      if (!ok) return;
+      await clearLocalAudioUri(id);
+      setLocalUri(null);
+      setPlaybackUri(null);
+      setShowPlayer(false);
+      setUploadStatus('idle');
+      setUploadMessage(undefined);
+      router.push(`/recording?id=${id}`);
+    })();
   }, [id, router]);
+
+  const onImportAudio = useCallback(async () => {
+    if (!id || typeof id !== 'string' || !session || session.audioPath) return;
+    setImporting(true);
+    setError(null);
+    try {
+      const picked = await pickAudioFile();
+      if (!picked) return;
+      const stored = await saveLocalAudioUri(id, picked.uri);
+      setLocalUri(stored);
+      setPlaybackUri(stored);
+      setShowPlayer(true);
+      setUploadStatus('idle');
+      setUploadMessage(undefined);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not import media. Try another file or record instead.',
+      );
+    } finally {
+      setImporting(false);
+    }
+  }, [id, session]);
 
   const onDelete = useCallback(() => {
     if (!id || typeof id !== 'string' || !session) return;
-    Alert.alert(
-      'Delete session?',
-      `“${session.title}” and its transcript/summary will be permanently removed.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              setDeleting(true);
-              try {
-                await deleteSession(id);
-                await clearLocalAudioUri(id);
-                router.replace('/');
-              } catch (err) {
-                setError(
-                  err instanceof ApiClientError
-                    ? err.message
-                    : 'Could not delete this session.',
-                );
-              } finally {
-                setDeleting(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
+    void (async () => {
+      const ok = await confirmDestructive(
+        'Delete session?',
+        `“${session.title}” and its transcript/summary will be permanently removed.`,
+      );
+      if (!ok) return;
+      setDeleting(true);
+      try {
+        await deleteSession(id);
+        await clearLocalAudioUri(id);
+        router.replace('/');
+      } catch (err) {
+        setError(
+          err instanceof ApiClientError
+            ? err.message
+            : 'Could not delete this session.',
+        );
+      } finally {
+        setDeleting(false);
+      }
+    })();
   }, [id, router, session]);
+
+  const onMoveToFolder = useCallback(
+    (nextFolderId: string | null) => {
+      if (!id || typeof id !== 'string') return;
+      setFolderPickerOpen(false);
+      if ((session?.folderId ?? null) === nextFolderId) return;
+      void (async () => {
+        setMovingFolder(true);
+        try {
+          const updated = await updateSession(id, { folderId: nextFolderId });
+          setSession(updated);
+        } catch (err) {
+          setError(
+            err instanceof ApiClientError ? err.message : 'Could not move this session.',
+          );
+        } finally {
+          setMovingFolder(false);
+        }
+      })();
+    },
+    [id, session],
+  );
 
   const onToggleFavorite = useCallback(() => {
     if (!id || typeof id !== 'string' || !session) return;
@@ -225,8 +271,13 @@ export default function SessionDetailsScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [data, uri] = await Promise.all([getSession(id), getLocalAudioUri(id)]);
+      const [data, uri, folderRows] = await Promise.all([
+        getSession(id),
+        getLocalAudioUri(id),
+        listFolders().catch(() => [] as SessionFolder[]),
+      ]);
       setSession(data);
+      setFolders(folderRows);
 
       let usableUri = uri;
       if (uri && !(await isLocalAudioReadable(uri))) {
@@ -289,7 +340,7 @@ export default function SessionDetailsScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <LoadingState message="Loading session…" />
       </View>
     );
@@ -297,7 +348,7 @@ export default function SessionDetailsScreen() {
 
   if (error || !session) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <ErrorState
           title="Session unavailable"
           description={error ?? 'Session not found.'}
@@ -308,7 +359,9 @@ export default function SessionDetailsScreen() {
   }
 
   const completed = session.status === 'completed';
+  const failed = session.status === 'failed';
   const canRecord = !localUri && !session.audioPath;
+  const canImport = !session.audioPath;
   const hasLocalDraft = Boolean(localUri) && !session.audioPath;
   const hasPlayback = Boolean(playbackUri);
   const showWorkspace =
@@ -321,398 +374,457 @@ export default function SessionDetailsScreen() {
     session.status === 'summarizing' ||
     session.status === 'completed';
   const hasSummary = session.status === 'completed';
+  const currentFolder = folders.find((folder) => folder.id === session.folderId) ?? null;
+  const statusColor = completed ? colors.success : failed ? colors.danger : colors.accent;
+  const statusLabel = SESSION_STATUS_LABELS[session.status];
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
-    >
-      <Text style={styles.title} accessibilityRole="header">
-        {session.title}
-      </Text>
-      <Text style={styles.meta}>{SESSION_TYPE_LABELS[session.sessionType]}</Text>
-      <Text style={styles.meta}>{formatSessionDate(session.recordedAt)}</Text>
-      <Text style={styles.meta}>{formatDurationHuman(session.durationSeconds)}</Text>
-      <Text
-        style={[
-          styles.status,
-          completed ? styles.statusOk : session.status === 'failed' ? styles.statusFailed : styles.statusPending,
-        ]}
+    <>
+      <Stack.Screen options={{ title: session.title }} />
+      <ScrollView
+        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={colors.accent}
+          />
+        }
       >
-        {completed
-          ? `✓ ${SESSION_STATUS_LABELS[session.status]}`
-          : session.status === 'failed'
-            ? `⚠ ${SESSION_STATUS_LABELS[session.status]}`
-            : SESSION_STATUS_LABELS[session.status]}
-      </Text>
-
-      {session.description ? <Text style={styles.description}>{session.description}</Text> : null}
-
-      <View style={styles.manageRow}>
-        <Pressable
-          style={[styles.manageButton, session.favoritedAt ? styles.favoriteOn : null]}
-          onPress={onToggleFavorite}
-          disabled={favoriting}
-          accessibilityRole="button"
-          accessibilityLabel={session.favoritedAt ? 'Remove from favorites' : 'Add to favorites'}
-        >
-          <Text
-            style={[
-              styles.manageButtonText,
-              session.favoritedAt ? styles.favoriteOnText : null,
-            ]}
-          >
-            {favoriting ? '…' : session.favoritedAt ? '★ Favorited' : '☆ Favorite'}
-          </Text>
-        </Pressable>
-        <Pressable
-          style={styles.manageButton}
-          onPress={onShare}
-          disabled={sharing}
-          accessibilityRole="button"
-          accessibilityLabel="Share session"
-        >
-          <Text style={styles.manageButtonText}>{sharing ? 'Sharing…' : 'Share'}</Text>
-        </Pressable>
-        <Pressable
-          style={styles.manageButton}
-          onPress={() => router.push(`/session/${session.id}/edit`)}
-          accessibilityRole="button"
-          accessibilityLabel="Edit session"
-        >
-          <Text style={styles.manageButtonText}>Edit</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.manageButton, styles.dangerButton]}
-          onPress={onDelete}
-          disabled={deleting}
-          accessibilityRole="button"
-          accessibilityLabel="Delete session"
-        >
-          <Text style={[styles.manageButtonText, styles.dangerButtonText]}>
-            {deleting ? 'Deleting…' : 'Delete'}
-          </Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.actions}>
-        {hasLocalDraft ? (
-          <View style={styles.reviewBox}>
-            <Text style={styles.reviewTitle}>Recording ready</Text>
-            <Text style={styles.reviewHint}>
-              Listen to your take, then upload & process it — or discard and record again.
-            </Text>
-
-            {hasPlayback && showPlayer && playbackUri ? (
-              <AudioPlayer
-                uri={playbackUri}
-                title={session.title}
-                variant="dock"
-                onProgress={setPlaybackTimeSec}
-                seekRequest={seekRequest}
-              />
-            ) : null}
-
-            {uploadStatus === 'uploading' || uploadStatus === 'error' ? (
-              <UploadProgress
-                progress={uploadProgress}
-                status={uploadStatus}
-                message={uploadMessage}
-                onRetry={
-                  localUri && id
-                    ? () => {
-                        void runUploadAndProcess(String(id), localUri);
-                      }
-                    : undefined
-                }
-              />
-            ) : null}
-
-            <Pressable
-              style={[styles.primaryButton, proceeding && styles.buttonDisabled]}
-              disabled={proceeding}
-              onPress={() => {
-                if (!localUri || !id) return;
-                void runUploadAndProcess(String(id), localUri);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Proceed — upload and process"
-            >
-              <Text style={styles.primaryButtonText}>
-                {proceeding ? 'Uploading…' : 'Proceed — upload & process'}
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={[styles.secondaryButton, proceeding && styles.buttonDisabled]}
-              disabled={proceeding}
-              onPress={onReRecord}
-              accessibilityRole="button"
-              accessibilityLabel="Re-record session"
-            >
-              <Text style={styles.secondaryButtonText}>Re-record</Text>
-            </Pressable>
+        <View style={styles.hero}>
+          <View style={[styles.statusPill, { backgroundColor: colors.accentSoft }]}>
+            <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+            <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
           </View>
-        ) : null}
+          <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
+            {session.title}
+          </Text>
+          <Text style={[styles.metaLine, { color: colors.inkMuted }]}>
+            {SESSION_TYPE_LABELS[session.sessionType]}
+            {' · '}
+            {formatSessionDate(session.recordedAt)}
+            {' · '}
+            {formatDurationHuman(session.durationSeconds)}
+          </Text>
+          {session.description ? (
+            <Text style={[styles.description, { color: colors.inkMuted }]} numberOfLines={3}>
+              {session.description}
+            </Text>
+          ) : null}
+        </View>
 
-        {!hasLocalDraft && session.audioPath && uploadStatus === 'error' ? (
-          <UploadProgress
-            progress={uploadProgress}
-            status={uploadStatus}
-            message={uploadMessage}
-          />
-        ) : null}
+        <View style={styles.toolbar}>
+          <Pressable
+            style={[
+              styles.toolBtn,
+              {
+                backgroundColor: session.favoritedAt ? colors.accentSoft : colors.surface,
+                borderColor: session.favoritedAt ? colors.accent : colors.border,
+              },
+              shadows.soft,
+            ]}
+            onPress={onToggleFavorite}
+            disabled={favoriting}
+            accessibilityRole="button"
+            accessibilityLabel={session.favoritedAt ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            <Icon
+              name={session.favoritedAt ? 'star' : 'star-outline'}
+              size={22}
+              color={session.favoritedAt ? colors.warning : colors.ink}
+            />
+          </Pressable>
+          <Pressable
+            style={[
+              styles.toolBtn,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+              shadows.soft,
+            ]}
+            onPress={onShare}
+            disabled={sharing}
+            accessibilityRole="button"
+            accessibilityLabel="Share session"
+          >
+            <Icon name="share-variant-outline" size={22} />
+          </Pressable>
+          <Pressable
+            style={[
+              styles.folderChip,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+              shadows.soft,
+            ]}
+            onPress={() => setFolderPickerOpen(true)}
+            disabled={movingFolder}
+            accessibilityRole="button"
+            accessibilityLabel="Move to folder"
+          >
+            <Icon name="folder" size={20} />
+            <Text style={[styles.folderChipText, { color: colors.ink }]} numberOfLines={1}>
+              {movingFolder ? 'Moving…' : currentFolder ? currentFolder.name : 'Default'}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.toolBtn,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+              shadows.soft,
+            ]}
+            onPress={() => router.push(`/session/${session.id}/edit`)}
+            accessibilityRole="button"
+            accessibilityLabel="Edit session"
+          >
+            <Icon name="pencil" size={20} />
+          </Pressable>
+          <Pressable
+            style={[
+              styles.toolBtn,
+              {
+                backgroundColor: colors.actionRecord,
+                borderColor: colors.danger,
+              },
+              shadows.soft,
+            ]}
+            onPress={onDelete}
+            disabled={deleting}
+            accessibilityRole="button"
+            accessibilityLabel="Delete session"
+          >
+            <Icon name="close" size={20} color={colors.danger} />
+          </Pressable>
+        </View>
 
-        {!hasLocalDraft && hasPlayback && showPlayer && playbackUri ? (
-          <AudioPlayer
-            uri={playbackUri}
-            title={session.title}
-            variant="dock"
-            onProgress={setPlaybackTimeSec}
-            seekRequest={seekRequest}
-          />
-        ) : null}
+        <View style={styles.body}>
+          {hasLocalDraft ? (
+            <View
+              style={[
+                styles.reviewCard,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+                shadows.soft,
+              ]}
+            >
+              <Text style={[styles.reviewTitle, { color: colors.ink }]}>Ready to process</Text>
+              <Text style={[styles.reviewHint, { color: colors.inkMuted }]}>
+                Preview your take, then upload to transcribe and summarize.
+              </Text>
 
-        {!hasLocalDraft && hasPlayback && !showPlayer ? (
-          <ActionRow
-            label="▶ Play Recording"
-            hint={
-              session.audioPath
-                ? 'Play via secure signed URL'
-                : 'Play the local recording saved on this device'
-            }
-            onPress={() => setShowPlayer(true)}
-          />
-        ) : null}
+              {hasPlayback && showPlayer && playbackUri ? (
+                <AudioPlayer
+                  uri={playbackUri}
+                  title={session.title}
+                  variant="dock"
+                  onProgress={setPlaybackTimeSec}
+                  seekRequest={seekRequest}
+                />
+              ) : null}
 
-        {!hasLocalDraft && !hasPlayback ? (
-          <ActionRow label="▶ Play Recording" hint="No recording available yet" disabled />
-        ) : null}
+              {uploadStatus === 'uploading' || uploadStatus === 'error' ? (
+                <UploadProgress
+                  progress={uploadProgress}
+                  status={uploadStatus}
+                  message={uploadMessage}
+                  onRetry={
+                    localUri && id
+                      ? () => {
+                          void runUploadAndProcess(String(id), localUri);
+                        }
+                      : undefined
+                  }
+                />
+              ) : null}
 
-        {canRecord ? (
-          <ActionRow
-            label="● Record audio"
-            hint="Capture microphone audio for this session"
-            onPress={() => router.push(`/recording?id=${session.id}`)}
-          />
-        ) : null}
+              <Button
+                label={proceeding ? 'Uploading…' : 'Upload & process'}
+                onPress={() => {
+                  if (!localUri || !id) return;
+                  void runUploadAndProcess(String(id), localUri);
+                }}
+                loading={proceeding}
+                disabled={proceeding}
+              />
+              <Button
+                label="Re-record"
+                variant="secondary"
+                onPress={onReRecord}
+                disabled={proceeding}
+              />
+              {canImport ? (
+                <Pressable
+                  onPress={() => void onImportAudio()}
+                  disabled={importing || proceeding}
+                  accessibilityRole="button"
+                  accessibilityLabel="Import a different file"
+                  style={styles.linkBtn}
+                >
+                  <Text style={[styles.linkText, { color: colors.accent }]}>
+                    {importing ? 'Importing…' : 'Or import a different file'}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
 
-        <ActionRow
-          label="⚙️ Processing"
-          hint={
-            !session.audioPath
-              ? 'Available after you proceed with a recording'
-              : session.status === 'completed'
-                ? 'Pipeline finished — view progress'
-                : session.status === 'transcribing' || session.status === 'summarizing'
-                  ? 'Pipeline in progress'
-                  : session.status === 'failed'
-                    ? 'Processing failed — tap to retry'
-                    : 'Transcribe and summarize in one flow'
-          }
-          disabled={!session.audioPath}
-          onPress={
-            session.audioPath
-              ? () => router.push(`/session/${session.id}/processing`)
-              : undefined
-          }
-        />
+          {!hasLocalDraft && session.audioPath && uploadStatus === 'error' ? (
+            <UploadProgress
+              progress={uploadProgress}
+              status={uploadStatus}
+              message={uploadMessage}
+            />
+          ) : null}
 
-        {showWorkspace ? (
-          <SessionWorkspace
-            sessionId={session.id}
-            sessionTitle={session.title}
-            hasTranscript={hasTranscript}
-            hasSummary={hasSummary}
-            initialTab={hasSummary ? 'summary' : 'transcript'}
-            currentTimeSec={playbackTimeSec}
-            onContentLoaded={onWorkspaceContent}
-            onSeekMs={(startMs) => {
-              seekIdRef.current += 1;
-              setSeekRequest({ id: seekIdRef.current, sec: startMs / 1000 });
-              setShowPlayer(true);
-            }}
-          />
-        ) : null}
-      </View>
+          {!hasLocalDraft && hasPlayback && showPlayer && playbackUri ? (
+            <AudioPlayer
+              uri={playbackUri}
+              title={session.title}
+              variant="dock"
+              onProgress={setPlaybackTimeSec}
+              seekRequest={seekRequest}
+            />
+          ) : null}
 
-      <Pressable onPress={() => router.back()} style={styles.back} accessibilityRole="button" accessibilityLabel="Back to sessions">
-        <Text style={styles.backText}>Back to sessions</Text>
-      </Pressable>
-    </ScrollView>
-  );
-}
+          {!hasLocalDraft && hasPlayback && !showPlayer ? (
+            <Button label="Play recording" onPress={() => setShowPlayer(true)} variant="secondary" />
+          ) : null}
 
-function ActionRow({
-  label,
-  hint,
-  disabled,
-  onPress,
-}: {
-  label: string;
-  hint?: string;
-  disabled?: boolean;
-  onPress?: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={[styles.action, disabled && styles.actionDisabled]}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled: Boolean(disabled) }}
-    >
-      <Text style={styles.actionLabel}>{label}</Text>
-      {hint ? <Text style={styles.actionHint}>{hint}</Text> : null}
-    </Pressable>
+          {!hasLocalDraft && !hasPlayback && !canRecord ? (
+            <Text style={[styles.hint, { color: colors.inkMuted }]}>No recording available yet.</Text>
+          ) : null}
+
+          {canRecord ? (
+            <View style={styles.captureRow}>
+              <View style={styles.captureHalf}>
+                <Button
+                  label="Record"
+                  onPress={() => router.push(`/recording?id=${session.id}`)}
+                />
+              </View>
+              {canImport ? (
+                <View style={styles.captureHalf}>
+                  <Button
+                    label={importing ? 'Importing…' : 'Import'}
+                    variant="secondary"
+                    onPress={() => void onImportAudio()}
+                    disabled={importing}
+                    loading={importing}
+                  />
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          {!hasLocalDraft && !canRecord && canImport ? (
+            <Button
+              label={importing ? 'Importing…' : 'Import audio or video'}
+              variant="secondary"
+              onPress={() => void onImportAudio()}
+              disabled={importing}
+              loading={importing}
+            />
+          ) : null}
+
+          {session.audioPath ? (
+            <View style={styles.pipelineBlock}>
+              <Pressable
+                onPress={() => router.push(`/session/${session.id}/processing`)}
+                style={[
+                  styles.pipelineCard,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="View processing"
+              >
+                <View style={[styles.pipelineMark, { backgroundColor: colors.actionSettings }]}>
+                  <Icon name="sine-wave" size={24} />
+                </View>
+                <View style={styles.pipelineBody}>
+                  <Text style={[styles.pipelineTitle, { color: colors.ink }]}>Processing</Text>
+                  <Text style={[styles.pipelineHint, { color: colors.inkMuted }]}>
+                    {completed
+                      ? 'Finished — view pipeline'
+                      : session.status === 'transcribing' || session.status === 'summarizing'
+                        ? 'In progress'
+                        : failed
+                          ? 'Failed — tap to retry'
+                          : 'Transcribe and summarize'}
+                  </Text>
+                </View>
+                <Icon name="chevron-right" size={16} color={colors.inkMuted} />
+              </Pressable>
+              {failed ? (
+                <Button
+                  label={deleting ? 'Deleting…' : 'Delete recording'}
+                  variant="danger"
+                  onPress={onDelete}
+                  disabled={deleting}
+                  loading={deleting}
+                />
+              ) : null}
+            </View>
+          ) : null}
+
+          {showWorkspace ? (
+            <SessionWorkspace
+              sessionId={session.id}
+              sessionTitle={session.title}
+              hasTranscript={hasTranscript}
+              hasSummary={hasSummary}
+              initialTab={hasSummary ? 'summary' : 'transcript'}
+              currentTimeSec={playbackTimeSec}
+              onContentLoaded={onWorkspaceContent}
+              onSeekMs={(startMs) => {
+                seekIdRef.current += 1;
+                setSeekRequest({ id: seekIdRef.current, sec: startMs / 1000 });
+                setShowPlayer(true);
+              }}
+            />
+          ) : null}
+        </View>
+      </ScrollView>
+
+      <FolderPicker
+        visible={folderPickerOpen}
+        folders={folders}
+        selectedId={currentFolder ? currentFolder.id : null}
+        onSelect={onMoveToFolder}
+        onClose={() => setFolderPickerOpen(false)}
+        allowCreate
+        onFoldersChange={setFolders}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   centered: {
     flex: 1,
-    backgroundColor: colors.background,
     padding: spacing.lg,
     justifyContent: 'center',
   },
   container: {
     padding: spacing.lg,
+    gap: spacing.lg,
+    paddingBottom: FLOATING_TAB_BAR_CONTENT_INSET,
+  },
+  hero: {
     gap: spacing.sm,
-    backgroundColor: colors.background,
+  },
+  statusPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.smd,
+    paddingVertical: spacing.xs,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusText: {
+    ...typography.caption,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   title: {
-    ...typography.title,
-    fontSize: 28,
-    color: colors.ink,
-    marginBottom: spacing.xs,
+    ...typography.pageTitle,
   },
-  meta: {
-    ...typography.body,
-    color: colors.inkMuted,
+  metaLine: {
+    ...typography.meta,
   },
-  status: {
-    ...typography.body,
-    fontWeight: '600',
-    marginTop: spacing.sm,
-  },
-  statusOk: { color: colors.success },
-  statusPending: { color: colors.accent },
-  statusFailed: { color: colors.danger },
   description: {
     ...typography.body,
-    color: colors.ink,
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
   },
-  manageRow: {
+  toolbar: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: spacing.sm,
-    marginTop: spacing.md,
   },
-  manageButton: {
+  toolBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  folderChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+    borderRadius: radii.pill,
+    borderWidth: 1,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
   },
-  manageButtonText: {
+  folderChipText: {
     ...typography.caption,
-    color: colors.ink,
     fontWeight: '700',
+    flex: 1,
   },
-  favoriteOn: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSoft,
-  },
-  favoriteOnText: {
-    color: colors.brand,
-  },
-  dangerButton: {
-    borderColor: colors.danger,
-    backgroundColor: '#F8D5DA',
-  },
-  dangerButtonText: {
-    color: colors.danger,
-  },
-  actions: {
-    marginTop: spacing.xl,
+  body: {
     gap: spacing.md,
   },
-  reviewBox: {
+  reviewCard: {
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    padding: spacing.md,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
     gap: spacing.md,
   },
   reviewTitle: {
-    ...typography.body,
-    fontWeight: '700',
-    color: colors.ink,
+    ...typography.section,
   },
   reviewHint: {
+    ...typography.meta,
+  },
+  linkBtn: {
+    alignSelf: 'center',
+    paddingVertical: spacing.sm,
+  },
+  linkText: {
     ...typography.caption,
-    color: colors.inkMuted,
-  },
-  primaryButton: {
-    backgroundColor: colors.brand,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: colors.onBrand,
     fontWeight: '700',
-    fontSize: 16,
   },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+  captureRow: {
+    flexDirection: 'row',
+    gap: spacing.smd,
+  },
+  captureHalf: {
+    flex: 1,
+  },
+  hint: {
+    ...typography.meta,
+  },
+  pipelineBlock: {
+    gap: spacing.sm,
+  },
+  pipelineCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  secondaryButtonText: {
-    color: colors.ink,
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  buttonDisabled: {
-    opacity: 0.55,
-  },
-  action: {
+    gap: spacing.smd,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     padding: spacing.md,
-    gap: 4,
   },
-  actionDisabled: {
-    opacity: 0.65,
+  pipelineMark: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  actionLabel: {
+  pipelineBody: {
+    flex: 1,
+    gap: 2,
+  },
+  pipelineTitle: {
     ...typography.body,
     fontWeight: '600',
-    color: colors.ink,
   },
-  actionHint: {
+  pipelineHint: {
     ...typography.caption,
-    color: colors.inkMuted,
-  },
-  back: {
-    marginTop: spacing.xl,
-    alignSelf: 'flex-start',
-  },
-  backText: {
-    color: colors.brandSoft,
-    fontWeight: '600',
   },
 });
