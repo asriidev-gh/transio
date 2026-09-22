@@ -131,4 +131,27 @@ describe('POST /sessions/:id/translate', () => {
     assert.equal(res.status, 400);
     assert.equal(res.body.success, false);
   });
+
+  it('translates a live caption chunk', async () => {
+    const sessions = new InMemorySessionRepository();
+    const session = await sessions.create(USER_A, {
+      title: 'Live',
+      sessionType: 'seminar',
+    });
+
+    const app = createApp({
+      authenticate: testAuthenticate,
+      createSessionRepository: () => sessions,
+      createSummaryRepository: () => new InMemorySummaryRepository(),
+      createTranslateProvider: () => new FakeTranslateProvider(),
+    });
+
+    const res = await request(app).post(
+      `/sessions/${session.id}/translate-live`,
+      { text: '你好', language: 'en', sourceLanguage: 'zh' },
+      { Authorization: 'Bearer token-a' },
+    );
+    assert.equal(res.status, 200);
+    assert.equal((res.body.data as { text: string }).text, '[en] 你好');
+  });
 });

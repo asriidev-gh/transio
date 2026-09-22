@@ -11,10 +11,12 @@ import {
   getSummary,
   startSummarization,
 } from '@/src/services/summary';
-import { colors, spacing, typography } from '@/src/theme';
+import { spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
 
 export default function SummaryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { colors } = useTheme();
   const [summary, setSummary] = useState<SummaryRecord | null>(null);
   const [status, setStatus] = useState<SessionStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -139,7 +141,7 @@ export default function SummaryScreen() {
 
   if (loading || starting || status?.status === 'summarizing') {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <LoadingState
           message={
             status?.status === 'summarizing' || starting
@@ -147,14 +149,16 @@ export default function SummaryScreen() {
               : 'Loading summary…'
           }
         />
-        <Text style={styles.hint}>Claude is structuring notes from your transcript.</Text>
+        <Text style={[styles.hint, { color: colors.inkMuted }]}>
+          Claude is structuring notes from your transcript.
+        </Text>
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <ErrorState
           title="Summary unavailable"
           description={error}
@@ -167,15 +171,18 @@ export default function SummaryScreen() {
 
   if (summary) {
     return (
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>AI Summary</Text>
+      <ScrollView
+        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+        style={{ backgroundColor: colors.background }}
+      >
+        <Text style={[styles.title, { color: colors.ink }]}>AI Summary</Text>
         <SummarySections summary={summary} />
       </ScrollView>
     );
   }
 
   return (
-    <View style={styles.centered}>
+    <View style={[styles.centered, { backgroundColor: colors.background }]}>
       <ErrorState
         title="No summary yet"
         description="Generate a structured AI summary from the transcript."
@@ -188,24 +195,20 @@ export default function SummaryScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.background,
     padding: spacing.lg,
     gap: spacing.md,
   },
   centered: {
     flex: 1,
-    backgroundColor: colors.background,
     padding: spacing.lg,
     justifyContent: 'center',
     gap: spacing.md,
   },
   title: {
     ...typography.title,
-    color: colors.ink,
   },
   hint: {
     ...typography.caption,
-    color: colors.inkMuted,
     textAlign: 'center',
   },
 });

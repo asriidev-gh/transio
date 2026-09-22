@@ -6,6 +6,13 @@ export interface SummaryInput {
   title?: string;
 }
 
+export interface LiveNotesMergeInput {
+  text: string;
+  previousNotes?: Partial<SessionSummary>;
+  sessionType: SessionType;
+  title?: string;
+}
+
 /**
  * Replaceable structured-summary provider.
  * Concrete implementations live under apps/api/src/providers/summary.
@@ -13,4 +20,5 @@ export interface SummaryInput {
 export interface SummaryProvider {
   readonly name: string;
   summarize(input: SummaryInput): Promise<SessionSummary>;
+  mergeLiveNotes(input: LiveNotesMergeInput): Promise<SessionSummary>;
 }

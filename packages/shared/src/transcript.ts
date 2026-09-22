@@ -57,3 +57,12 @@ export const RemapSpeakersSchema = z.object({
 });
 
 export type RemapSpeakersInput = z.infer<typeof RemapSpeakersSchema>;
+
+/** Client-supplied live / edited transcript upsert. */
+export const UpsertTranscriptBodySchema = z.object({
+  text: z.string().trim().min(1).max(500_000),
+  language: z.string().trim().min(2).max(32).nullable().optional(),
+  segments: z.array(TranscriptSegmentSchema).max(20_000).optional(),
+});
+
+export type UpsertTranscriptBody = z.infer<typeof UpsertTranscriptBodySchema>;

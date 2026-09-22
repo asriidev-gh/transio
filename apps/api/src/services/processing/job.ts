@@ -1,3 +1,4 @@
+import { isNotesOnlyCaptureMode } from '@sessionai/shared';
 import { logger } from '../../lib/logger.js';
 import { AppError } from '../../middleware/error-handler.js';
 import { labelSegmentsBestEffort } from '../../providers/speakers/index.js';
@@ -19,6 +20,7 @@ export interface ProcessingPipelineDeps {
 
 /**
  * End-to-end pipeline: transcribe (if needed) → summarize → completed.
+ * Notes-only capture modes transcribe ephemerally and never persist a transcript.
  * Failures set status to `failed` without deleting audio/transcript.
  */
 export async function runProcessingPipeline(
@@ -34,9 +36,17 @@ export async function runProcessingPipeline(
       throw new AppError('VALIDATION_ERROR', 'Session has no uploaded audio', 400);
     }
 
-    let transcript = await deps.transcripts.getBySessionId(sessionId);
+    const notesOnly = isNotesOnlyCaptureMode(session.captureMode);
+    let transcriptText = '';
 
-    if (!transcript?.text?.trim()) {
+    if (!notesOnly) {
+      const existing = await deps.transcripts.getBySessionId(sessionId);
+      if (existing?.text?.trim()) {
+        transcriptText = existing.text;
+      }
+    }
+
+    if (!transcriptText.trim()) {
       await deps.sessions.update(deps.userId, sessionId, { status: 'transcribing' });
 
       const audio = await deps.downloadAudio(session.audioPath);
@@ -47,26 +57,35 @@ export async function runProcessingPipeline(
         fileName,
       });
 
-      const segments = await labelSegmentsBestEffort({
-        title: session.title,
-        sessionType: session.sessionType,
-        segments: result.segments ?? [],
-      });
+      transcriptText = result.text;
 
-      transcript = await deps.transcripts.upsertForSession(
-        sessionId,
-        result.text,
-        result.language ?? null,
-        segments,
-      );
-      await deps.sessions.update(deps.userId, sessionId, { status: 'transcribed' });
+      if (!notesOnly) {
+        const segments = await labelSegmentsBestEffort({
+          title: session.title,
+          sessionType: session.sessionType,
+          segments: result.segments ?? [],
+        });
+
+        await deps.transcripts.upsertForSession(
+          sessionId,
+          result.text,
+          result.language ?? null,
+          segments,
+        );
+        await deps.sessions.update(deps.userId, sessionId, { status: 'transcribed' });
+      }
 
       logger.info('Pipeline transcription completed', {
         sessionId,
         provider: deps.transcriptionProvider.name,
         textLength: result.text.length,
-        segmentCount: segments.length,
+        notesOnly,
+        persisted: !notesOnly,
       });
+    }
+
+    if (!transcriptText.trim()) {
+      throw new AppError('VALIDATION_ERROR', 'Transcription produced empty text', 400);
     }
 
     await deps.sessions.update(deps.userId, sessionId, { status: 'summarizing' });
@@ -77,7 +96,7 @@ export async function runProcessingPipeline(
     }
 
     const summary = await deps.summaryProvider.summarize({
-      transcriptText: transcript.text,
+      transcriptText,
       sessionType: refreshed.sessionType,
       title: refreshed.title,
     });
@@ -90,6 +109,7 @@ export async function runProcessingPipeline(
       transcriptionProvider: deps.transcriptionProvider.name,
       summaryProvider: deps.summaryProvider.name,
       keyPointCount: summary.keyPoints.length,
+      notesOnly,
     });
   } catch (err) {
     logger.error('Processing pipeline failed', {

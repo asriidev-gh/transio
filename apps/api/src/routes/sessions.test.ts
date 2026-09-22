@@ -196,5 +196,6 @@ describe('mapSessionRow', () => {
     assert.equal(mapped.userId, USER_B);
     assert.equal(mapped.sessionType, 'seminar');
     assert.equal(mapped.durationSeconds, 12);
+    assert.equal(mapped.captureMode, 'batch');
   });
 });

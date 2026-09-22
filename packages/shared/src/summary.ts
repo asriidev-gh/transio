@@ -55,3 +55,20 @@ export const SummarizeAcceptedSchema = z.object({
 });
 
 export type SummarizeAccepted = z.infer<typeof SummarizeAcceptedSchema>;
+
+/** Incremental live note-taker merge (during recording). */
+export const LiveNotesChunkRequestSchema = z.object({
+  text: z.string().trim().min(1).max(4_000),
+  previousNotes: SessionSummarySchema.partial().optional(),
+});
+
+export type LiveNotesChunkRequest = z.infer<typeof LiveNotesChunkRequestSchema>;
+
+export const LiveNotesChunkResultSchema = SessionSummarySchema;
+
+export type LiveNotesChunkResult = z.infer<typeof LiveNotesChunkResultSchema>;
+
+/** Persist final notes for notes-only sessions (no transcript). */
+export const FinalizeNotesRequestSchema = SessionSummarySchema;
+
+export type FinalizeNotesRequest = z.infer<typeof FinalizeNotesRequestSchema>;

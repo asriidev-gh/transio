@@ -74,4 +74,22 @@ export const TranslateResultSchema = z.object({
 
 export type TranslateResult = z.infer<typeof TranslateResultSchema>;
 
+/** Short live-caption chunk translation (during recording). */
+export const LiveTranslateChunkRequestSchema = z.object({
+  text: z.string().trim().min(1).max(4_000),
+  language: TranslateLanguageSchema,
+  /** Optional BCP-47 / Deepgram source hint for better translation. */
+  sourceLanguage: z.string().trim().min(2).max(16).optional(),
+});
+
+export type LiveTranslateChunkRequest = z.infer<typeof LiveTranslateChunkRequestSchema>;
+
+export const LiveTranslateChunkResultSchema = z.object({
+  language: TranslateLanguageSchema,
+  languageLabel: z.string(),
+  text: z.string().min(1),
+});
+
+export type LiveTranslateChunkResult = z.infer<typeof LiveTranslateChunkResultSchema>;
+
 export type { SessionSummary, TranscriptSegment };

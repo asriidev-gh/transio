@@ -2,29 +2,40 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { radii, spacing } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 
-export type SessionTabKey = 'summary' | 'transcript' | 'ask' | 'actions';
+export type SessionTabKey = 'summary' | 'transcript' | 'ask' | 'actions' | 'map';
 
-const TABS: Array<{ key: SessionTabKey; label: string }> = [
+const ALL_TABS: Array<{ key: SessionTabKey; label: string }> = [
   { key: 'summary', label: 'Summary' },
   { key: 'transcript', label: 'Transcript' },
   { key: 'ask', label: 'Ask' },
   { key: 'actions', label: 'Actions' },
+  { key: 'map', label: 'Map' },
+];
+
+/** Notes-only sessions have no transcript, so hide Ask / Transcript. */
+const NOTES_ONLY_TABS: Array<{ key: SessionTabKey; label: string }> = [
+  { key: 'summary', label: 'Notes' },
+  { key: 'actions', label: 'Actions' },
+  { key: 'map', label: 'Map' },
 ];
 
 interface SessionTabsProps {
   value: SessionTabKey;
   onChange: (key: SessionTabKey) => void;
+  notesOnly?: boolean;
 }
 
-export function SessionTabs({ value, onChange }: SessionTabsProps) {
+export function SessionTabs({ value, onChange, notesOnly = false }: SessionTabsProps) {
   const { colors } = useTheme();
+  const tabs = notesOnly ? NOTES_ONLY_TABS : ALL_TABS;
+
   return (
     <View
       style={[styles.wrap, { backgroundColor: colors.backgroundAlt }]}
       accessibilityRole="tablist"
       accessibilityLabel="Session views"
     >
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const selected = tab.key === value;
         return (
           <Pressable

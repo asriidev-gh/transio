@@ -37,6 +37,9 @@ describe('runSummaryJob', () => {
             quotes: [],
           };
         },
+        async mergeLiveNotes() {
+          throw new Error('not used');
+        },
       },
     });
 
@@ -66,6 +69,9 @@ describe('runSummaryJob', () => {
         name: 'unit',
         async summarize() {
           throw new AppError('SUMMARY_ERROR', 'should not run', 502);
+        },
+        async mergeLiveNotes() {
+          throw new Error('not used');
         },
       },
     });

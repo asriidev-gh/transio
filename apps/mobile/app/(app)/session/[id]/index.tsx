@@ -11,6 +11,7 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-rou
 import {
   SESSION_STATUS_LABELS,
   SESSION_TYPE_LABELS,
+  isNotesOnlyCaptureMode,
   type Session,
   type SessionFolder,
 } from '@sessionai/shared';
@@ -32,6 +33,7 @@ import {
   saveLocalAudioUri,
 } from '@/src/services/local-audio';
 import { pickAudioFile } from '@/src/services/pick-audio';
+import { getRecordCaptionsModePref } from '@/src/services/record-mode';
 import { listFolders } from '@/src/services/folders';
 import { deleteSession, getSession, updateSession } from '@/src/services/sessions';
 import { radii, spacing, typography } from '@/src/theme';
@@ -139,7 +141,8 @@ export default function SessionDetailsScreen() {
       setShowPlayer(false);
       setUploadStatus('idle');
       setUploadMessage(undefined);
-      router.push(`/recording?id=${id}`);
+      const captions = await getRecordCaptionsModePref();
+      router.push(`/recording?id=${id}&captions=${captions}`);
     })();
   }, [id, router]);
 
@@ -364,15 +367,17 @@ export default function SessionDetailsScreen() {
   const canImport = !session.audioPath;
   const hasLocalDraft = Boolean(localUri) && !session.audioPath;
   const hasPlayback = Boolean(playbackUri);
+  const notesOnly = isNotesOnlyCaptureMode(session.captureMode);
   const showWorkspace =
     session.status === 'completed' ||
     session.status === 'transcribed' ||
     session.status === 'summarizing' ||
     session.status === 'transcribing';
   const hasTranscript =
-    session.status === 'transcribed' ||
-    session.status === 'summarizing' ||
-    session.status === 'completed';
+    !notesOnly &&
+    (session.status === 'transcribed' ||
+      session.status === 'summarizing' ||
+      session.status === 'completed');
   const hasSummary = session.status === 'completed';
   const currentFolder = folders.find((folder) => folder.id === session.folderId) ?? null;
   const statusColor = completed ? colors.success : failed ? colors.danger : colors.accent;
@@ -594,7 +599,11 @@ export default function SessionDetailsScreen() {
               <View style={styles.captureHalf}>
                 <Button
                   label="Record"
-                  onPress={() => router.push(`/recording?id=${session.id}`)}
+                  onPress={() => {
+                    void getRecordCaptionsModePref().then((captions) => {
+                      router.push(`/recording?id=${session.id}&captions=${captions}`);
+                    });
+                  }}
                 />
               </View>
               {canImport ? (
@@ -667,7 +676,8 @@ export default function SessionDetailsScreen() {
               sessionTitle={session.title}
               hasTranscript={hasTranscript}
               hasSummary={hasSummary}
-              initialTab={hasSummary ? 'summary' : 'transcript'}
+              notesOnly={notesOnly}
+              initialTab={hasSummary || notesOnly ? 'summary' : 'transcript'}
               currentTimeSec={playbackTimeSec}
               onContentLoaded={onWorkspaceContent}
               onSeekMs={(startMs) => {

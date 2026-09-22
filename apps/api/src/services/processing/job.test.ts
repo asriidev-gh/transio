@@ -45,6 +45,9 @@ describe('runProcessingPipeline', () => {
             quotes: [],
           };
         },
+        async mergeLiveNotes() {
+          throw new Error('not used');
+        },
       },
       downloadAudio: async () => ({ data: Buffer.from('abc'), mimeType: 'audio/mp4' }),
     });
@@ -95,6 +98,9 @@ describe('runProcessingPipeline', () => {
             importantInsights: [],
           };
         },
+        async mergeLiveNotes() {
+          throw new Error('not used');
+        },
       },
       downloadAudio: async () => {
         throw new AppError('STORAGE_ERROR', 'should not download', 500);
@@ -136,6 +142,9 @@ describe('runProcessingPipeline', () => {
         async summarize() {
           throw new AppError('SUMMARY_ERROR', 'should not run', 502);
         },
+        async mergeLiveNotes() {
+          throw new Error('not used');
+        },
       },
       downloadAudio: async () => ({ data: Buffer.from('x'), mimeType: 'audio/mp4' }),
     });
@@ -143,5 +152,56 @@ describe('runProcessingPipeline', () => {
     assert.equal((await sessions.getById(userId, session.id))?.status, 'failed');
     assert.equal(await transcripts.getBySessionId(session.id), null);
     assert.equal(await summaries.getBySessionId(session.id), null);
+  });
+
+  it('notes-only mode summarizes without persisting a transcript', async () => {
+    const userId = '11111111-1111-1111-1111-111111111111';
+    const sessions = new InMemorySessionRepository();
+    const transcripts = new InMemoryTranscriptRepository();
+    const summaries = new InMemorySummaryRepository();
+    const session = await sessions.create(userId, {
+      title: 'Auto notes',
+      sessionType: 'meeting',
+      captureMode: 'notes',
+    });
+    await sessions.update(userId, session.id, {
+      audioPath: `${userId}/${session.id}/audio.m4a`,
+      status: 'uploaded',
+    });
+
+    await runProcessingPipeline(session.id, {
+      userId,
+      sessions,
+      transcripts,
+      summaries,
+      transcriptionProvider: {
+        name: 'unit-stt',
+        async transcribe() {
+          return { text: 'Ephemeral speech for notes', language: 'en' };
+        },
+      },
+      summaryProvider: {
+        name: 'unit-summary',
+        async summarize() {
+          return {
+            overview: 'Notes overview',
+            keyPoints: ['N1'],
+            topics: [],
+            questionsDiscussed: [],
+            actionItems: [],
+            importantInsights: [],
+            quotes: [],
+          };
+        },
+        async mergeLiveNotes() {
+          throw new Error('not used');
+        },
+      },
+      downloadAudio: async () => ({ data: Buffer.from('abc'), mimeType: 'audio/mp4' }),
+    });
+
+    assert.equal(await transcripts.getBySessionId(session.id), null);
+    assert.equal((await summaries.getBySessionId(session.id))?.overview, 'Notes overview');
+    assert.equal((await sessions.getById(userId, session.id))?.status, 'completed');
   });
 });

@@ -1,5 +1,7 @@
 import {
   apiSuccess,
+  LiveTranslateChunkRequestSchema,
+  LiveTranslateChunkResultSchema,
   SessionIdParamSchema,
   TRANSLATE_LANGUAGE_LABELS,
   TranslateRequestSchema,
@@ -26,6 +28,35 @@ import type { SummaryRepoFactory } from './summary.js';
 import type { TranscriptRepoFactory } from './transcription.js';
 
 export type TranslateProviderFactory = () => TranslateProvider;
+
+/** Map live-caption / BCP-47 codes to a short Claude source hint. */
+function sourceLanguageLabel(code: string | undefined): string | undefined {
+  if (!code) return undefined;
+  switch (code.trim().toLowerCase()) {
+    case 'multi':
+      return 'auto-detected (multilingual)';
+    case 'tl':
+    case 'fil':
+      return 'Tagalog / Filipino';
+    case 'en':
+      return 'English';
+    case 'zh':
+    case 'zh-cn':
+    case 'zh-hans':
+      return 'Chinese';
+    case 'zh-hant':
+    case 'zh-tw':
+      return 'Traditional Chinese';
+    case 'es':
+      return 'Spanish';
+    case 'ja':
+      return 'Japanese';
+    case 'ko':
+      return 'Korean';
+    default:
+      return code.trim();
+  }
+}
 
 function defaultTranscriptRepoFactory(req: Request): TranscriptRepository {
   if (!req.accessToken) {
@@ -142,6 +173,44 @@ export function registerTranslateRoutes(
         transcript: translated,
       });
       res.status(200).json(apiSuccess(payload));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** Translate a short live-caption chunk during recording. */
+  router.post('/:id/translate-live', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+      }
+
+      const { id } = SessionIdParamSchema.parse(req.params);
+      const body = LiveTranslateChunkRequestSchema.parse(req.body);
+      const languageLabel = TRANSLATE_LANGUAGE_LABELS[body.language];
+
+      const session = await options.createRepository(req).getById(req.user.id, id);
+      if (!session) {
+        throw new AppError('NOT_FOUND', 'Session not found', 404);
+      }
+
+      const provider = createProvider();
+      const text = await provider.translateChunk({
+        language: body.language,
+        languageLabel,
+        text: body.text,
+        sourceLanguageLabel: sourceLanguageLabel(body.sourceLanguage),
+      });
+
+      res.status(200).json(
+        apiSuccess(
+          LiveTranslateChunkResultSchema.parse({
+            language: body.language,
+            languageLabel,
+            text,
+          }),
+        ),
+      );
     } catch (err) {
       next(err);
     }

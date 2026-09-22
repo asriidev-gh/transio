@@ -52,6 +52,15 @@ describe('shared schemas', () => {
       sessionType: 'group_discussion',
     });
     assert.equal(parsed.title, 'GLC Session 3');
+    assert.equal(parsed.captureMode, 'batch');
+    assert.equal(
+      CreateSessionSchema.parse({
+        title: 'Notes',
+        sessionType: 'meeting',
+        captureMode: 'notes',
+      }).captureMode,
+      'notes',
+    );
     assert.throws(() => CreateSessionSchema.parse({ title: '', sessionType: 'seminar' }));
   });
 

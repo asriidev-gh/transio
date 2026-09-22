@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import type { SessionStatusResponse } from '@sessionai/shared';
+import type { CaptureMode, SessionStatusResponse } from '@sessionai/shared';
+import { isNotesOnlyCaptureMode } from '@sessionai/shared';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { ProcessingSteps } from '@/src/components/ProcessingSteps';
@@ -27,6 +28,7 @@ export default function ProcessingScreen() {
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string>('Session');
+  const [captureMode, setCaptureMode] = useState<CaptureMode>('batch');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedRef = useRef(false);
   const notifiedRef = useRef(false);
@@ -125,6 +127,7 @@ export default function ProcessingScreen() {
       try {
         const session = await getSession(id);
         setSessionTitle(session.title);
+        setCaptureMode(session.captureMode);
       } catch {
         // Title is optional for notifications.
       }
@@ -273,6 +276,7 @@ export default function ProcessingScreen() {
           hasAudio={status.hasAudio}
           hasTranscript={status.hasTranscript}
           hasSummary={status.hasSummary}
+          notesOnly={isNotesOnlyCaptureMode(captureMode)}
         />
       </View>
 

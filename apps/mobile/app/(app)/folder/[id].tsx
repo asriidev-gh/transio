@@ -16,7 +16,6 @@ import { LoadingState } from '@/src/components/LoadingState';
 import { SessionCard } from '@/src/components/SessionCard';
 import { Button } from '@/src/components/ui/Button';
 import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
-import { BrandLogo } from '@/src/components/BrandLogo';
 import { Icon } from '@/src/components/ui/Icon';
 import { SectionHeader } from '@/src/components/ui/SectionHeader';
 import { ApiClientError } from '@/src/services/api';
@@ -50,7 +49,6 @@ function FolderHeaderLeft({ onBack }: { onBack: () => void }) {
           <Icon name="chevron-right" size={18} color={colors.ink} />
         </View>
       </Pressable>
-      <BrandLogo variant="app" size={56} />
     </View>
   );
 }

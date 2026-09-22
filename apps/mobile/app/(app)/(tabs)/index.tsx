@@ -15,14 +15,12 @@ import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Session, SessionFolder } from '@sessionai/shared';
 import { AccountMenu } from '@/src/components/AccountMenu';
-import { BrandLogo } from '@/src/components/BrandLogo';
 import { ThemeToggle } from '@/src/components/ThemeToggle';
 import { CompletionBanner } from '@/src/components/CompletionBanner';
 import { ConnectivityBanner } from '@/src/components/ConnectivityBanner';
 import { EmptyState } from '@/src/components/EmptyState';
 import { ErrorState } from '@/src/components/ErrorState';
 import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
-import { FolderPicker } from '@/src/components/FolderPicker';
 import { HorizontalCarousel } from '@/src/components/HorizontalCarousel';
 import {
   HomeActionCard,
@@ -37,6 +35,7 @@ import { LoadingState } from '@/src/components/LoadingState';
 import { SectionHeader } from '@/src/components/ui/SectionHeader';
 import { Icon } from '@/src/components/ui/Icon';
 import { useApiReachable } from '@/src/hooks/useApiReachable';
+import { useAuth } from '@/src/hooks/useAuth';
 import { ApiClientError } from '@/src/services/api';
 import {
   dismissCompletionNotice,
@@ -72,10 +71,14 @@ const NOT_TRANSCRIBED_YET = new Set([
 
 type CaptureMode = 'record' | 'import';
 
-function hrefForCapture(mode: CaptureMode, folderId: string): string {
-  return mode === 'record'
-    ? `/new-session?mode=record&folderId=${folderId}`
-    : `/new-session?mode=import&folderId=${folderId}`;
+function greetingForHour(hour: number): string {
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function hrefForCapture(mode: CaptureMode): string {
+  return mode === 'record' ? '/new-session?mode=record' : '/new-session?mode=import';
 }
 
 function isInFlight(session: Session): boolean {
@@ -96,12 +99,15 @@ export default function HomeScreen() {
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const { colors, shadows } = useTheme();
+  const { user } = useAuth();
   const { reachable, refresh: refreshReachable } = useApiReachable();
 
   const pagePad = windowWidth < 480 ? spacing.md : spacing.lg;
   const usableWidth = Math.max(280, windowWidth - pagePad * 2);
   const carouselCardWidth = Math.min(200, Math.max(150, Math.floor((usableWidth - spacing.smd) / 2)));
   const folderCardWidth = carouselCardWidth;
+  const firstName = user?.email?.split('@')[0];
+  const greeting = `${greetingForHour(new Date().getHours())}${firstName ? `, ${firstName}` : ''}`;
   const [sessions, setSessions] = useState<Session[]>([]);
   const [folders, setFolders] = useState<SessionFolder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,8 +117,6 @@ export default function HomeScreen() {
   const [composingFolder, setComposingFolder] = useState(false);
   const [folderName, setFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
-  const [captureMode, setCaptureMode] = useState<CaptureMode | null>(null);
-  const [captureFolderId, setCaptureFolderId] = useState<string | null>(null);
   const [insightBrowse, setInsightBrowse] = useState<'calendar' | 'captured' | 'processing' | null>(
     null,
   );
@@ -312,8 +316,7 @@ export default function HomeScreen() {
   }
 
   function openCapture(mode: CaptureMode) {
-    setCaptureFolderId(null);
-    setCaptureMode(mode);
+    router.push(hrefForCapture(mode) as Href);
   }
 
   return (
@@ -357,20 +360,26 @@ export default function HomeScreen() {
 
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
-            <BrandLogo variant="app" size={windowWidth < 400 ? 52 : 60} />
+            <View style={styles.greetingBlock}>
+              <Text
+                style={[styles.greeting, { color: colors.ink }]}
+                numberOfLines={1}
+                accessibilityRole="header"
+              >
+                {greeting}
+              </Text>
+              <Text
+                style={[styles.pageTitle, { color: colors.inkMuted }]}
+                numberOfLines={2}
+              >
+                Ready to capture your thoughts?
+              </Text>
+            </View>
             <View style={styles.headerActions}>
               <ThemeToggle />
               <AccountMenu />
             </View>
           </View>
-          <Text
-            style={[styles.pageTitle, { color: colors.ink }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.75}
-          >
-            Ready to capture your thoughts?
-          </Text>
         </View>
 
         {loading ? <LoadingState message="Loading your insights…" /> : null}
@@ -592,24 +601,6 @@ export default function HomeScreen() {
         ) : null}
       </ScrollView>
 
-      <FolderPicker
-        visible={captureMode !== null}
-        folders={folders}
-        selectedId={captureFolderId}
-        onSelect={setCaptureFolderId}
-        onClose={() => setCaptureMode(null)}
-        title={captureMode === 'import' ? 'Save import to' : 'Save recording to'}
-        confirmLabel="Continue"
-        onConfirm={(folderId) => {
-          if (!folderId) return;
-          const mode = captureMode ?? 'record';
-          setCaptureMode(null);
-          router.push(hrefForCapture(mode, folderId) as Href);
-        }}
-        allowCreate
-        onFoldersChange={(next) => setFolders(dedupeFoldersByName(next))}
-      />
-
       <InsightsCalendarModal
         visible={insightBrowse === 'calendar'}
         sessions={sessions}
@@ -654,22 +645,33 @@ const styles = StyleSheet.create({
   },
   brandRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing.md,
     width: '100%',
+  },
+  greetingBlock: {
+    flex: 1,
+    minWidth: 0,
+    gap: spacing.xs,
+  },
+  greeting: {
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '700',
+    letterSpacing: -0.4,
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     flexShrink: 0,
+    paddingTop: 2,
   },
   pageTitle: {
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '600',
-    letterSpacing: -0.3,
+    ...typography.body,
+    fontSize: 15,
+    lineHeight: 21,
   },
   dashboard: {
     gap: spacing.md,

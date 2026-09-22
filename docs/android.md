@@ -4,7 +4,8 @@ You must run SessionAI on **your computer** (not the cloud agent VM). Your phone
 
 ## Option A — Expo Go (fastest)
 
-Best for day-to-day testing.
+Native live captions (`expo-audio-stream-pcm`) need a **development build or EAS build** —
+they do **not** run inside Expo Go. In Expo Go, choose **Record, then transcribe**.
 
 ### 1. On your phone
 
@@ -64,6 +65,10 @@ Allow microphone permission when Android asks.
 Use this when you want a real app icon on the home screen.
 
 ### EAS Build (recommended)
+
+Android “Bundle JavaScript” needs `@sessionai/shared` compiled (`packages/shared/dist`).
+That folder is gitignored, so the mobile app runs an `eas-build-post-install` hook to
+`npm run build --workspace=@sessionai/shared` before bundling.
 
 ```bash
 cd apps/mobile

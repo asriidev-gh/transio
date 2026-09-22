@@ -12,7 +12,9 @@ interface Flags {
 const STEPS: Array<{
   key: string;
   label: string;
+  notesLabel?: string;
   hint: string;
+  notesHint?: string;
   matches: (status: SessionStatus, flags: Flags) => 'done' | 'active' | 'pending' | 'failed';
 }> = [
   {
@@ -24,7 +26,9 @@ const STEPS: Array<{
   {
     key: 'transcribing',
     label: 'Detecting speech',
+    notesLabel: 'Understanding audio',
     hint: 'Listening for words and speakers',
+    notesHint: 'Listening to write notes',
     matches: (status, flags) => {
       if (flags.hasTranscript || status === 'transcribed' || status === 'summarizing' || status === 'completed') {
         return 'done';
@@ -37,7 +41,9 @@ const STEPS: Array<{
   {
     key: 'transcript',
     label: 'Converting audio to text',
+    notesLabel: 'Preparing notes',
     hint: 'Building a readable transcript',
+    notesHint: 'Speech is processed privately — not saved as a transcript',
     matches: (status, flags) => {
       if (flags.hasTranscript || status === 'transcribed' || status === 'summarizing' || status === 'completed') {
         return 'done';
@@ -48,7 +54,9 @@ const STEPS: Array<{
   {
     key: 'summarizing',
     label: 'Formatting insights',
+    notesLabel: 'Writing notes',
     hint: 'Summary and action items',
+    notesHint: 'Structured notes and action items',
     matches: (status, flags) => {
       if (flags.hasSummary || status === 'completed') return 'done';
       if (status === 'summarizing') return 'active';
@@ -72,6 +80,7 @@ interface ProcessingStepsProps {
   hasAudio: boolean;
   hasTranscript: boolean;
   hasSummary: boolean;
+  notesOnly?: boolean;
 }
 
 export function ProcessingSteps({
@@ -79,6 +88,7 @@ export function ProcessingSteps({
   hasAudio,
   hasTranscript,
   hasSummary,
+  notesOnly = false,
 }: ProcessingStepsProps) {
   const { colors } = useTheme();
   const flags = { hasAudio, hasTranscript, hasSummary };
@@ -87,6 +97,8 @@ export function ProcessingSteps({
     <View style={styles.wrap} accessibilityLabel="Processing pipeline stages">
       {STEPS.map((step, index) => {
         const state = step.matches(status, flags);
+        const label = notesOnly && step.notesLabel ? step.notesLabel : step.label;
+        const hint = notesOnly && step.notesHint ? step.notesHint : step.hint;
         return (
           <View key={step.key} style={styles.row}>
             <View style={styles.rail}>
@@ -119,10 +131,10 @@ export function ProcessingSteps({
                   state === 'pending' && { color: colors.inkMuted, fontWeight: '500' },
                 ]}
               >
-                {step.label}
+                {label}
               </Text>
               {state === 'active' ? (
-                <Text style={[styles.hint, { color: colors.inkMuted }]}>{step.hint}</Text>
+                <Text style={[styles.hint, { color: colors.inkMuted }]}>{hint}</Text>
               ) : null}
               {state === 'failed' ? (
                 <Text style={[styles.hint, { color: colors.danger }]}>Failed — you can retry</Text>

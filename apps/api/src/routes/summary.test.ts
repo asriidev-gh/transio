@@ -194,6 +194,9 @@ describe('summary API', () => {
         async summarize() {
           throw new AppError('SUMMARY_ERROR', 'provider down', 502);
         },
+        async mergeLiveNotes() {
+          throw new Error('not used');
+        },
       }),
       runSummaryJob: (sessionId, req) => {
         if (!req.user) return;
@@ -207,6 +210,9 @@ describe('summary API', () => {
               name: 'broken',
               async summarize() {
                 throw new AppError('SUMMARY_ERROR', 'provider down', 502);
+              },
+              async mergeLiveNotes() {
+                throw new Error('not used');
               },
             },
           }),

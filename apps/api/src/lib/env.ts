@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 /**
  * Server-only environment configuration.
- * Never expose SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, or TRANSCRIPTION_API_KEY to the client.
+ * Never expose SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, TRANSCRIPTION_API_KEY,
+ * or DEEPGRAM_API_KEY to the client.
  */
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -12,10 +13,12 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional().default(''),
   ANTHROPIC_API_KEY: z.string().optional().default(''),
   ANTHROPIC_MODEL: z.string().optional().default('claude-sonnet-4-5'),
-  /** Faster model for on-demand Translate (defaults to Haiku). */
+  /** Faster model for Translate + Live Note Taker merges (defaults to Haiku). */
   ANTHROPIC_TRANSLATE_MODEL: z.string().optional().default('claude-haiku-4-5'),
   TRANSCRIPTION_API_KEY: z.string().optional().default(''),
   TRANSCRIPTION_BASE_URL: z.string().default(''),
+  /** Live captions WebSocket proxy (Deepgram Listen). Server-only. */
+  DEEPGRAM_API_KEY: z.string().optional().default(''),
   LOG_SENSITIVE: z
     .enum(['true', 'false'])
     .default('false')

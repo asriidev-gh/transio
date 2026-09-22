@@ -4,7 +4,7 @@
     "slug": "sessionai",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/images/transio_logo.jpg",
+    "icon": "./assets/images/smart_transcriber_logo_dark.png",
     "scheme": "sessionai",
     "userInterfaceStyle": "dark",
     "ios": {
@@ -23,7 +23,14 @@
       },
       "package": "com.sessionai.app",
       "predictiveBackGestureEnabled": false,
-      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"],
+      "permissions": [
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
       "usesCleartextTraffic": true
     },
     "web": {
@@ -37,7 +44,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/transio_logo.jpg",
+          "image": "./assets/images/smart_transcriber_logo_dark.png",
           "resizeMode": "contain",
           "backgroundColor": "#1E313B"
         }
@@ -52,6 +59,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3a350df2-b240-4963-8a52-8ef8d16b80f1"
+      }
     }
   }
 }

@@ -11,6 +11,7 @@ export interface SessionRow {
   duration_seconds: number | null;
   audio_path: string | null;
   status: string;
+  capture_mode?: string | null;
   favorited_at?: string | null;
   folder_id?: string | null;
   created_at: string;
@@ -28,6 +29,7 @@ export function mapSessionRow(row: SessionRow) {
     durationSeconds: row.duration_seconds,
     audioPath: row.audio_path,
     status: row.status,
+    captureMode: row.capture_mode ?? 'batch',
     favoritedAt: row.favorited_at ?? null,
     folderId: row.folder_id ?? null,
     createdAt: row.created_at,

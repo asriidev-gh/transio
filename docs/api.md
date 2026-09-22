@@ -110,14 +110,31 @@ Upload response:
 | --- | --- | --- |
 | `POST` | `/sessions/:id/transcribe` | Start async transcription job (`202`) |
 | `GET` | `/sessions/:id/transcript` | Fetch saved transcript |
+| `PUT` | `/sessions/:id/transcript` | Upsert transcript text/segments (live captions) |
 | `POST` | `/sessions/:id/summarize` | Start async Claude summary job (`202`) |
 | `GET` | `/sessions/:id/summary` | Fetch structured AI summary |
 | `POST` | `/sessions/:id/process` | Start end-to-end pipeline (`202`) |
 | `GET` | `/sessions/:id/status` | Poll `{ status, hasAudio, hasTranscript, hasSummary }` |
 | `POST` | `/sessions/:id/ask` | Q&A over transcript/summary |
 | `POST` | `/sessions/:id/translate` | On-demand summary/transcript translation |
+| `POST` | `/sessions/:id/translate-live` | Translate a short live-caption chunk `{ text, language }` |
+| `POST` | `/sessions/:id/notes-live` | Merge live speech into notes `{ text, previousNotes? }` |
+| `POST` | `/sessions/:id/notes/finalize` | Persist notes + `completed` (Auto Notes / Live Note Taker) |
 | `GET` | `/sessions/:id/feedback` | Thumbs feedback for summary/transcript |
 | `PUT` | `/sessions/:id/feedback` | Set or clear thumbs (`target`, `rating`) |
+
+Sessions include `captureMode`: `live` | `batch` | `notes` | `live_notes` (default `batch`).
+Notes-only modes never persist a transcript row. `live_notes` skips auto-process after
+upload when notes were already finalized. Migration: `202609210003_session_capture_mode.sql`.
+
+### Live captions WebSocket
+
+`ws(s)://<api-host>/live/transcribe?token=<supabase_access_token>`
+
+Authenticated browser clients send binary audio chunks (e.g. MediaRecorder webm/opus).
+The API proxies to Deepgram Listen using server-only `DEEPGRAM_API_KEY` and forwards
+normalized JSON events (`ready`, `transcript`, `error`, `closed`). Never put the
+Deepgram key in `EXPO_PUBLIC_*`.
 
 Requires uploaded audio for processing. Summarization-only requires a saved transcript.
 Successful uploads best-effort auto-start `/process` when STT + Claude keys are configured.

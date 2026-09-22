@@ -219,4 +219,33 @@ describe('transcription API', () => {
     });
     assert.equal((status.body.data as { status: string }).status, 'failed');
   });
+
+  it('upserts a live caption transcript without forcing status before upload', async () => {
+    const ctx = createTranscriptionTestApp();
+    const created = await request(ctx.app).post(
+      '/sessions',
+      { title: 'Live talk', sessionType: 'seminar' },
+      { Authorization: 'Bearer token-a' },
+    );
+    const id = (created.body.data as { id: string }).id;
+
+    const put = await request(ctx.app).put(
+      `/sessions/${id}/transcript`,
+      {
+        text: 'Live finals from Deepgram.',
+        language: null,
+        segments: [{ startMs: 0, endMs: 1200, text: 'Live finals from Deepgram.', speaker: null }],
+      },
+      { Authorization: 'Bearer token-a' },
+    );
+    assert.equal(put.status, 200);
+    assert.equal((put.body.data as { text: string }).text, 'Live finals from Deepgram.');
+
+    const status = await request(ctx.app).get(`/sessions/${id}/status`, {
+      Authorization: 'Bearer token-a',
+    });
+    const statusData = status.body.data as { status: string; hasTranscript: boolean };
+    assert.equal(statusData.status, 'recording');
+    assert.equal(statusData.hasTranscript, true);
+  });
 });

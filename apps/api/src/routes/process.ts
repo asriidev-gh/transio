@@ -211,23 +211,33 @@ export function tryStartProcessingAfterUpload(
 ): void {
   try {
     if (!req.user) return;
-    ensureProcessingProviders(
-      options.createTranscriptionProvider ?? createTranscriptionProvider,
-      options.createSummaryProvider ?? createSummaryProvider,
-    );
+    const userId = req.user.id;
 
-    void options
-      .createRepository(req)
-      .update(req.user.id, sessionId, { status: 'transcribing' })
-      .then(() => {
-        options.runJob(sessionId, req);
-      })
-      .catch((err) => {
-        logger.warn('Auto-process status update failed after upload', {
-          sessionId,
-          message: err instanceof Error ? err.message : 'Unknown error',
-        });
+    void (async () => {
+      const session = await options.createRepository(req).getById(userId, sessionId);
+      if (!session) return;
+
+      // Live Note Taker: skip re-process when notes were already finalized.
+      // If finalize never ran (empty take), fall through to notes-only pipeline.
+      if (session.captureMode === 'live_notes' && session.status === 'completed') {
+        return;
+      }
+
+      ensureProcessingProviders(
+        options.createTranscriptionProvider ?? createTranscriptionProvider,
+        options.createSummaryProvider ?? createSummaryProvider,
+      );
+
+      await options.createRepository(req).update(userId, sessionId, {
+        status: 'transcribing',
       });
+      options.runJob(sessionId, req);
+    })().catch((err) => {
+      logger.warn('Auto-process after upload failed', {
+        sessionId,
+        message: err instanceof Error ? err.message : 'Unknown error',
+      });
+    });
   } catch (err) {
     logger.warn('Auto-process skipped after upload (providers not configured)', {
       sessionId,

@@ -1,11 +1,7 @@
-import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { usePathname, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { SessionFolder } from '@sessionai/shared';
-import { FolderPicker } from '@/src/components/FolderPicker';
 import { Icon, type AppIconName } from '@/src/components/ui/Icon';
-import { listFolders } from '@/src/services/folders';
 import { radii, spacing } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 
@@ -21,10 +17,8 @@ const TABS: Array<{ key: TabKey; label: string; icon: TabIcon; href: Href }> = [
   { key: 'settings', label: 'Settings', icon: 'cog-outline', href: '/(app)/(tabs)/settings' },
 ];
 
-function hrefForCapture(mode: CaptureMode, folderId: string): string {
-  return mode === 'record'
-    ? `/new-session?mode=record&folderId=${folderId}`
-    : `/new-session?mode=import&folderId=${folderId}`;
+function hrefForCapture(mode: CaptureMode): string {
+  return mode === 'record' ? '/new-session?mode=record' : '/new-session?mode=import';
 }
 
 function activeTabFromPath(pathname: string): TabKey | null {
@@ -50,21 +44,13 @@ export function FloatingTabBar() {
   const bottomPad = Math.max(insets.bottom, spacing.sm);
   const focused = activeTabFromPath(pathname);
 
-  const [folders, setFolders] = useState<SessionFolder[]>([]);
-  const [pickerMode, setPickerMode] = useState<CaptureMode | null>(null);
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-
   const glassBg =
     scheme === 'light' ? 'rgba(247, 245, 238, 0.94)' : 'rgba(37, 59, 71, 0.94)';
   const glassBorder =
     scheme === 'light' ? 'rgba(214, 209, 194, 0.7)' : 'rgba(110, 139, 151, 0.45)';
 
   function openCapture(mode: CaptureMode) {
-    setSelectedFolderId(null);
-    setPickerMode(mode);
-    void listFolders()
-      .then(setFolders)
-      .catch(() => setFolders([]));
+    router.push(hrefForCapture(mode) as Href);
   }
 
   function goTab(tab: (typeof TABS)[number]) {
@@ -168,24 +154,6 @@ export function FloatingTabBar() {
           {renderNavTab(TABS[2])}
         </View>
       </View>
-
-      <FolderPicker
-        visible={pickerMode !== null}
-        folders={folders}
-        selectedId={selectedFolderId}
-        onSelect={setSelectedFolderId}
-        onClose={() => setPickerMode(null)}
-        title={pickerMode === 'import' ? 'Save import to' : 'Save recording to'}
-        confirmLabel="Continue"
-        onConfirm={(folderId) => {
-          if (!folderId) return;
-          const mode = pickerMode ?? 'record';
-          setPickerMode(null);
-          router.push(hrefForCapture(mode, folderId) as Href);
-        }}
-        allowCreate
-        onFoldersChange={setFolders}
-      />
     </View>
   );
 }
@@ -227,32 +195,28 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     paddingHorizontal: 4,
     paddingVertical: 4,
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
   },
   tabActive: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
   },
   pressed: {
-    opacity: 0.72,
+    opacity: 0.7,
   },
   label: {
     fontSize: 10,
     fontWeight: '600',
-    letterSpacing: 0.1,
   },
   labelActive: {
     fontWeight: '700',
   },
   centerBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    marginHorizontal: spacing.xs,
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 2,
-    marginTop: -16,
-    marginBottom: -4,
-    borderWidth: 3,
-    flexShrink: 0,
+    borderWidth: 1,
   },
 });

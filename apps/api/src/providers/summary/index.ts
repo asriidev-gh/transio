@@ -9,10 +9,11 @@ import {
   SUMMARY_TOOL,
   SUMMARY_TOOL_NAME,
 } from '../../prompts/summary.js';
-import type { SummaryInput, SummaryProvider } from './types.js';
+import type { LiveNotesMergeInput, SummaryInput, SummaryProvider } from './types.js';
 
 const ANTHROPIC_MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-4-5';
+const DEFAULT_LIVE_NOTES_MODEL = 'claude-haiku-4-5';
 
 interface AnthropicContentBlock {
   type: string;
@@ -36,6 +37,7 @@ export class ClaudeSummaryProvider implements SummaryProvider {
   constructor(
     private readonly apiKey: string,
     private readonly model = DEFAULT_MODEL,
+    private readonly liveNotesModel = DEFAULT_LIVE_NOTES_MODEL,
   ) {}
 
   async summarize(input: SummaryInput): Promise<SessionSummary> {
@@ -138,6 +140,95 @@ export class ClaudeSummaryProvider implements SummaryProvider {
       return parsed.data;
     });
   }
+
+  async mergeLiveNotes(input: LiveNotesMergeInput): Promise<SessionSummary> {
+    return withProviderRetry(async (attempt) => {
+      const previous = input.previousNotes
+        ? JSON.stringify(input.previousNotes)
+        : '{}';
+      const system = [
+        'You maintain live meeting notes while someone is still speaking.',
+        'Merge the new speech into previous notes. Stay concise and factual.',
+        'Do not invent facts. Empty arrays are fine.',
+        'Return the full updated notes object via the tool.',
+      ].join(' ');
+
+      const body = {
+        model: this.liveNotesModel,
+        max_tokens: 1024,
+        system,
+        tools: [SUMMARY_TOOL],
+        tool_choice: { type: 'tool', name: SUMMARY_TOOL_NAME },
+        messages: [
+          {
+            role: 'user',
+            content: `${input.title?.trim() ? `Title: ${input.title.trim()}\n` : ''}Type: ${input.sessionType}
+
+Previous notes:
+${previous}
+
+New speech:
+${input.text}`,
+          },
+        ],
+      };
+
+      let response: Response;
+      try {
+        response = await fetch(ANTHROPIC_MESSAGES_URL, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': this.apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        throw new AppError('SUMMARY_ERROR', 'Could not reach the Claude API', 502);
+      }
+
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const errBody = (await response.json()) as {
+            error?: { message?: string };
+          };
+          detail = errBody.error?.message ?? '';
+        } catch {
+          // ignore
+        }
+        logger.warn('Claude live-notes merge returned error', {
+          status: response.status,
+          provider: this.name,
+          model: this.liveNotesModel,
+          detail: detail || undefined,
+          attempt,
+        });
+        throw new AppError(
+          'SUMMARY_ERROR',
+          detail ? `Live notes update failed (${detail})` : 'Live notes update failed',
+          response.status === 429 ? 429 : 502,
+        );
+      }
+
+      const payload = (await response.json()) as AnthropicMessagesResponse;
+      const toolBlock = payload.content?.find(
+        (block) => block.type === 'tool_use' && block.name === SUMMARY_TOOL_NAME,
+      );
+
+      if (!toolBlock?.input) {
+        throw new AppError('SUMMARY_ERROR', 'Claude did not return updated notes', 502);
+      }
+
+      const parsed = SessionSummarySchema.safeParse(toolBlock.input);
+      if (!parsed.success) {
+        throw new AppError('SUMMARY_ERROR', 'Live notes failed schema validation', 502);
+      }
+
+      return parsed.data;
+    });
+  }
 }
 
 /** Test-only provider with deterministic structured output. */
@@ -158,6 +249,22 @@ export class FakeSummaryProvider implements SummaryProvider {
       quotes: ['This is a memorable line from the transcript.'],
     };
   }
+
+  async mergeLiveNotes(input: LiveNotesMergeInput): Promise<SessionSummary> {
+    const base = await this.summarize({
+      transcriptText: input.text,
+      sessionType: input.sessionType,
+      title: input.title,
+    });
+    const prevPoints = input.previousNotes?.keyPoints ?? [];
+    return {
+      ...base,
+      overview: input.previousNotes?.overview?.trim()
+        ? `${input.previousNotes.overview} ${input.text}`.trim()
+        : base.overview,
+      keyPoints: [...prevPoints, ...base.keyPoints].slice(0, 12),
+    };
+  }
 }
 
 export function createSummaryProvider(): SummaryProvider {
@@ -174,5 +281,6 @@ export function createSummaryProvider(): SummaryProvider {
   return new ClaudeSummaryProvider(
     env.ANTHROPIC_API_KEY,
     env.ANTHROPIC_MODEL.trim() || DEFAULT_MODEL,
+    env.ANTHROPIC_TRANSLATE_MODEL.trim() || DEFAULT_LIVE_NOTES_MODEL,
   );
 }

@@ -5,6 +5,7 @@ import {
   SessionStatusResponseSchema,
   TranscribeAcceptedSchema,
   TranscriptSchema,
+  UpsertTranscriptBodySchema,
 } from '@sessionai/shared';
 import type { Request, Router } from 'express';
 import { AppError } from '../middleware/error-handler.js';
@@ -158,6 +159,46 @@ export function registerTranscriptionRoutes(
       const transcript = await createTranscriptRepository(req).getBySessionId(id);
       if (!transcript) {
         throw new AppError('NOT_FOUND', 'Transcript not found', 404);
+      }
+
+      res.status(200).json(apiSuccess(TranscriptSchema.parse(transcript)));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** Persist a client-built transcript (e.g. live Deepgram finals). */
+  router.put('/:id/transcript', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+      }
+
+      const { id } = SessionIdParamSchema.parse(req.params);
+      const body = UpsertTranscriptBodySchema.parse(req.body);
+      const session = await options.createRepository(req).getById(req.user.id, id);
+      if (!session) {
+        throw new AppError('NOT_FOUND', 'Session not found', 404);
+      }
+
+      const transcript = await createTranscriptRepository(req).upsertForSession(
+        id,
+        body.text,
+        body.language ?? null,
+        body.segments ?? [],
+      );
+
+      // If audio is already uploaded, mark transcribed so status polling reflects it.
+      // (Processing skips Whisper whenever transcript text exists regardless.)
+      if (
+        session.audioPath &&
+        (session.status === 'uploaded' ||
+          session.status === 'recording' ||
+          session.status === 'failed')
+      ) {
+        await options.createRepository(req).update(req.user.id, id, {
+          status: 'transcribed',
+        });
       }
 
       res.status(200).json(apiSuccess(TranscriptSchema.parse(transcript)));

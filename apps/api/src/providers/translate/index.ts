@@ -33,10 +33,18 @@ export interface TranslateTranscriptInput {
   segments: TranscriptSegment[];
 }
 
+export interface TranslateChunkInput {
+  language: TranslateLanguage;
+  languageLabel: string;
+  text: string;
+  sourceLanguageLabel?: string;
+}
+
 export interface TranslateProvider {
   readonly name: string;
   translateSummary(input: TranslateSummaryInput): Promise<TranslatedSummary>;
   translateTranscript(input: TranslateTranscriptInput): Promise<TranslatedTranscript>;
+  translateChunk(input: TranslateChunkInput): Promise<string>;
 }
 
 function extractJson(text: string): unknown {
@@ -198,6 +206,47 @@ export class ClaudeTranslateProvider implements TranslateProvider {
     }
   }
 
+  async translateChunk(input: TranslateChunkInput): Promise<string> {
+    const sourceHint = input.sourceLanguageLabel
+      ? ` Source language: ${input.sourceLanguageLabel}.`
+      : '';
+    const system = [
+      `You are a speech-caption translator.`,
+      `Translate the user message into ${input.languageLabel}.${sourceHint}`,
+      `Reply with ONLY the translated caption text.`,
+      `Do not explain, greet, ask questions, or wrap the answer in quotes.`,
+      `If the input is already in ${input.languageLabel}, return it unchanged.`,
+    ].join(' ');
+
+    const raw = await callClaude({
+      apiKey: this.apiKey,
+      model: this.model,
+      system,
+      user: input.text,
+      maxTokens: Math.min(1024, Math.max(128, input.text.length * 3)),
+    });
+
+    const text = raw
+      .trim()
+      .replace(/^["'«»]+|["'«»]+$/g, '')
+      .trim();
+    if (!text) {
+      throw new AppError('TRANSLATE_ERROR', 'Claude returned an empty live translation.', 502);
+    }
+    // Guard against chatty model replies that aren't a caption translation.
+    if (
+      text.length > Math.max(120, input.text.length * 8) ||
+      /i'?m ready|please share|however,? i don'?t|i can help translate/i.test(text)
+    ) {
+      throw new AppError(
+        'TRANSLATE_ERROR',
+        'Live translation returned an invalid response. Try again.',
+        502,
+      );
+    }
+    return text;
+  }
+
   private async translateTextBatch(
     languageLabel: string,
     texts: string[],
@@ -341,6 +390,10 @@ export class FakeTranslateProvider implements TranslateProvider {
       text: prefixText(input.language, input.text),
       segments: [],
     };
+  }
+
+  async translateChunk(input: TranslateChunkInput): Promise<string> {
+    return prefixText(input.language, input.text);
   }
 }
 

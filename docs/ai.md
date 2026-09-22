@@ -83,10 +83,46 @@ pipeline stages from backend status (`hasAudio`, `hasTranscript`, `hasSummary`).
 | --- | --- | --- |
 | `POST` | `/sessions/:id/transcribe` | Starts async transcription only |
 | `GET` | `/sessions/:id/transcript` | Full transcript text |
+| `PUT` | `/sessions/:id/transcript` | Upsert client transcript (live captions finals) |
 | `POST` | `/sessions/:id/summarize` | Starts async Claude summary only |
 | `GET` | `/sessions/:id/summary` | Structured summary record |
 | `POST` | `/sessions/:id/process` | Full pipeline (transcribe → summarize) |
 | `GET` | `/sessions/:id/status` | `{ status, hasAudio, hasTranscript, hasSummary }` for polling |
+| `POST` | `/sessions/:id/notes-live` | Merge live speech into structured notes (Live Note Taker) |
+| `POST` | `/sessions/:id/notes/finalize` | Persist notes + mark completed (notes-only modes) |
+| `WS` | `/live/transcribe?token=` | Deepgram live caption proxy (server holds `DEEPGRAM_API_KEY`) |
+
+## Live captions
+
+Recording streams microphone PCM to `ws://…/live/transcribe`. The API proxies
+binary audio to Deepgram Listen and returns normalized `{ type: "transcript", text, isFinal }`
+events. On stop, finals are saved with `PUT /sessions/:id/transcript`. The processing
+pipeline skips Whisper when a transcript already exists.
+
+- **Web:** AudioContext → linear16 PCM  
+- **iOS / Android:** `expo-audio-stream-pcm` → linear16 PCM (needs a **development or EAS build**; not Expo Go)
+- **Live Note Taker:** `POST /sessions/:id/notes-live` uses Haiku (`ANTHROPIC_TRANSLATE_MODEL`)
+  for faster merges while recording; full post-session summaries still use Sonnet.
+- **Spoken language Auto:** Deepgram `language=multi` (EN/ES/FR/DE/HI/RU/PT/JA/IT/NL). Tagalog and
+  Chinese still need an explicit language chip.
+
+## Capture modes (notes)
+
+Sessions store `captureMode`: `live` | `batch` | `notes` | `live_notes`.
+
+| Mode | While recording | After stop |
+| --- | --- | --- |
+| `live` | Live captions (+ optional translate) | Audio + transcript + summary |
+| `batch` | Audio only | Upload → transcribe → summarize |
+| `notes` (Auto Notes) | Audio only | Upload → ephemeral STT → summary; **no transcript row** |
+| `live_notes` (Live Note Taker) | Growing notes via `notes-live` | Finalize notes + upload audio; **no transcript** |
+
+Apply migration `202609210003_session_capture_mode.sql` in Supabase.
+
+| Env | Purpose |
+| --- | --- |
+| `DEEPGRAM_API_KEY` | Server-only Deepgram key for the live WS proxy |
+| `ANTHROPIC_API_KEY` | Required for live translate (and post-session Translate) |
 
 ## Ask (session Q&A)
 

@@ -10,14 +10,18 @@ export {
 export {
   SessionTypeSchema,
   SessionStatusSchema,
+  CaptureModeSchema,
   SessionSchema,
   CreateSessionSchema,
   UpdateSessionSchema,
   SessionIdParamSchema,
   SESSION_TYPE_LABELS,
   SESSION_STATUS_LABELS,
+  CAPTURE_MODE_LABELS,
+  isNotesOnlyCaptureMode,
   type SessionType,
   type SessionStatus,
+  type CaptureMode,
   type Session,
   type CreateSessionInput,
   type UpdateSessionInput,
@@ -51,21 +55,40 @@ export {
   SessionStatusResponseSchema,
   TranscribeAcceptedSchema,
   RemapSpeakersSchema,
+  UpsertTranscriptBodySchema,
   type TranscriptSegment,
   type Transcript,
   type SessionStatusResponse,
   type TranscribeAccepted,
   type RemapSpeakersInput,
+  type UpsertTranscriptBody,
 } from './transcript.js';
 
 export {
   SessionSummarySchema,
   SummaryRecordSchema,
   SummarizeAcceptedSchema,
+  LiveNotesChunkRequestSchema,
+  LiveNotesChunkResultSchema,
+  FinalizeNotesRequestSchema,
   type SessionSummary,
   type SummaryRecord,
   type SummarizeAccepted,
+  type LiveNotesChunkRequest,
+  type LiveNotesChunkResult,
+  type FinalizeNotesRequest,
 } from './summary.js';
+
+export {
+  MindMapNodeKindSchema,
+  MindMapNodeSchema,
+  MindMapSchema,
+  deriveMindMapFromSummary,
+  type MindMap,
+  type MindMapNode,
+  type MindMapNodeKind,
+  type MindMapSummaryInput,
+} from './mind-map.js';
 
 export {
   ProcessAcceptedSchema,
@@ -87,6 +110,8 @@ export {
   TranslatedSummarySchema,
   TranslatedTranscriptSchema,
   TranslateResultSchema,
+  LiveTranslateChunkRequestSchema,
+  LiveTranslateChunkResultSchema,
   TRANSLATE_LANGUAGE_LABELS,
   TRANSLATE_LANGUAGE_OPTIONS,
   type TranslateLanguage,
@@ -95,6 +120,8 @@ export {
   type TranslatedSummary,
   type TranslatedTranscript,
   type TranslateResult,
+  type LiveTranslateChunkRequest,
+  type LiveTranslateChunkResult,
 } from './translate.js';
 
 export {

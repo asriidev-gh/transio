@@ -60,6 +60,7 @@ export class SupabaseSessionRepository implements SessionRepository {
       description: input.description?.trim() ? input.description.trim() : null,
       recorded_at: input.recordedAt ?? new Date().toISOString(),
       status: 'recording',
+      capture_mode: input.captureMode ?? 'batch',
       folder_id: input.folderId ?? null,
     };
 
@@ -69,7 +70,9 @@ export class SupabaseSessionRepository implements SessionRepository {
       const hint =
         error.message.includes('folder_id') || error.message.includes('folder does not belong')
           ? ' Apply migration 202609210001_session_folders.sql in Supabase.'
-          : '';
+          : error.message.includes('capture_mode')
+            ? ' Apply migration 202609210003_session_capture_mode.sql in Supabase.'
+            : '';
       throw new AppError('DATABASE_ERROR', `Could not create session.${hint}`, 500);
     }
 
@@ -87,6 +90,7 @@ export class SupabaseSessionRepository implements SessionRepository {
     if (input.durationSeconds !== undefined) patch.duration_seconds = input.durationSeconds;
     if (input.audioPath !== undefined) patch.audio_path = input.audioPath;
     if (input.status !== undefined) patch.status = input.status;
+    if (input.captureMode !== undefined) patch.capture_mode = input.captureMode;
     if (input.favoritedAt !== undefined) patch.favorited_at = input.favoritedAt;
     if (input.folderId !== undefined) patch.folder_id = input.folderId;
 
@@ -103,7 +107,9 @@ export class SupabaseSessionRepository implements SessionRepository {
         ? ' Apply migration 202609200006_session_favorites.sql in Supabase.'
         : error.message.includes('folder_id')
           ? ' Apply migration 202609210001_session_folders.sql in Supabase.'
-          : '';
+          : error.message.includes('capture_mode')
+            ? ' Apply migration 202609210003_session_capture_mode.sql in Supabase.'
+            : '';
       throw new AppError('DATABASE_ERROR', `Could not update session.${hint}`, 500);
     }
 
@@ -161,6 +167,7 @@ export class InMemorySessionRepository implements SessionRepository {
       durationSeconds: null,
       audioPath: null,
       status: 'recording',
+      captureMode: input.captureMode ?? 'batch',
       favoritedAt: null,
       folderId: input.folderId ?? null,
       createdAt: now,
@@ -191,6 +198,7 @@ export class InMemorySessionRepository implements SessionRepository {
         input.durationSeconds !== undefined ? input.durationSeconds : existing.durationSeconds,
       audioPath: input.audioPath !== undefined ? input.audioPath : existing.audioPath,
       status: input.status ?? existing.status,
+      captureMode: input.captureMode ?? existing.captureMode,
       favoritedAt:
         input.favoritedAt !== undefined ? input.favoritedAt : existing.favoritedAt,
       folderId: input.folderId !== undefined ? input.folderId : existing.folderId,

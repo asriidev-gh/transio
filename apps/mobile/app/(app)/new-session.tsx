@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SessionFolder, SessionType } from '@sessionai/shared';
+import { CAPTURE_MODE_LABELS } from '@sessionai/shared';
 import { SessionTypePicker } from '@/src/components/SessionTypePicker';
 import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
 import { Button } from '@/src/components/ui/Button';
@@ -36,7 +37,14 @@ import {
   listCustomSessionTypes,
   rememberCustomSessionType,
 } from '@/src/services/custom-session-types';
-import { listFolders } from '@/src/services/folders';
+import { listFolders, createFolder } from '@/src/services/folders';
+import {
+  getRecordCaptionsModePref,
+  isLiveCaptionsModeAvailable,
+  modeNeedsLiveStt,
+  setRecordCaptionsModePref,
+  type RecordCaptionsMode,
+} from '@/src/services/record-mode';
 import { createSession } from '@/src/services/sessions';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
@@ -49,6 +57,7 @@ export default function NewSessionScreen() {
     folderId?: string;
   }>();
   const preferImport = mode === 'import';
+  const [step, setStep] = useState<'mode' | 'details'>(preferImport ? 'details' : 'mode');
   const [title, setTitle] = useState('');
   const [sessionType, setSessionType] = useState<SessionType>('group_discussion');
   const [customTypeLabel, setCustomTypeLabel] = useState('');
@@ -58,19 +67,27 @@ export default function NewSessionScreen() {
   const [loading, setLoading] = useState(false);
   const [picked, setPicked] = useState<PickedAudio | null>(null);
   const [mediaUrl, setMediaUrl] = useState('');
+  const [captionsMode, setCaptionsMode] = useState<RecordCaptionsMode>(
+    isLiveCaptionsModeAvailable() ? 'live' : 'batch',
+  );
   const [folders, setFolders] = useState<SessionFolder[]>([]);
   const [folderId, setFolderId] = useState<string | null>(
     typeof folderIdParam === 'string' && folderIdParam ? folderIdParam : null,
   );
+  const [composingFolder, setComposingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   useEffect(() => {
     void (async () => {
       try {
-        const [rows, customs] = await Promise.all([
+        const [rows, customs, pref] = await Promise.all([
           listFolders(),
           listCustomSessionTypes(),
+          getRecordCaptionsModePref(),
         ]);
         setCustomTypes(customs);
+        setCaptionsMode(pref);
         const def = await ensureDefaultFolder(rows);
         const merged = sortFoldersWithDefaultFirst(
           dedupeFoldersByName(rows.some((f) => f.id === def.id) ? rows : [...rows, def]),
@@ -100,7 +117,7 @@ export default function NewSessionScreen() {
     return null;
   }
 
-  async function createDraft(trimmedTitle: string) {
+  async function createDraft(trimmedTitle: string, captureMode: RecordCaptionsMode = 'batch') {
     if (sessionType === 'other') {
       const label = customTypeLabel.trim();
       if (!label) {
@@ -121,6 +138,7 @@ export default function NewSessionScreen() {
       sessionType,
       description: description.trim() ? description.trim() : null,
       folderId: destinationId,
+      captureMode,
     });
   }
 
@@ -128,11 +146,17 @@ export default function NewSessionScreen() {
     const trimmed = resolveTitle();
     if (!trimmed) return;
 
+    let modeToUse = captionsMode;
+    if (modeNeedsLiveStt(modeToUse) && !isLiveCaptionsModeAvailable()) {
+      modeToUse = modeToUse === 'live_notes' ? 'notes' : 'batch';
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const session = await createDraft(trimmed);
-      router.replace(`/recording?id=${session.id}`);
+      await setRecordCaptionsModePref(modeToUse);
+      const session = await createDraft(trimmed, modeToUse);
+      router.replace(`/recording?id=${session.id}&captions=${modeToUse}`);
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -205,6 +229,13 @@ export default function NewSessionScreen() {
     router.replace('/');
   }
 
+  function chooseCaptureMode(next: RecordCaptionsMode) {
+    if (modeNeedsLiveStt(next) && !isLiveCaptionsModeAvailable()) return;
+    setCaptionsMode(next);
+    setError(null);
+    setStep('details');
+  }
+
   function switchMode() {
     if (preferImport) {
       router.replace(
@@ -216,6 +247,66 @@ export default function NewSessionScreen() {
       folderId
         ? `/new-session?mode=import&folderId=${folderId}`
         : '/new-session?mode=import',
+    );
+  }
+
+  async function onCreateFolder() {
+    const trimmed = newFolderName.trim();
+    if (!trimmed) return;
+    setCreatingFolder(true);
+    setError(null);
+    try {
+      const created = await createFolder({ name: trimmed });
+      const merged = sortFoldersWithDefaultFirst(
+        dedupeFoldersByName([...folders, created]),
+      );
+      setFolders(merged);
+      setFolderId(created.id);
+      setNewFolderName('');
+      setComposingFolder(false);
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not create folder.',
+      );
+    } finally {
+      setCreatingFolder(false);
+    }
+  }
+
+  const showModeStep = !preferImport && step === 'mode';
+  const showDetailsStep = preferImport || step === 'details';
+
+  function renderModeOption(
+    optionMode: RecordCaptionsMode,
+    titleText: string,
+    hint: string,
+    disabled: boolean,
+  ) {
+    const selected = captionsMode === optionMode;
+    return (
+      <Pressable
+        key={optionMode}
+        onPress={() => chooseCaptureMode(optionMode)}
+        disabled={disabled}
+        style={[
+          styles.modeOption,
+          {
+            borderColor: selected ? colors.accent : colors.border,
+            backgroundColor: colors.background,
+            opacity: disabled ? 0.55 : 1,
+          },
+        ]}
+        accessibilityRole="button"
+        accessibilityState={{ selected, disabled }}
+        accessibilityLabel={titleText}
+      >
+        <Text style={[styles.modeTitle, { color: colors.ink }]}>{titleText}</Text>
+        <Text style={[styles.modeHint, { color: colors.inkMuted }]}>{hint}</Text>
+      </Pressable>
     );
   }
 
@@ -249,15 +340,66 @@ export default function NewSessionScreen() {
               />
             </View>
             <Text style={[styles.title, { color: colors.ink }]}>
-              {preferImport ? 'Import to transcribe' : 'New recording'}
+              {preferImport
+                ? 'Import to transcribe'
+                : showModeStep
+                  ? 'How to capture speech'
+                  : 'New recording'}
             </Text>
             <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
               {preferImport
                 ? 'Upload audio or video, or paste a direct file link. YouTube pages aren’t supported — download those first.'
-                : 'Name the session, pick a type and folder, then start recording.'}
+                : showModeStep
+                  ? 'Pick a capture mode first. You’ll name the session on the next step.'
+                  : 'Name the session, then start recording.'}
             </Text>
           </View>
 
+          {showModeStep ? (
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+                shadows.soft,
+              ]}
+            >
+              <View style={styles.modeList}>
+                {renderModeOption(
+                  'live',
+                  'Live captions',
+                  isLiveCaptionsModeAvailable()
+                    ? 'See speech as you talk. Choose Tagalog or English on the recording screen.'
+                    : 'Needs a development or EAS build with native audio streaming. Use “Record, then transcribe” in Expo Go.',
+                  !isLiveCaptionsModeAvailable(),
+                )}
+                {renderModeOption(
+                  'batch',
+                  'Record, then transcribe',
+                  'Save audio only while recording. Transcribe after you upload and proceed — quieter and uses less data.',
+                  false,
+                )}
+                {renderModeOption(
+                  'notes',
+                  'Auto Notes',
+                  'Record quietly, then we write structured notes from the audio. No transcript is saved.',
+                  false,
+                )}
+                {renderModeOption(
+                  'live_notes',
+                  'Live Note Taker',
+                  isLiveCaptionsModeAvailable()
+                    ? 'Notes grow while you speak. Audio is kept; transcript is not saved.'
+                    : 'Needs a development or EAS build with native audio streaming. Use Auto Notes in Expo Go.',
+                  !isLiveCaptionsModeAvailable(),
+                )}
+              </View>
+            </View>
+          ) : null}
+
+          {showDetailsStep ? (
           <View
             style={[
               styles.card,
@@ -268,24 +410,56 @@ export default function NewSessionScreen() {
               shadows.soft,
             ]}
           >
+            {!preferImport ? (
+              <View style={styles.field}>
+                <Text style={[styles.label, { color: colors.inkMuted }]}>Capture mode</Text>
+                <Pressable
+                  onPress={() => setStep('mode')}
+                  disabled={loading}
+                  accessibilityRole="button"
+                  accessibilityLabel="Change capture mode"
+                  style={[
+                    styles.modeSummary,
+                    {
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.modeTitle, { color: colors.ink, flex: 1 }]}>
+                    {CAPTURE_MODE_LABELS[captionsMode]}
+                  </Text>
+                  <Text style={[styles.changeLink, { color: colors.accent }]}>Change</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             <View style={styles.field}>
               <Text style={[styles.label, { color: colors.inkMuted }]}>Title</Text>
               <TextInput
                 style={[
                   styles.input,
                   {
-                    borderColor: colors.border,
+                    borderColor: error === 'Title is required.' ? colors.danger : colors.border,
                     backgroundColor: colors.background,
                     color: colors.ink,
                   },
                 ]}
                 value={title}
-                onChangeText={setTitle}
+                onChangeText={(value) => {
+                  setTitle(value);
+                  if (error === 'Title is required.') setError(null);
+                }}
                 placeholder="Weekly seminar"
                 placeholderTextColor={colors.tertiary}
                 editable={!loading}
                 accessibilityLabel="Title"
               />
+              {error === 'Title is required.' ? (
+                <Text style={[styles.fieldError, { color: colors.danger }]} accessibilityRole="alert">
+                  {error}
+                </Text>
+              ) : null}
             </View>
 
             <View style={styles.field}>
@@ -326,47 +500,104 @@ export default function NewSessionScreen() {
               />
             </View>
 
-            {folders.length > 0 ? (
-              <View style={styles.field}>
-                <Text style={[styles.label, { color: colors.inkMuted }]}>Folder</Text>
-                <View style={styles.folderChips}>
-                  {folders.map((folder) => {
-                    const selected = folderId === folder.id;
-                    const label = isDefaultFolder(folder)
-                      ? DEFAULT_FOLDER_NAME
-                      : folder.name;
-                    return (
-                      <Pressable
-                        key={folder.id}
-                        onPress={() => setFolderId(folder.id)}
-                        disabled={loading}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        accessibilityLabel={label}
-                        style={({ pressed }) => [
-                          styles.folderChip,
-                          {
-                            backgroundColor: selected ? colors.accent : colors.background,
-                            borderColor: selected ? colors.accent : colors.border,
-                            opacity: pressed && !selected ? 0.85 : 1,
-                          },
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: colors.inkMuted }]}>Folder</Text>
+              <View style={styles.folderChips}>
+                {folders.map((folder) => {
+                  const selected = folderId === folder.id;
+                  const label = isDefaultFolder(folder)
+                    ? DEFAULT_FOLDER_NAME
+                    : folder.name;
+                  return (
+                    <Pressable
+                      key={folder.id}
+                      onPress={() => setFolderId(folder.id)}
+                      disabled={loading || creatingFolder}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={label}
+                      style={({ pressed }) => [
+                        styles.folderChip,
+                        {
+                          backgroundColor: selected ? colors.accent : colors.background,
+                          borderColor: selected ? colors.accent : colors.border,
+                          opacity: pressed && !selected ? 0.85 : 1,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.folderChipText,
+                          { color: selected ? colors.onBrand : colors.ink },
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.folderChipText,
-                            { color: selected ? colors.onBrand : colors.ink },
-                          ]}
-                        >
-                          {label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-            ) : null}
+
+              {composingFolder ? (
+                <View style={styles.createFolderRow}>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.createFolderInput,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.background,
+                        color: colors.ink,
+                      },
+                    ]}
+                    value={newFolderName}
+                    onChangeText={setNewFolderName}
+                    placeholder="Folder name"
+                    placeholderTextColor={colors.tertiary}
+                    editable={!creatingFolder && !loading}
+                    autoFocus
+                    accessibilityLabel="New folder name"
+                    onSubmitEditing={() => void onCreateFolder()}
+                  />
+                  <Button
+                    label={creatingFolder ? '…' : 'Add'}
+                    onPress={() => void onCreateFolder()}
+                    disabled={creatingFolder || loading || !newFolderName.trim()}
+                    loading={creatingFolder}
+                  />
+                  <Button
+                    label="Cancel"
+                    variant="ghost"
+                    onPress={() => {
+                      setComposingFolder(false);
+                      setNewFolderName('');
+                    }}
+                    disabled={creatingFolder || loading}
+                  />
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => setComposingFolder(true)}
+                  disabled={loading || creatingFolder}
+                  accessibilityRole="button"
+                  accessibilityLabel="Create folder"
+                  style={[
+                    styles.createFolderBtn,
+                    {
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                    },
+                  ]}
+                >
+                  <Icon name="plus" size={18} color={colors.accent} />
+                  <Text style={[styles.createFolderLabel, { color: colors.accent }]}>
+                    Create folder
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           </View>
+          ) : null}
 
           {preferImport ? (
             <View
@@ -435,44 +666,67 @@ export default function NewSessionScreen() {
             </View>
           ) : null}
 
-          {error ? (
+          {error && error !== 'Title is required.' ? (
             <Text style={[styles.error, { color: colors.danger }]} accessibilityRole="alert">
               {error}
             </Text>
           ) : null}
 
           <View style={styles.actions}>
-            {preferImport ? (
+            {showModeStep ? (
               <Button
-                label={loading ? 'Working…' : 'Transcribe'}
-                onPress={() => void onTranscribeImport()}
-                loading={loading}
+                label="Cancel"
+                onPress={onCancel}
+                variant="ghost"
                 disabled={loading}
               />
+            ) : preferImport ? (
+              <>
+                <Button
+                  label={loading ? 'Working…' : 'Transcribe'}
+                  onPress={() => void onTranscribeImport()}
+                  loading={loading}
+                  disabled={loading}
+                />
+                <Button
+                  label="Start recording instead"
+                  onPress={switchMode}
+                  variant="secondary"
+                  disabled={loading}
+                />
+                <Button
+                  label="Cancel"
+                  onPress={onCancel}
+                  variant="ghost"
+                  disabled={loading}
+                />
+              </>
             ) : (
-              <Button
-                label={loading ? 'Working…' : 'Start recording'}
-                onPress={() => void onStartRecording()}
-                loading={loading}
-                disabled={loading}
-              />
+              <>
+                <Button
+                  label={
+                    loading
+                      ? 'Working…'
+                      : captionsMode === 'live'
+                        ? 'Start with live captions'
+                        : captionsMode === 'live_notes'
+                          ? 'Start Live Note Taker'
+                          : captionsMode === 'notes'
+                            ? 'Start Auto Notes'
+                            : 'Start recording'
+                  }
+                  onPress={() => void onStartRecording()}
+                  loading={loading}
+                  disabled={loading}
+                />
+                <Button
+                  label="Cancel"
+                  onPress={onCancel}
+                  variant="ghost"
+                  disabled={loading}
+                />
+              </>
             )}
-            <Button
-              label={
-                preferImport
-                  ? 'Start recording instead'
-                  : 'Import a file or link instead'
-              }
-              onPress={switchMode}
-              variant="secondary"
-              disabled={loading}
-            />
-            <Button
-              label="Cancel"
-              onPress={onCancel}
-              variant="ghost"
-              disabled={loading}
-            />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -550,6 +804,65 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  createFolderBtn: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: 44,
+  },
+  createFolderLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  createFolderRow: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+  },
+  createFolderInput: {
+    flexGrow: 1,
+    flexBasis: 140,
+    minWidth: 120,
+  },
+  modeList: {
+    gap: spacing.sm,
+  },
+  modeOption: {
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+  },
+  modeTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  modeHint: {
+    ...typography.meta,
+    lineHeight: 18,
+  },
+  modeSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    minHeight: 48,
+  },
+  changeLink: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   drop: {
     borderWidth: 1,
     borderStyle: 'dashed',
@@ -584,6 +897,10 @@ const styles = StyleSheet.create({
   error: {
     ...typography.body,
     fontSize: 14,
+  },
+  fieldError: {
+    ...typography.caption,
+    marginTop: 4,
   },
   actions: {
     gap: spacing.sm,

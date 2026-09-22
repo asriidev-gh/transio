@@ -51,6 +51,13 @@ media-file URL (not YouTube/Vimeo pages). On-demand Translate
 covers summary and transcript via a language select (English, Filipino, Cebuano, Spanish,
 Chinese, Japanese, Korean, and other common targets).
 
+Web and native live captions stream mic PCM through an authenticated API WebSocket
+(`/live/transcribe`) that proxies to Deepgram Listen (`DEEPGRAM_API_KEY` server-only).
+Web uses AudioContext; iOS/Android use `expo-audio-stream-pcm` (requires a development or
+EAS build — not Expo Go). Default language is Tagalog (`language=tl`); the recording UI
+can switch to English. Finals are upserted with `PUT /sessions/:id/transcript`; batch
+Whisper still runs after upload only when no transcript text exists yet.
+
 First-launch onboarding (AsyncStorage-gated slider) introduces capture → process → review.
 Home uses a calm greeting (“Ready to capture your thoughts?”), one-level folders plus an Unfiled remainder (search flattens across folders), list-level delete, and a floating pill tab bar (Home · Favorites · mic Record · Import · Settings).
 Settings includes grouped Account / Appearance / Notifications. Light and dark palettes live in

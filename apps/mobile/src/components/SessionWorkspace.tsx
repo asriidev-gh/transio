@@ -14,6 +14,7 @@ import { AskSessionPanel } from '@/src/components/AskSessionPanel';
 import { ContentFeedback } from '@/src/components/ContentFeedback';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
+import { MindMapView } from '@/src/components/MindMapView';
 import { SessionTabs, type SessionTabKey } from '@/src/components/SessionTabs';
 import { SummarySections } from '@/src/components/SummarySections';
 import { TranscriptViewer } from '@/src/components/TranscriptViewer';
@@ -31,6 +32,7 @@ interface SessionWorkspaceProps {
   sessionTitle: string;
   hasTranscript: boolean;
   hasSummary: boolean;
+  notesOnly?: boolean;
   initialTab?: SessionTabKey;
   currentTimeSec?: number;
   onSeekMs?: (startMs: number) => void;
@@ -64,6 +66,7 @@ export function SessionWorkspace({
   sessionTitle,
   hasTranscript,
   hasSummary,
+  notesOnly = false,
   initialTab = 'summary',
   currentTimeSec = 0,
   onSeekMs,
@@ -71,7 +74,11 @@ export function SessionWorkspace({
 }: SessionWorkspaceProps) {
   const { colors } = useTheme();
   const [tab, setTab] = useState<SessionTabKey>(
-    initialTab === 'summary' && !hasSummary && hasTranscript ? 'transcript' : initialTab,
+    initialTab === 'summary' && !hasSummary && hasTranscript && !notesOnly
+      ? 'transcript'
+      : notesOnly
+        ? 'summary'
+        : initialTab,
   );
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [summary, setSummary] = useState<SummaryRecord | null>(null);
@@ -116,9 +123,17 @@ export function SessionWorkspace({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!notesOnly) return;
+    if (tab === 'transcript' || tab === 'ask') {
+      setTab('summary');
+    }
+  }, [notesOnly, tab]);
+
   const canTranslate =
     (tab === 'summary' && Boolean(summary)) ||
     (tab === 'actions' && Boolean(summary)) ||
+    (tab === 'map' && Boolean(summary)) ||
     (tab === 'transcript' && Boolean(transcript));
 
   const ensureTranslation = useCallback(
@@ -205,7 +220,7 @@ export function SessionWorkspace({
 
   return (
     <View style={styles.wrap}>
-      <SessionTabs value={tab} onChange={setTab} />
+      <SessionTabs value={tab} onChange={setTab} notesOnly={notesOnly} />
 
       {!loading && !error && canTranslate ? (
         <TranslateBar
@@ -246,7 +261,7 @@ export function SessionWorkspace({
         )
       ) : null}
 
-      {!loading && !error && tab === 'transcript' ? (
+      {!loading && !error && tab === 'transcript' && !notesOnly ? (
         displayTranscript ? (
           <View>
             <TranscriptViewer
@@ -279,7 +294,7 @@ export function SessionWorkspace({
         )
       ) : null}
 
-      {!loading && !error && tab === 'ask' ? (
+      {!loading && !error && tab === 'ask' && !notesOnly ? (
         hasTranscript ? (
           <AskSessionPanel sessionId={sessionId} sessionTitle={sessionTitle} />
         ) : (
@@ -293,6 +308,16 @@ export function SessionWorkspace({
         ) : (
           <Text style={[styles.empty, { color: colors.inkMuted }]}>
             Action items appear after the AI summary is ready.
+          </Text>
+        )
+      ) : null}
+
+      {!loading && !error && tab === 'map' ? (
+        displaySummary ? (
+          <MindMapView summary={displaySummary} sessionTitle={sessionTitle} />
+        ) : (
+          <Text style={[styles.empty, { color: colors.inkMuted }]}>
+            Mind map appears after the AI summary is ready.
           </Text>
         )
       ) : null}

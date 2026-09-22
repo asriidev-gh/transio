@@ -44,6 +44,21 @@ export const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
   failed: 'Failed',
 };
 
+/** How speech was captured for this session. */
+export const CaptureModeSchema = z.enum(['live', 'batch', 'notes', 'live_notes']);
+export type CaptureMode = z.infer<typeof CaptureModeSchema>;
+
+export const CAPTURE_MODE_LABELS: Record<CaptureMode, string> = {
+  live: 'Live captions',
+  batch: 'Record, then transcribe',
+  notes: 'Auto Notes',
+  live_notes: 'Live Note Taker',
+};
+
+export function isNotesOnlyCaptureMode(mode: CaptureMode): boolean {
+  return mode === 'notes' || mode === 'live_notes';
+}
+
 /** Session row as returned by the API (camelCase). */
 export const SessionSchema = z.object({
   id: z.string().uuid(),
@@ -55,6 +70,7 @@ export const SessionSchema = z.object({
   durationSeconds: z.number().int().nonnegative().nullable(),
   audioPath: z.string().nullable(),
   status: SessionStatusSchema,
+  captureMode: CaptureModeSchema.default('batch'),
   favoritedAt: z.string().nullable().default(null),
   folderId: z.string().uuid().nullable().default(null),
   createdAt: z.string(),
@@ -78,9 +94,10 @@ export const CreateSessionSchema = z.object({
     .nullable(),
   recordedAt: z.string().datetime().optional(),
   folderId: z.string().uuid().optional(),
+  captureMode: CaptureModeSchema.optional().default('batch'),
 });
 
-export type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
+export type CreateSessionInput = z.input<typeof CreateSessionSchema>;
 
 export const UpdateSessionSchema = z
   .object({
@@ -101,6 +118,7 @@ export const UpdateSessionSchema = z
     durationSeconds: z.number().int().nonnegative().nullable().optional(),
     audioPath: z.string().min(1).nullable().optional(),
     status: SessionStatusSchema.optional(),
+    captureMode: CaptureModeSchema.optional(),
     /** ISO timestamp to favorite; null to unfavorite. */
     favoritedAt: z.string().datetime().nullable().optional(),
     /** Folder id to file the session; null to move back to Unfiled. */

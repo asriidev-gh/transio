@@ -14,6 +14,8 @@
     "api": "npm run dev --workspace=@sessionai/api",
     "api:build": "npm run build --workspace=@sessionai/api",
     "api:start": "npm run start --workspace=@sessionai/api",
+    "build:shared": "npm run build --workspace=@sessionai/shared",
+    "postinstall": "npm run build:shared",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

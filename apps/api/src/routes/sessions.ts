@@ -38,6 +38,7 @@ import {
   tryStartProcessingAfterUpload,
   type ProcessJobRunner,
 } from './process.js';
+import { registerNotesRoutes } from './notes.js';
 import {
   registerSummaryRoutes,
   type SummaryJobRunner,
@@ -179,6 +180,12 @@ export function createSessionsRouter(options: {
     createSummaryRepository: options.createSummaryRepository,
     createProvider: options.createSummaryProvider,
     runJob: options.runSummaryJob,
+  });
+
+  registerNotesRoutes(router, {
+    createRepository,
+    createSummaryRepository: options.createSummaryRepository,
+    createSummaryProvider: options.createSummaryProvider,
   });
 
   registerProcessRoutes(router, {

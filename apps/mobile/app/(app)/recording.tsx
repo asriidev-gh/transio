@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AppState,
   type AppStateStatus,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
@@ -21,11 +24,37 @@ import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { WaveformVisualizer } from '@/src/components/WaveformVisualizer';
 import { ApiClientError } from '@/src/services/api';
+import {
+  createLiveCaptionController,
+  getLiveCaptionLanguagePref,
+  isLiveCaptionsSupported,
+  LIVE_CAPTION_LANGUAGES,
+  saveLiveTranscript,
+  type LiveCaptionController,
+  type LiveCaptionLanguage,
+  type LiveCaptionSnapshot,
+} from '@/src/services/live-captions';
+import {
+  getLiveTranslateTargetPref,
+  isSameLiveLanguage,
+  LIVE_TRANSLATE_TARGET_OPTIONS,
+  setLiveTranslateTargetPref,
+  translateLiveChunk,
+} from '@/src/services/live-translate';
+import {
+  getRecordCaptionsModePref,
+  isLiveCaptionsModeAvailable,
+  modeNeedsLiveStt,
+  parseRecordCaptionsMode,
+  type RecordCaptionsMode,
+} from '@/src/services/record-mode';
+import { finalizeSessionNotes, mergeLiveNotesChunk } from '@/src/services/live-notes';
 import { saveLocalAudioUri } from '@/src/services/local-audio';
 import { getSession, updateSession } from '@/src/services/sessions';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { confirmAction } from '@/src/utils/confirm';
+import type { SessionSummary, TranslateLanguage } from '@sessionai/shared';
 
 type PermissionState = 'checking' | 'granted' | 'denied' | 'unavailable';
 
@@ -34,8 +63,19 @@ const RECORDING_OPTIONS = {
   directory: 'document' as const,
 };
 
+const EMPTY_CAPTIONS: LiveCaptionSnapshot = {
+  status: 'idle',
+  finals: [],
+  interim: '',
+  error: null,
+  language: 'tl',
+};
+
 export default function RecordingScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, captions: captionsParam } = useLocalSearchParams<{
+    id: string;
+    captions?: string;
+  }>();
   const router = useRouter();
   const navigation = useNavigation();
 
@@ -53,13 +93,47 @@ export default function RecordingScreen() {
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [captionsMode, setCaptionsMode] = useState<RecordCaptionsMode | null>(
+    parseRecordCaptionsMode(captionsParam),
+  );
+  const [captions, setCaptions] = useState<LiveCaptionSnapshot>(EMPTY_CAPTIONS);
+  const [captionLanguage, setCaptionLanguage] = useState<LiveCaptionLanguage>('tl');
+  const [translateTarget, setTranslateTarget] = useState<TranslateLanguage | null>(null);
+  const [translatedFinals, setTranslatedFinals] = useState<string[]>([]);
+  const [translateBusy, setTranslateBusy] = useState(false);
+  const [translateError, setTranslateError] = useState<string | null>(null);
+  const [notesError, setNotesError] = useState<string | null>(null);
   const startedRef = useRef(false);
   const activeRef = useRef(false);
+  const liveRef = useRef<LiveCaptionController | null>(null);
+  const captionLanguageRef = useRef<LiveCaptionLanguage>('tl');
+  const translateTargetRef = useRef<TranslateLanguage | null>(null);
+  const translatedCountRef = useRef(0);
+  const translateQueueRef = useRef(Promise.resolve());
+  const translateGenRef = useRef(0);
+  const notesSentCountRef = useRef(0);
+  const notesFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notesInFlightRef = useRef(false);
+  const notesFinalsRef = useRef<string[]>([]);
+  const notesGenRef = useRef(0);
+  const liveNotesRef = useRef<SessionSummary | null>(null);
+  const captionsModeRef = useRef<RecordCaptionsMode | null>(
+    parseRecordCaptionsMode(captionsParam),
+  );
 
   const { colors } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
+  const sideBySideCaptions = windowWidth >= 720;
   const elapsedSeconds = Math.max(0, Math.floor((recorderState.durationMillis ?? 0) / 1000));
   const isRecording = recorderState.isRecording;
   const blockingNavigation = (isRecording || isPaused) && !stopping;
+  const liveEnabled =
+    captionsMode === 'live' && isLiveCaptionsSupported() && isLiveCaptionsModeAvailable();
+  const liveNotesEnabled =
+    captionsMode === 'live_notes' &&
+    isLiveCaptionsSupported() &&
+    isLiveCaptionsModeAvailable();
+  const liveSttEnabled = liveEnabled || liveNotesEnabled;
 
   const ensurePermission = useCallback(async (): Promise<boolean> => {
     try {
@@ -73,6 +147,23 @@ export default function RecordingScreen() {
     } catch {
       setPermission('unavailable');
       return false;
+    }
+  }, []);
+
+  const startLiveCaptions = useCallback(async () => {
+    const mode = captionsModeRef.current;
+    if (!mode || !modeNeedsLiveStt(mode)) return;
+    if (!isLiveCaptionsSupported() || !isLiveCaptionsModeAvailable()) return;
+    if (!liveRef.current) {
+      const live = createLiveCaptionController();
+      if (!live) return;
+      liveRef.current = live;
+      live.subscribe(setCaptions);
+    }
+    try {
+      await liveRef.current.start({ language: captionLanguageRef.current });
+    } catch {
+      // Snapshot already has error; recording file path continues.
     }
   }, []);
 
@@ -93,13 +184,184 @@ export default function RecordingScreen() {
       startedRef.current = true;
       activeRef.current = true;
       setIsPaused(false);
+      if (captionsModeRef.current && modeNeedsLiveStt(captionsModeRef.current)) {
+        // Native: brief delay so expo-audio can own the session before PCM streaming starts.
+        const delay = Platform.OS === 'web' ? 0 : 300;
+        if (delay === 0) {
+          void startLiveCaptions();
+        } else {
+          setTimeout(() => {
+            void startLiveCaptions();
+          }, delay);
+        }
+      }
     } catch {
       setRecordError('We could not start recording. Check microphone access and try again.');
       activeRef.current = false;
     } finally {
       setStarting(false);
     }
-  }, [recorder]);
+  }, [recorder, startLiveCaptions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([getLiveCaptionLanguagePref(), getLiveTranslateTargetPref()]).then(
+      ([lang, target]) => {
+        if (cancelled) return;
+        captionLanguageRef.current = lang;
+        setCaptionLanguage(lang);
+        translateTargetRef.current = target;
+        setTranslateTarget(target);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!liveEnabled || !id || typeof id !== 'string') return;
+    const target = translateTargetRef.current;
+    if (!target) return;
+    if (isSameLiveLanguage(captionLanguageRef.current, target)) return;
+
+    const source = captionLanguageRef.current;
+    const sessionId = id;
+
+    while (translatedCountRef.current < captions.finals.length) {
+      const nextIndex = translatedCountRef.current;
+      const chunk = captions.finals[nextIndex];
+      translatedCountRef.current = nextIndex + 1;
+      if (!chunk?.trim()) continue;
+
+      const gen = translateGenRef.current;
+      translateQueueRef.current = translateQueueRef.current
+        .then(async () => {
+          if (gen !== translateGenRef.current) return;
+          setTranslateBusy(true);
+          setTranslateError(null);
+          try {
+            const result = await translateLiveChunk(sessionId, chunk, target, source);
+            if (gen !== translateGenRef.current) return;
+            setTranslatedFinals((prev) => [...prev, result.text]);
+          } catch (err) {
+            if (gen !== translateGenRef.current) return;
+            setTranslateError(
+              err instanceof ApiClientError
+                ? err.message
+                : 'Live translation paused — captions continue.',
+            );
+          } finally {
+            if (gen === translateGenRef.current) {
+              setTranslateBusy(false);
+            }
+          }
+        })
+        .catch(() => undefined);
+    }
+  }, [captions.finals, liveEnabled, id, translateTarget]);
+
+  const flushLiveNotesRef = useRef<(sessionId: string, gen: number) => Promise<void>>(
+    async () => undefined,
+  );
+  const armLiveNotesFlushRef = useRef<(sessionId: string) => void>(() => undefined);
+  const notesChainRef = useRef(Promise.resolve());
+
+  const armLiveNotesFlush = useCallback((sessionId: string) => {
+    if (notesFinalsRef.current.length <= notesSentCountRef.current) return;
+    // Never reset a pending timer — continuous Deepgram finals were cancelling debounce forever.
+    if (notesFlushTimerRef.current) return;
+
+    const delayMs = liveNotesRef.current ? 900 : 250;
+    const gen = notesGenRef.current;
+    notesFlushTimerRef.current = setTimeout(() => {
+      notesFlushTimerRef.current = null;
+      void flushLiveNotesRef.current(sessionId, gen);
+    }, delayMs);
+  }, []);
+  armLiveNotesFlushRef.current = armLiveNotesFlush;
+
+  const flushLiveNotes = useCallback(async (sessionId: string, gen: number) => {
+    const run = async () => {
+      if (gen !== notesGenRef.current) return;
+      const start = notesSentCountRef.current;
+      const finals = notesFinalsRef.current;
+      const end = finals.length;
+      if (end <= start) return;
+      const chunk = finals.slice(start, end).join(' ').trim();
+      if (!chunk) {
+        notesSentCountRef.current = end;
+        return;
+      }
+
+      notesInFlightRef.current = true;
+      setNotesError(null);
+      try {
+        const result = await mergeLiveNotesChunk(
+          sessionId,
+          chunk,
+          liveNotesRef.current ?? undefined,
+        );
+        if (gen !== notesGenRef.current) return;
+        notesSentCountRef.current = end;
+        liveNotesRef.current = result;
+      } catch (err) {
+        if (gen !== notesGenRef.current) return;
+        setNotesError(
+          err instanceof ApiClientError
+            ? err.message
+            : 'Live notes paused — recording continues.',
+        );
+      } finally {
+        notesInFlightRef.current = false;
+        if (
+          gen === notesGenRef.current &&
+          notesFinalsRef.current.length > notesSentCountRef.current
+        ) {
+          armLiveNotesFlushRef.current(sessionId);
+        }
+      }
+    };
+
+    // Serialize merges so stop can await the full chain (no early-return while in-flight).
+    const next = notesChainRef.current.then(run, run);
+    notesChainRef.current = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    await next;
+  }, []);
+  flushLiveNotesRef.current = flushLiveNotes;
+
+  // Keep a live ref of finals (including when only interim text changes).
+  useEffect(() => {
+    notesFinalsRef.current = captions.finals;
+  }, [captions.finals]);
+
+  // When finalized phrase count grows, arm a one-shot flush (never reset while pending).
+  useEffect(() => {
+    if (!liveNotesEnabled || !id || typeof id !== 'string') return;
+    if (captions.finals.length <= notesSentCountRef.current) return;
+    armLiveNotesFlush(id);
+  }, [captions.finals.length, liveNotesEnabled, id, armLiveNotesFlush]);
+
+  // Clear flush timer only on unmount or when leaving live-notes mode.
+  useEffect(() => {
+    if (liveNotesEnabled) return;
+    if (notesFlushTimerRef.current) {
+      clearTimeout(notesFlushTimerRef.current);
+      notesFlushTimerRef.current = null;
+    }
+  }, [liveNotesEnabled]);
+
+  useEffect(() => {
+    return () => {
+      if (notesFlushTimerRef.current) {
+        clearTimeout(notesFlushTimerRef.current);
+        notesFlushTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +370,21 @@ export default function RecordingScreen() {
       if (!id || typeof id !== 'string') {
         setBootError('Missing session id.');
         return;
+      }
+
+      let mode = parseRecordCaptionsMode(captionsParam) ?? captionsModeRef.current;
+      if (!mode) {
+        mode = await getRecordCaptionsModePref();
+      }
+      if (mode === 'live' && !isLiveCaptionsModeAvailable()) {
+        mode = 'batch';
+      }
+      if (mode === 'live_notes' && !isLiveCaptionsModeAvailable()) {
+        mode = 'notes';
+      }
+      if (!cancelled) {
+        captionsModeRef.current = mode;
+        setCaptionsMode(mode);
       }
 
       try {
@@ -127,8 +404,17 @@ export default function RecordingScreen() {
       }
 
       const granted = await ensurePermission();
-      if (!cancelled && granted && !startedRef.current) {
+      if (cancelled || !granted) return;
+
+      if (!startedRef.current) {
         await startRecording();
+        return;
+      }
+
+      // Effect re-ran (e.g. Strict Mode / callback identity) after the file recorder
+      // already started — restart live STT if cleanup tore it down.
+      if (modeNeedsLiveStt(captionsModeRef.current) && !liveRef.current) {
+        void startLiveCaptions();
       }
     }
 
@@ -136,7 +422,15 @@ export default function RecordingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, ensurePermission, startRecording]);
+  }, [id, captionsParam, ensurePermission, startRecording, startLiveCaptions]);
+
+  // Stop live STT only when leaving the recording screen — not when boot deps churn.
+  useEffect(() => {
+    return () => {
+      void liveRef.current?.stop().catch(() => undefined);
+      liveRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const onChange = (next: AppStateStatus) => {
@@ -164,6 +458,7 @@ export default function RecordingScreen() {
         );
         if (!ok) return;
         activeRef.current = false;
+        void liveRef.current?.stop().catch(() => undefined);
         navigation.dispatch(event.data.action);
       })();
     });
@@ -175,10 +470,12 @@ export default function RecordingScreen() {
     try {
       if (isRecording) {
         recorder.pause();
+        liveRef.current?.pause();
         setIsPaused(true);
         return;
       }
       recorder.record();
+      liveRef.current?.resume();
       setIsPaused(false);
       activeRef.current = true;
     } catch {
@@ -191,6 +488,15 @@ export default function RecordingScreen() {
     setStopping(true);
     setRecordError(null);
     try {
+      let liveResult: Awaited<ReturnType<LiveCaptionController['stop']>> | null = null;
+      try {
+        if (liveSttEnabled && liveRef.current) {
+          liveResult = await liveRef.current.stop();
+        }
+      } catch {
+        liveResult = null;
+      }
+
       await recorder.stop();
       activeRef.current = false;
       setIsPaused(false);
@@ -216,6 +522,48 @@ export default function RecordingScreen() {
         await updateSession(id, { durationSeconds });
       } catch {
         // Non-fatal.
+      }
+
+      if (liveNotesEnabled) {
+        // Merge any speech that hadn't flushed yet, then persist.
+        try {
+          if (notesFlushTimerRef.current) {
+            clearTimeout(notesFlushTimerRef.current);
+            notesFlushTimerRef.current = null;
+          }
+          // Prefer controller snapshot (includes trailing interim promoted on stop);
+          // React `captions` state may not have flushed yet.
+          const snap = liveRef.current?.getSnapshot();
+          notesFinalsRef.current = snap?.finals?.length
+            ? snap.finals
+            : liveResult?.text
+              ? [liveResult.text]
+              : captions.finals;
+          await flushLiveNotes(id, notesGenRef.current);
+          // Drain any merge that was already in flight before this flush.
+          await notesChainRef.current;
+        } catch {
+          // Best-effort final merge.
+        }
+        const notes = liveNotesRef.current;
+        if (notes) {
+          try {
+            await finalizeSessionNotes(id, notes);
+          } catch {
+            // Non-fatal — user can still upload; notes may be incomplete.
+          }
+        }
+      } else if (liveResult?.text) {
+        try {
+          await saveLiveTranscript(
+            id,
+            liveResult.text,
+            liveResult.segments,
+            liveResult.language,
+          );
+        } catch {
+          // Non-fatal — batch Whisper still runs after upload if needed.
+        }
       }
 
       router.replace(`/session/${id}`);
@@ -274,7 +622,11 @@ export default function RecordingScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <ScrollView
+      style={[styles.screen, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={[styles.kicker, { color: colors.inkMuted }]}>Recording</Text>
       <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
         {title}
@@ -298,9 +650,292 @@ export default function RecordingScreen() {
           ]}
         />
         <Text style={[styles.statusText, { color: colors.ink }]}>
-          {stopping ? 'Saving…' : isRecording ? 'Listening' : isPaused ? 'Paused' : 'Ready'}
+          {stopping
+            ? liveNotesEnabled
+              ? 'Saving notes…'
+              : 'Saving…'
+            : isRecording
+              ? liveNotesEnabled && captions.status === 'live'
+                ? 'Listening · live notes'
+                : liveEnabled && captions.status === 'live'
+                  ? 'Listening · live captions'
+                  : captionsMode === 'notes'
+                    ? 'Listening · notes after stop'
+                    : 'Listening'
+              : isPaused
+                ? 'Paused'
+                : 'Ready'}
         </Text>
       </View>
+
+      {liveNotesEnabled ? (
+        <View
+          style={[
+            styles.captionCard,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+          accessibilityLiveRegion="polite"
+        >
+          <Text style={[styles.captionLabel, { color: colors.inkMuted }]}>Hearing</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.langScroll}
+            contentContainerStyle={styles.langRow}
+          >
+            {LIVE_CAPTION_LANGUAGES.map((opt) => {
+              const selected = captionLanguage === opt.code;
+              return (
+                <Pressable
+                  key={opt.code}
+                  onPress={() => {
+                    notesGenRef.current += 1;
+                    notesSentCountRef.current = 0;
+                    liveNotesRef.current = null;
+                    setNotesError(null);
+                    captionLanguageRef.current = opt.code;
+                    setCaptionLanguage(opt.code);
+                    void liveRef.current?.setLanguage(opt.code);
+                  }}
+                  style={[
+                    styles.langChip,
+                    {
+                      borderColor: selected ? colors.accent : colors.border,
+                      backgroundColor: colors.surface,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`Spoken language ${opt.label}`}
+                >
+                  <Text
+                    style={[
+                      styles.langChipText,
+                      { color: selected ? colors.accent : colors.inkMuted },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          {notesError ? (
+            <Text style={[styles.captionText, { color: colors.danger }]}>{notesError}</Text>
+          ) : null}
+          {captions.finals.length > 0 || Boolean(captions.interim.trim()) ? (
+            <Text style={[styles.captionText, { color: colors.ink }]}>
+              {captions.finals.join(' ')}
+              {captions.interim.trim() ? (
+                <Text style={{ color: colors.inkMuted }}>
+                  {captions.finals.length > 0 ? ' ' : ''}
+                  {captions.interim}
+                </Text>
+              ) : null}
+            </Text>
+          ) : (
+            <Text style={[styles.captionText, { color: colors.inkMuted }]}>
+              {captions.status === 'connecting'
+                ? 'Connecting…'
+                : captions.error
+                  ? captions.error
+                  : captions.status === 'error'
+                    ? 'Mic text unavailable — recording continues.'
+                    : 'Speak to see text…'}
+            </Text>
+          )}
+        </View>
+      ) : null}
+
+      {liveEnabled ? (
+        <View
+          style={[
+            styles.captionPanes,
+            sideBySideCaptions ? styles.captionPanesRow : styles.captionPanesStack,
+          ]}
+        >
+          <View
+            style={[
+              styles.captionCard,
+              sideBySideCaptions && styles.captionCardHalf,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+            accessibilityLiveRegion="polite"
+          >
+            <Text style={[styles.captionLabel, { color: colors.inkMuted }]}>
+              Spoken language
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.langScroll}
+              contentContainerStyle={styles.langRow}
+            >
+              {LIVE_CAPTION_LANGUAGES.map((opt) => {
+                const selected = captionLanguage === opt.code;
+                return (
+                  <Pressable
+                    key={opt.code}
+                    onPress={() => {
+                      translateGenRef.current += 1;
+                      captionLanguageRef.current = opt.code;
+                      setCaptionLanguage(opt.code);
+                      translatedCountRef.current = 0;
+                      setTranslatedFinals([]);
+                      setTranslateError(null);
+                      void liveRef.current?.setLanguage(opt.code);
+                    }}
+                    style={[
+                      styles.langChip,
+                      {
+                        borderColor: selected ? colors.accent : colors.border,
+                        backgroundColor: colors.surface,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`Caption language ${opt.label}`}
+                  >
+                    <Text
+                      style={[
+                        styles.langChipText,
+                        { color: selected ? colors.accent : colors.inkMuted },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            {captionLanguage === 'multi' ? (
+              <Text style={[styles.autoHint, { color: colors.inkMuted }]}>
+                Auto works for English, Spanish, French, German, Hindi, Russian, Portuguese,
+                Japanese, Italian, and Dutch. Use Tagalog or Chinese chips for those languages.
+              </Text>
+            ) : null}
+            {captions.finals.length > 0 || Boolean(captions.interim.trim()) ? (
+              <Text style={[styles.captionText, { color: colors.ink }]}>
+                {captions.finals.join(' ')}
+                {captions.interim.trim() ? (
+                  <Text style={{ color: colors.inkMuted }}>
+                    {captions.finals.length > 0 ? ' ' : ''}
+                    {captions.interim}
+                  </Text>
+                ) : null}
+              </Text>
+            ) : (
+              <Text style={[styles.captionText, { color: colors.inkMuted }]}>
+                {captions.status === 'connecting'
+                  ? 'Connecting…'
+                  : captions.error
+                    ? captions.error
+                    : captions.status === 'error'
+                      ? 'Captions unavailable — recording continues.'
+                      : 'Speak to see captions…'}
+              </Text>
+            )}
+          </View>
+
+          <View
+            style={[
+              styles.captionCard,
+              sideBySideCaptions && styles.captionCardHalf,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+            accessibilityLiveRegion="polite"
+          >
+            <Text style={[styles.captionLabel, { color: colors.inkMuted }]}>
+              Live translate
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.langScroll}
+              contentContainerStyle={styles.langRow}
+            >
+              {LIVE_TRANSLATE_TARGET_OPTIONS.map((opt) => {
+                const selected = translateTarget === opt.code;
+                const disabled =
+                  opt.code != null && isSameLiveLanguage(captionLanguage, opt.code);
+                return (
+                  <Pressable
+                    key={opt.label}
+                    disabled={disabled}
+                    onPress={() => {
+                      translateGenRef.current += 1;
+                      translateTargetRef.current = opt.code;
+                      setTranslateTarget(opt.code);
+                      void setLiveTranslateTargetPref(opt.code);
+                      translatedCountRef.current = 0;
+                      setTranslatedFinals([]);
+                      setTranslateError(null);
+                    }}
+                    style={[
+                      styles.langChip,
+                      {
+                        borderColor: selected ? colors.accent : colors.border,
+                        backgroundColor: colors.surface,
+                        opacity: disabled ? 0.4 : 1,
+                      },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected, disabled }}
+                    accessibilityLabel={`Translate to ${opt.label}`}
+                  >
+                    <Text
+                      style={[
+                        styles.langChipText,
+                        { color: selected ? colors.accent : colors.inkMuted },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            {!translateTarget ? (
+              <Text style={[styles.captionText, { color: colors.inkMuted }]}>
+                Pick a language to see a live translation beside the captions.
+              </Text>
+            ) : isSameLiveLanguage(captionLanguage, translateTarget) ? (
+              <Text style={[styles.captionText, { color: colors.inkMuted }]}>
+                Choose a different language than the spoken captions.
+              </Text>
+            ) : translatedFinals.length ? (
+              <Text style={[styles.captionText, { color: colors.ink }]}>
+                {translatedFinals.join(' ')}
+                {translateBusy ? (
+                  <Text style={{ color: colors.inkMuted }}> …</Text>
+                ) : null}
+              </Text>
+            ) : (
+              <Text style={[styles.captionText, { color: colors.inkMuted }]}>
+                {translateError
+                  ? translateError
+                  : translateBusy
+                    ? 'Translating…'
+                    : 'Translation appears as phrases finalize…'}
+              </Text>
+            )}
+          </View>
+        </View>
+      ) : captionsMode === 'live' && !liveEnabled ? (
+        <Text style={[styles.hint, { color: colors.inkMuted }]}>
+          Live captions need a development or EAS build (not Expo Go). Recording continues without
+          captions.
+        </Text>
+      ) : captionsMode === 'live_notes' && !liveNotesEnabled ? (
+        <Text style={[styles.hint, { color: colors.inkMuted }]}>
+          Live Note Taker needs a development or EAS build (not Expo Go). Use Auto Notes instead, or
+          recording continues without live notes.
+        </Text>
+      ) : captionsMode === 'notes' ? (
+        <Text style={[styles.hint, { color: colors.inkMuted }]}>
+          Auto Notes: we will write structured notes after you upload — no transcript is saved.
+        </Text>
+      ) : null}
 
       {recordError ? (
         <Text style={[styles.error, { color: colors.danger }]} accessibilityRole="alert">
@@ -350,19 +985,29 @@ export default function RecordingScreen() {
       </Pressable>
 
       <Text style={[styles.hint, { color: colors.inkMuted }]}>
-        Recording continues offline. When you stop, review locally, then proceed to transcribe.
+        {liveNotesEnabled
+          ? 'Notes update as you speak. When you stop, we save notes and keep the audio — no transcript.'
+          : liveEnabled
+            ? 'Captions appear as you speak. When you stop, we save audio plus any finals, then you can proceed to summarize.'
+            : captionsMode === 'notes'
+              ? 'Recording audio only. After upload we generate notes automatically without saving a transcript.'
+              : 'Recording audio only. When you stop, review locally, then proceed to upload and transcribe.'}
       </Text>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
+  },
+  container: {
+    flexGrow: 1,
     padding: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.md,
+    paddingBottom: spacing.xl,
   },
   centered: {
     flex: 1,
@@ -391,6 +1036,74 @@ const styles = StyleSheet.create({
   statusText: {
     ...typography.body,
     fontWeight: '600',
+  },
+  captionPanes: {
+    width: '100%',
+    maxWidth: 960,
+    gap: spacing.md,
+  },
+  captionPanesRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  captionPanesStack: {
+    flexDirection: 'column',
+  },
+  captionCard: {
+    width: '100%',
+    minHeight: 96,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  captionCardHalf: {
+    flex: 1,
+    width: undefined,
+    minWidth: 0,
+  },
+  captionLabel: {
+    ...typography.caption,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontWeight: '600',
+  },
+  langScroll: {
+    alignSelf: 'stretch',
+    width: '100%',
+    flexGrow: 0,
+  },
+  langRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+    paddingRight: spacing.sm,
+  },
+  langChip: {
+    borderWidth: 1,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    minHeight: 30,
+    marginRight: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+    flexGrow: 0,
+  },
+  langChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  autoHint: {
+    ...typography.caption,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  captionText: {
+    ...typography.body,
+    fontSize: 15,
+    lineHeight: 22,
   },
   error: {
     textAlign: 'center',
