@@ -19,6 +19,12 @@ const envSchema = z.object({
   TRANSCRIPTION_BASE_URL: z.string().default(''),
   /** Live captions WebSocket proxy (Deepgram Listen). Server-only. */
   DEEPGRAM_API_KEY: z.string().optional().default(''),
+  /**
+   * Comma-separated browser origins allowed to call the API (CORS).
+   * Empty in development = allow all (local Expo web).
+   * In production, set explicitly (e.g. https://app.example.com).
+   */
+  CORS_ORIGINS: z.string().optional().default(''),
   LOG_SENSITIVE: z
     .enum(['true', 'false'])
     .default('false')

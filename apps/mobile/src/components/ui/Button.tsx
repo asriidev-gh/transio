@@ -1,5 +1,6 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
-import { radii, sizes, spacing } from '@/src/theme';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { gradients, radii, sizes, spacing } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -24,19 +25,27 @@ export function Button({
   const { colors, shadows } = useTheme();
   const idle = disabled || loading;
 
+  // Secondary/ghost always get a solid surface so they read as real controls on soft canvases.
   const background =
-    variant === 'primary'
-      ? colors.accent
-      : variant === 'danger'
-        ? colors.danger
-        : variant === 'secondary'
-          ? colors.surface
-          : 'transparent';
+    variant === 'danger'
+      ? colors.danger
+      : variant === 'primary'
+        ? 'transparent'
+        : colors.surface;
+
   const borderColor =
-    variant === 'secondary' || variant === 'ghost' ? colors.border : background;
+    variant === 'primary' || variant === 'danger' ? 'transparent' : colors.border;
+
   const textColor =
     variant === 'primary' || variant === 'danger' ? colors.onBrand : colors.ink;
-  const elevate = variant === 'primary' || variant === 'secondary';
+
+  const elevate = variant === 'primary' || variant === 'secondary' || variant === 'ghost';
+
+  const content = loading ? (
+    <ActivityIndicator color={textColor} />
+  ) : (
+    <Text style={[styles.label, { color: textColor }]}>{label}</Text>
+  );
 
   return (
     <Pressable
@@ -46,19 +55,28 @@ export function Button({
       accessibilityLabel={accessibilityLabel ?? label}
       style={({ pressed }) => [
         styles.base,
-        elevate ? shadows.float : null,
+        elevate && variant !== 'primary' ? shadows.soft : null,
+        variant === 'primary' ? shadows.emboss : null,
         {
           backgroundColor: background,
           borderColor,
-          opacity: idle ? 0.45 : pressed ? 0.9 : 1,
+          opacity: idle ? 0.45 : pressed ? 0.92 : 1,
           transform: [{ scale: pressed && !idle ? 0.98 : 1 }],
+          overflow: 'hidden',
         },
       ]}
     >
-      {loading ? (
-        <ActivityIndicator color={textColor} />
+      {variant === 'primary' ? (
+        <LinearGradient
+          colors={[...gradients.primary]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.gradientFill}
+        >
+          {content}
+        </LinearGradient>
       ) : (
-        <Text style={[styles.label, { color: textColor }]}>{label}</Text>
+        <View style={styles.plainFill}>{content}</View>
       )}
     </Pressable>
   );
@@ -68,7 +86,21 @@ const styles = StyleSheet.create({
   base: {
     minHeight: sizes.button,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'stretch',
+    justifyContent: 'center',
+  },
+  gradientFill: {
+    flex: 1,
+    minHeight: sizes.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
+  },
+  plainFill: {
+    flex: 1,
+    minHeight: sizes.button,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,

@@ -51,7 +51,7 @@ import {
 import { finalizeSessionNotes, mergeLiveNotesChunk } from '@/src/services/live-notes';
 import { saveLocalAudioUri } from '@/src/services/local-audio';
 import { getSession, updateSession } from '@/src/services/sessions';
-import { radii, spacing, typography } from '@/src/theme';
+import { radii, sizes, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { confirmAction } from '@/src/utils/confirm';
 import type { SessionSummary, TranslateLanguage } from '@sessionai/shared';
@@ -121,7 +121,7 @@ export default function RecordingScreen() {
     parseRecordCaptionsMode(captionsParam),
   );
 
-  const { colors } = useTheme();
+  const { colors, shadows } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const sideBySideCaptions = windowWidth >= 720;
   const elapsedSeconds = Math.max(0, Math.floor((recorderState.durationMillis ?? 0) / 1000));
@@ -413,7 +413,11 @@ export default function RecordingScreen() {
 
       // Effect re-ran (e.g. Strict Mode / callback identity) after the file recorder
       // already started — restart live STT if cleanup tore it down.
-      if (modeNeedsLiveStt(captionsModeRef.current) && !liveRef.current) {
+      if (
+        captionsModeRef.current &&
+        modeNeedsLiveStt(captionsModeRef.current) &&
+        !liveRef.current
+      ) {
         void startLiveCaptions();
       }
     }
@@ -612,7 +616,7 @@ export default function RecordingScreen() {
           title="Microphone permission needed"
           description={
             permission === 'denied'
-              ? 'SessionAI needs microphone access to record seminars and discussions. Enable it in system settings, then try again.'
+              ? 'Smart Transcriber needs microphone access to record seminars and discussions. Enable it in system settings, then try again.'
               : 'Microphone access is unavailable in this environment.'
           }
           onRetry={() => void ensurePermission().then((ok) => (ok ? startRecording() : undefined))}
@@ -757,14 +761,16 @@ export default function RecordingScreen() {
           <View
             style={[
               styles.captionCard,
+              styles.spokenPane,
               sideBySideCaptions && styles.captionCardHalf,
               { backgroundColor: colors.surface, borderColor: colors.border },
             ]}
             accessibilityLiveRegion="polite"
           >
-            <Text style={[styles.captionLabel, { color: colors.inkMuted }]}>
-              Spoken language
-            </Text>
+            <View style={styles.paneHeader}>
+              <View style={[styles.paneDot, { backgroundColor: colors.accent }]} />
+              <Text style={[styles.captionLabel, { color: colors.inkMuted }]}>Spoken</Text>
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -840,14 +846,22 @@ export default function RecordingScreen() {
           <View
             style={[
               styles.captionCard,
+              styles.translatePane,
               sideBySideCaptions && styles.captionCardHalf,
-              { backgroundColor: colors.surface, borderColor: colors.border },
+              {
+                backgroundColor: colors.actionImport,
+                borderColor: colors.cyan,
+              },
             ]}
             accessibilityLiveRegion="polite"
           >
-            <Text style={[styles.captionLabel, { color: colors.inkMuted }]}>
-              Live translate
-            </Text>
+            <View style={styles.paneHeader}>
+              <View style={[styles.paneDot, { backgroundColor: colors.cyan }]} />
+              <Text style={[styles.captionLabel, { color: colors.cyan }]}>Live translate</Text>
+              {translateBusy ? (
+                <Text style={[styles.translateBusy, { color: colors.inkMuted }]}>Updating…</Text>
+              ) : null}
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -874,8 +888,8 @@ export default function RecordingScreen() {
                     style={[
                       styles.langChip,
                       {
-                        borderColor: selected ? colors.accent : colors.border,
-                        backgroundColor: colors.surface,
+                        borderColor: selected ? colors.cyan : colors.border,
+                        backgroundColor: selected ? colors.surface : colors.surface,
                         opacity: disabled ? 0.4 : 1,
                       },
                     ]}
@@ -886,7 +900,7 @@ export default function RecordingScreen() {
                     <Text
                       style={[
                         styles.langChipText,
-                        { color: selected ? colors.accent : colors.inkMuted },
+                        { color: selected ? colors.cyan : colors.inkMuted },
                       ]}
                     >
                       {opt.label}
@@ -896,22 +910,22 @@ export default function RecordingScreen() {
               })}
             </ScrollView>
             {!translateTarget ? (
-              <Text style={[styles.captionText, { color: colors.inkMuted }]}>
-                Pick a language to see a live translation beside the captions.
+              <Text style={[styles.translateText, { color: colors.inkMuted }]}>
+                Pick a language to mirror captions in real time.
               </Text>
             ) : isSameLiveLanguage(captionLanguage, translateTarget) ? (
-              <Text style={[styles.captionText, { color: colors.inkMuted }]}>
+              <Text style={[styles.translateText, { color: colors.inkMuted }]}>
                 Choose a different language than the spoken captions.
               </Text>
             ) : translatedFinals.length ? (
-              <Text style={[styles.captionText, { color: colors.ink }]}>
+              <Text style={[styles.translateText, { color: colors.ink }]}>
                 {translatedFinals.join(' ')}
                 {translateBusy ? (
                   <Text style={{ color: colors.inkMuted }}> …</Text>
                 ) : null}
               </Text>
             ) : (
-              <Text style={[styles.captionText, { color: colors.inkMuted }]}>
+              <Text style={[styles.translateText, { color: colors.inkMuted }]}>
                 {translateError
                   ? translateError
                   : translateBusy
@@ -979,9 +993,17 @@ export default function RecordingScreen() {
         disabled={stopping}
         accessibilityRole="button"
         accessibilityLabel="Cancel"
-        style={styles.cancel}
+        style={({ pressed }) => [
+          styles.cancel,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            opacity: stopping ? 0.45 : pressed ? 0.92 : 1,
+          },
+          shadows.soft,
+        ]}
       >
-        <Text style={[styles.cancelText, { color: colors.inkMuted }]}>Cancel</Text>
+        <Text style={[styles.cancelText, { color: colors.ink }]}>Cancel</Text>
       </Pressable>
 
       <Text style={[styles.hint, { color: colors.inkMuted }]}>
@@ -1051,22 +1073,49 @@ const styles = StyleSheet.create({
   },
   captionCard: {
     width: '100%',
-    minHeight: 96,
+    minHeight: 120,
     borderWidth: 1,
-    borderRadius: radii.md,
+    borderRadius: radii.card,
     padding: spacing.md,
-    gap: spacing.xs,
+    gap: spacing.sm,
+  },
+  spokenPane: {
+    minHeight: 140,
+  },
+  translatePane: {
+    minHeight: 160,
   },
   captionCardHalf: {
     flex: 1,
     width: undefined,
     minWidth: 0,
   },
+  paneHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  paneDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   captionLabel: {
     ...typography.caption,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    fontWeight: '600',
+    fontWeight: '700',
+    flex: 1,
+  },
+  translateBusy: {
+    ...typography.caption,
+    fontSize: 11,
+  },
+  translateText: {
+    ...typography.body,
+    fontSize: 17,
+    lineHeight: 26,
+    fontWeight: '500',
   },
   langScroll: {
     alignSelf: 'stretch',
@@ -1133,12 +1182,18 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   cancel: {
-    minHeight: 44,
+    alignSelf: 'stretch',
+    maxWidth: 420,
+    minHeight: sizes.button,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.pill,
+    alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
   },
   cancelText: {
-    fontSize: 15,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '700',
   },
   hint: {
     ...typography.caption,

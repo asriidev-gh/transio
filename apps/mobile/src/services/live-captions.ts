@@ -345,17 +345,23 @@ export function createLiveCaptionController(): LiveCaptionController | null {
   async function openSocket(token: string): Promise<void> {
     const url =
       `${wsBaseUrl(mobileEnv.apiBaseUrl)}/live/transcribe` +
-      `?token=${encodeURIComponent(token)}` +
-      `&language=${encodeURIComponent(language)}`;
+      `?language=${encodeURIComponent(language)}`;
     const next = new WebSocket(url);
     next.binaryType = 'arraybuffer';
     socket = next;
 
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Live caption connection timed out')), 12_000);
+      let authed = false;
 
       next.onopen = () => {
-        /* wait for ready */
+        try {
+          next.send(JSON.stringify({ type: 'auth', token }));
+          authed = true;
+        } catch {
+          clearTimeout(timer);
+          reject(new Error('Could not authenticate live caption stream'));
+        }
       };
 
       next.onmessage = (event) => {
@@ -389,7 +395,13 @@ export function createLiveCaptionController(): LiveCaptionController | null {
       next.onclose = () => {
         clearTimeout(timer);
         if (status === 'connecting') {
-          reject(new Error('Live caption connection closed'));
+          reject(
+            new Error(
+              authed
+                ? 'Live caption connection closed'
+                : 'Live caption auth failed before connect',
+            ),
+          );
         } else if (!stopping) {
           scheduleReconnect();
         }

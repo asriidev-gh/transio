@@ -22,7 +22,7 @@ export function RecordingButton({ recording, paused, disabled, onPress }: Record
   const { colors, reduceMotion } = useTheme();
   const live = recording && !paused;
   const pulse = useSharedValue(1);
-  const label = !recording ? 'Start recording' : paused ? 'Resume recording' : 'Stop recording';
+  const label = !recording ? 'Tap to record' : paused ? 'Resume' : 'Stop';
 
   useEffect(() => {
     if (live && !reduceMotion) {
@@ -57,8 +57,8 @@ export function RecordingButton({ recording, paused, disabled, onPress }: Record
           style={[
             styles.inner,
             {
-              backgroundColor: live ? colors.recording : colors.surface,
-              borderColor: colors.recording,
+              backgroundColor: live ? colors.recording : colors.accent,
+              borderColor: live ? colors.recording : colors.accentDeep,
             },
           ]}
         >
@@ -67,7 +67,7 @@ export function RecordingButton({ recording, paused, disabled, onPress }: Record
           ) : paused ? (
             <Icon name="play" size={40} />
           ) : (
-            <Icon name="microphone" size={44} />
+            <Icon name="microphone" size={44} color="#FFFFFF" />
           )}
         </View>
       </View>

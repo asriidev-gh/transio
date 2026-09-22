@@ -237,17 +237,17 @@ export default function ProcessingScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Text style={[styles.kicker, { color: colors.inkMuted }]}>
-        {done ? 'Ready' : failed ? 'Needs attention' : inFlight ? 'Transcribing' : 'Process'}
+        {done ? 'Ready' : failed ? 'Needs attention' : inFlight ? 'Analyzing' : 'Process'}
       </Text>
       <Text style={[styles.title, { color: colors.ink }]}>{sessionTitle}</Text>
       <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
         {done
-          ? 'Your transcript and summary are ready to review.'
+          ? 'Your transcript is ready — review, translate, or share.'
           : failed
-            ? 'Something went wrong — your audio is still saved.'
+            ? 'We couldn’t finish this recording. Your audio is still saved.'
             : inFlight
-              ? 'Your recording is being processed. Safe to leave this screen.'
-              : 'We’ll transcribe speech, then format a summary.'}
+              ? 'Smart Transcriber is analyzing your audio. Safe to leave — we’ll notify you when it’s done.'
+              : 'We’ll transcribe speech, then prepare a clear summary.'}
       </Text>
 
       {inFlight && !done ? (

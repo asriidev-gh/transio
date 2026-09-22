@@ -1,64 +1,74 @@
 import { Platform, type TextStyle, type ViewStyle } from 'react-native';
 
 /**
- * Transio — soft 3D / claymorphism.
- * Dark: mint clay on deep slate. Light: white clay on warm cream (logo canvas).
+ * Smart Transcriber — Fintech-premium glass language.
+ * Soft canvas, blue→violet primary gradient, generous radii, quiet shadows.
+ * Prefer useTheme() so light/dark both work.
  */
 export const darkColors = {
-  background: '#1E313B',
-  backgroundAlt: '#172A35',
-  surface: '#253B47',
-  ink: '#E6F5EE',
-  inkMuted: '#6E8B97',
-  tertiary: '#5A7582',
-  brand: '#9DE0AD',
-  brandSoft: '#A2E3C4',
-  accent: '#9DE0AD',
-  accentSoft: '#2A4652',
-  accentDeep: '#7BC992',
-  success: '#9DE0AD',
-  warning: '#E0C07A',
-  danger: '#E07A7A',
-  border: '#334E5A',
-  recording: '#E07A7A',
-  player: '#172A35',
-  playerText: '#E6F5EE',
-  playerMuted: '#6E8B97',
-  onBrand: '#1E313B',
-  overlay: 'rgba(10, 20, 26, 0.55)',
-  actionRecord: '#3A2A2E',
-  actionImport: '#2A4652',
-  actionFav: '#2E3F52',
-  actionSettings: '#3A3A2E',
+  background: '#070914',
+  backgroundAlt: '#0C0F1C',
+  surface: '#121526',
+  surfaceAlt: '#1A1E32',
+  ink: '#F8FAFC',
+  inkMuted: '#9CA3AF',
+  tertiary: '#6B7280',
+  brand: '#6B7CFF',
+  brandSoft: '#9B7CFF',
+  accent: '#7B6CFF',
+  accentSoft: 'rgba(123, 108, 255, 0.2)',
+  accentDeep: '#5B4CE8',
+  cyan: '#38BDF8',
+  cyanSoft: '#7DD3FC',
+  success: '#22C55E',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  border: '#24283A',
+  recording: '#EF4444',
+  player: '#121526',
+  playerText: '#F8FAFC',
+  playerMuted: '#9CA3AF',
+  onBrand: '#FFFFFF',
+  overlay: 'rgba(7, 9, 20, 0.72)',
+  actionRecord: 'rgba(123, 108, 255, 0.18)',
+  actionImport: 'rgba(56, 189, 248, 0.14)',
+  actionFav: 'rgba(245, 158, 11, 0.14)',
+  actionSettings: 'rgba(156, 163, 175, 0.12)',
+  glass: 'rgba(18, 21, 38, 0.78)',
+  glassBorder: 'rgba(248, 250, 252, 0.08)',
 } as const;
 
-/** Cream canvas from the light lockup (~#EDE9DC) + white surfaces + slate ink. */
 export const lightColors = {
-  background: '#EDE9DC',
-  backgroundAlt: '#E5E1D4',
-  surface: '#F7F5EE',
-  ink: '#1E313B',
-  inkMuted: '#6E6B62',
-  tertiary: '#8A877C',
-  brand: '#1E313B',
-  brandSoft: '#2A4652',
-  accent: '#2A4652',
-  accentSoft: '#E0DCCE',
-  accentDeep: '#1E313B',
-  success: '#4F8F6A',
-  warning: '#B8892E',
-  danger: '#C45C5C',
-  border: '#D6D1C2',
-  recording: '#C45C5C',
-  player: '#1E313B',
-  playerText: '#F7F5EE',
-  playerMuted: '#9A978C',
-  onBrand: '#F7F5EE',
-  overlay: 'rgba(30, 49, 59, 0.4)',
-  actionRecord: '#E8DFE0',
-  actionImport: '#DFE6E4',
-  actionFav: '#E0E4EA',
-  actionSettings: '#E8E6DC',
+  background: '#F4F6FB',
+  backgroundAlt: '#EEF1F8',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F0F3FA',
+  ink: '#0F172A',
+  inkMuted: '#64748B',
+  tertiary: '#94A3B8',
+  brand: '#4A6CF7',
+  brandSoft: '#8B7CFF',
+  accent: '#5B6CFF',
+  accentSoft: 'rgba(74, 108, 247, 0.12)',
+  accentDeep: '#3D52D9',
+  cyan: '#38BDF8',
+  cyanSoft: '#7DD3FC',
+  success: '#059669',
+  warning: '#F59E0B',
+  danger: '#EF4444',
+  border: 'rgba(15, 23, 42, 0.06)',
+  recording: '#EF4444',
+  player: '#0F172A',
+  playerText: '#F8FAFC',
+  playerMuted: '#94A3B8',
+  onBrand: '#FFFFFF',
+  overlay: 'rgba(15, 23, 42, 0.4)',
+  actionRecord: 'rgba(74, 108, 247, 0.12)',
+  actionImport: 'rgba(56, 189, 248, 0.12)',
+  actionFav: 'rgba(245, 158, 11, 0.12)',
+  actionSettings: 'rgba(100, 116, 139, 0.1)',
+  glass: 'rgba(255, 255, 255, 0.82)',
+  glassBorder: 'rgba(15, 23, 42, 0.06)',
 } as const;
 
 export type ColorTokenKey = keyof typeof darkColors;
@@ -67,91 +77,114 @@ export type ColorTokens = Record<ColorTokenKey, string>;
 export type ColorScheme = 'light' | 'dark';
 export type AppearancePreference = 'system' | ColorScheme;
 
+/** Primary CTA / hero gradient stops — blue → violet (reference). */
+export const gradients = {
+  primary: ['#4A6CF7', '#A064FF'] as const,
+  aurora: ['#4A6CF7', '#7B6CFF', '#A064FF'] as const,
+  recording: ['#4A6CF7', '#EF4444'] as const,
+  soft: ['rgba(74, 108, 247, 0.14)', 'rgba(160, 100, 255, 0.10)'] as const,
+} as const;
+
 export const spacing = {
   xs: 4,
   sm: 8,
   smd: 12,
   md: 16,
+  /** 20 — compact section gaps */
+  lgSoft: 20,
   lg: 24,
   xl: 32,
-  xxl: 48,
+  xxl: 40,
+  huge: 48,
+  massive: 64,
 } as const;
 
 export const radii = {
   sm: 12,
   md: 16,
-  lg: 24,
-  xl: 32,
-  pill: 9999,
+  lg: 22,
+  xl: 28,
+  card: 24,
+  button: 18,
+  pill: 999,
 } as const;
 
 export const motion = {
-  fast: 160,
-  base: 220,
-  slow: 300,
+  fast: 200,
+  base: 280,
+  slow: 400,
 } as const;
 
 export const sizes = {
-  icon: 24,
-  iconLg: 32,
+  icon: 22,
+  iconLg: 28,
   hit: 44,
   button: 52,
-  avatar: 36,
+  avatar: 40,
+  record: 64,
 } as const;
 
 export const fonts = {
-  mono: Platform.select({
-    ios: 'SpaceMono',
-    android: 'SpaceMono',
-    default: 'SpaceMono',
-  }) as string,
+  /** UI body / labels */
+  sans: 'PlusJakartaSans_500Medium',
+  sansSemi: 'PlusJakartaSans_600SemiBold',
+  sansBold: 'PlusJakartaSans_700Bold',
+  /** Display / hero headlines */
+  display: 'Fraunces_700Bold',
+  displaySemi: 'Fraunces_600SemiBold',
+  mono: 'SpaceMono',
 } as const;
 
 export const typography = {
+  display: {
+    fontFamily: fonts.display,
+    fontSize: 34,
+    lineHeight: 40,
+    letterSpacing: -0.7,
+  },
   brand: {
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sansBold,
     fontSize: 22,
-    fontWeight: '700' as const,
     letterSpacing: -0.4,
   },
   pageTitle: {
+    fontFamily: fonts.sansBold,
     fontSize: 28,
     lineHeight: 34,
-    fontWeight: '600' as const,
     letterSpacing: -0.5,
   },
   title: {
+    fontFamily: fonts.sansSemi,
     fontSize: 22,
     lineHeight: 28,
-    fontWeight: '600' as const,
     letterSpacing: -0.3,
   },
   section: {
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: '600' as const,
-    letterSpacing: -0.2,
+    fontFamily: fonts.sansBold,
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.25,
   },
   body: {
+    fontFamily: fonts.sans,
     fontSize: 16,
     lineHeight: 24,
-    fontWeight: '400' as const,
   },
   transcript: {
+    fontFamily: fonts.sans,
     fontSize: 17,
     lineHeight: 28,
-    fontWeight: '400' as const,
   },
   meta: {
+    fontFamily: fonts.sans,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '400' as const,
   },
   caption: {
+    fontFamily: fonts.sansSemi,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '500' as const,
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
   },
   mono: {
     fontFamily: fonts.mono,
@@ -166,53 +199,72 @@ export function makeShadows(scheme: ColorScheme): {
   emboss: ViewStyle;
 } {
   const light = scheme === 'light';
-  const opacity = light
-    ? { soft: 0.12, float: 0.16, emboss: 0.2 }
-    : { soft: 0.28, float: 0.35, emboss: 0.4 };
-  const shadowColor = light ? '#6E6B62' : '#000';
+  if (!light) {
+    return {
+      soft: { elevation: 0 },
+      float: { elevation: 0 },
+      emboss: {
+        ...Platform.select<ViewStyle>({
+          ios: {
+            shadowColor: '#7B6CFF',
+            shadowOpacity: 0.35,
+            shadowRadius: 16,
+            shadowOffset: { width: 0, height: 8 },
+          },
+          android: { elevation: 8 },
+          default: {
+            shadowColor: '#7B6CFF',
+            shadowOpacity: 0.35,
+            shadowRadius: 16,
+            shadowOffset: { width: 0, height: 8 },
+          },
+        }),
+      },
+    };
+  }
   return {
     soft: Platform.select<ViewStyle>({
       ios: {
-        shadowColor,
-        shadowOpacity: opacity.soft,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 4 },
+        shadowColor: '#64748B',
+        shadowOpacity: 0.1,
+        shadowRadius: 24,
+        shadowOffset: { width: 0, height: 8 },
       },
-      android: { elevation: light ? 2 : 4 },
+      android: { elevation: 3 },
       default: {
-        shadowColor,
-        shadowOpacity: opacity.soft,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 4 },
+        shadowColor: '#64748B',
+        shadowOpacity: 0.1,
+        shadowRadius: 24,
+        shadowOffset: { width: 0, height: 8 },
       },
     })!,
     float: Platform.select<ViewStyle>({
       ios: {
-        shadowColor,
-        shadowOpacity: opacity.float,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 6 },
+        shadowColor: '#475569',
+        shadowOpacity: 0.12,
+        shadowRadius: 28,
+        shadowOffset: { width: 0, height: 10 },
       },
-      android: { elevation: light ? 4 : 8 },
+      android: { elevation: 6 },
       default: {
-        shadowColor,
-        shadowOpacity: opacity.float,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 6 },
+        shadowColor: '#475569',
+        shadowOpacity: 0.12,
+        shadowRadius: 28,
+        shadowOffset: { width: 0, height: 10 },
       },
     })!,
     emboss: Platform.select<ViewStyle>({
       ios: {
-        shadowColor,
-        shadowOpacity: opacity.emboss,
-        shadowRadius: 12,
+        shadowColor: '#4A6CF7',
+        shadowOpacity: 0.35,
+        shadowRadius: 18,
         shadowOffset: { width: 0, height: 8 },
       },
-      android: { elevation: light ? 6 : 10 },
+      android: { elevation: 8 },
       default: {
-        shadowColor,
-        shadowOpacity: opacity.emboss,
-        shadowRadius: 12,
+        shadowColor: '#4A6CF7',
+        shadowOpacity: 0.35,
+        shadowRadius: 18,
         shadowOffset: { width: 0, height: 8 },
       },
     })!,
@@ -222,7 +274,7 @@ export function makeShadows(scheme: ColorScheme): {
 export const paperThemeFrom = (colors: ColorTokens) => ({
   colors: {
     primary: colors.accent,
-    secondary: colors.accent,
+    secondary: colors.cyan,
     background: colors.background,
     surface: colors.surface,
     error: colors.danger,

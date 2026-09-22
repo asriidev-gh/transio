@@ -52,16 +52,21 @@ const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.xl,
     gap: spacing.sm,
+    alignItems: 'flex-start',
   },
   hero: {
     paddingVertical: spacing.xxl,
     maxWidth: 360,
+    alignItems: 'center',
+    alignSelf: 'center',
   },
   title: {
     ...typography.section,
+    textAlign: 'left',
   },
   titleHero: {
     ...typography.pageTitle,
+    textAlign: 'center',
   },
   description: {
     ...typography.body,
@@ -70,5 +75,6 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: spacing.md,
     gap: spacing.sm,
+    width: '100%',
   },
 });

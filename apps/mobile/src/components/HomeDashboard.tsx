@@ -15,16 +15,21 @@ interface InsightStatProps {
   value: string;
   icon: AppIconName;
   tint: string;
+  accent?: string;
   onPress?: () => void;
 }
 
 /** Compact metric tile for the home insights row. */
-export function InsightStat({ label, value, icon, tint, onPress }: InsightStatProps) {
+export function InsightStat({ label, value, icon, tint, accent, onPress }: InsightStatProps) {
   const { colors, shadows } = useTheme();
+  const accentColor = accent ?? colors.accent;
+
   const body = (
     <>
-      <View style={[styles.statIcon, { backgroundColor: tint }]}>
-        <Icon name={icon} size={22} />
+      <View style={styles.statTop}>
+        <View style={[styles.statIcon, { backgroundColor: tint }]}>
+          <Icon name={icon} size={20} variant="line" color={accentColor} />
+        </View>
       </View>
       <Text style={[styles.statValue, { color: colors.ink }]} numberOfLines={1}>
         {value}
@@ -32,12 +37,13 @@ export function InsightStat({ label, value, icon, tint, onPress }: InsightStatPr
       <Text style={[styles.statLabel, { color: colors.inkMuted }]} numberOfLines={1}>
         {label}
       </Text>
+      <View style={[styles.statAccent, { backgroundColor: accentColor }]} />
     </>
   );
 
   const shellStyle = [
     styles.stat,
-    { backgroundColor: colors.surface, borderColor: colors.border },
+    { backgroundColor: colors.surface },
     shadows.soft,
   ];
 
@@ -48,7 +54,7 @@ export function InsightStat({ label, value, icon, tint, onPress }: InsightStatPr
         style={({ pressed }) => [
           ...shellStyle,
           {
-            opacity: pressed ? 0.88 : 1,
+            opacity: pressed ? 0.9 : 1,
             transform: [{ scale: pressed ? 0.98 : 1 }],
           },
         ]}
@@ -86,7 +92,6 @@ export function HomeActionCard({ label, hint, icon, tint, onPress }: ActionCardP
         styles.action,
         {
           backgroundColor: colors.surface,
-          borderColor: colors.border,
           opacity: pressed ? 0.85 : 1,
         },
         shadows.soft,
@@ -133,7 +138,6 @@ export function InsightSessionCard({ session, onPress, width = 200 }: InsightSes
         {
           width,
           backgroundColor: colors.surface,
-          borderColor: colors.border,
           opacity: pressed ? 0.9 : 1,
         },
         shadows.soft,
@@ -142,7 +146,7 @@ export function InsightSessionCard({ session, onPress, width = 200 }: InsightSes
       accessibilityLabel={`${session.title}, ${SESSION_TYPE_LABELS[session.sessionType]}`}
     >
       <View style={[styles.sessionMark, { backgroundColor: markColor }]}>
-        <Icon name={topic.icon} size={36} />
+        <Icon name={topic.icon} size={32} />
       </View>
       <Text style={[styles.sessionTitle, { color: colors.ink }]} numberOfLines={2}>
         {session.title}
@@ -168,7 +172,7 @@ export function InsightSessionCard({ session, onPress, width = 200 }: InsightSes
         numberOfLines={2}
       >
         {preview
-          ? `“${preview}”`
+          ? preview
           : session.status === 'completed'
             ? 'Ready to review'
             : statusLabel}
@@ -181,31 +185,49 @@ const styles = StyleSheet.create({
   stat: {
     width: '47%',
     flexGrow: 1,
-    minWidth: 140,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    padding: spacing.smd,
-    gap: spacing.xs,
+    minWidth: 148,
+    borderWidth: 0,
+    borderRadius: radii.card,
+    padding: spacing.md,
+    gap: 4,
+    overflow: 'hidden',
+    minHeight: 118,
+  },
+  statTop: {
+    marginBottom: spacing.sm,
   },
   statIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.md,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
   },
   statValue: {
-    ...typography.section,
+    fontSize: 26,
+    lineHeight: 30,
+    fontWeight: '700',
+    letterSpacing: -0.6,
   },
   statLabel: {
     ...typography.caption,
+    fontWeight: '600',
+  },
+  statAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 16,
+    bottom: 16,
+    width: 3,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+    opacity: 0.85,
   },
   action: {
     flex: 1,
     minWidth: 0,
-    borderWidth: 1,
-    borderRadius: radii.xl,
+    borderWidth: 0,
+    borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.sm,
     minHeight: 120,
@@ -214,7 +236,7 @@ const styles = StyleSheet.create({
   actionIcon: {
     width: 48,
     height: 48,
-    borderRadius: radii.lg,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -225,23 +247,25 @@ const styles = StyleSheet.create({
     ...typography.meta,
   },
   sessionCard: {
-    borderWidth: 1,
-    borderRadius: radii.xl,
+    borderWidth: 0,
+    borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.sm,
     flexShrink: 0,
   },
   sessionMark: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.lg,
+    width: 52,
+    height: 52,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sessionTitle: {
-    ...typography.body,
+    fontSize: 15,
+    lineHeight: 20,
     fontWeight: '600',
-    minHeight: 44,
+    letterSpacing: -0.2,
+    minHeight: 40,
   },
   sessionMeta: {
     ...typography.caption,

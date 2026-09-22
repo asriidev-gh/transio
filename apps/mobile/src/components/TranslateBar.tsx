@@ -32,7 +32,7 @@ export function TranslateBar({
   disabled = false,
   onSelect,
 }: TranslateBarProps) {
-  const { colors } = useTheme();
+  const { colors, shadows } = useTheme();
   const [open, setOpen] = useState(false);
   const locked = busy || disabled;
 
@@ -134,12 +134,20 @@ export function TranslateBar({
               }}
             />
             <Pressable
-              style={styles.cancel}
+              style={({ pressed }) => [
+                styles.cancel,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.92 : 1,
+                },
+                shadows.soft,
+              ]}
               onPress={() => setOpen(false)}
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
-              <Text style={[styles.cancelText, { color: colors.inkMuted }]}>Cancel</Text>
+              <Text style={[styles.cancelText, { color: colors.ink }]}>Cancel</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -218,10 +226,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     marginHorizontal: spacing.md,
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.pill,
+    minHeight: 48,
   },
   cancelText: {
     ...typography.body,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

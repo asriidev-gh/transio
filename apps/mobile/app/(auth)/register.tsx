@@ -62,7 +62,7 @@ export default function RegisterScreen() {
         <View style={styles.container}>
           <BrandLogo size={88} />
           <Text style={[styles.brand, { color: colors.ink }]} accessibilityRole="header">
-            Transio
+            Smart Transcriber
           </Text>
           <Text style={[styles.title, { color: colors.ink }]}>Create account</Text>
           <Text style={[styles.subtitle, { color: colors.inkMuted }]}>

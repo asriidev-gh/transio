@@ -42,19 +42,26 @@ export function WaveformVisualizer({
 
   return (
     <View style={styles.wrap} accessibilityLabel={accessibilityLabel} accessibilityRole="image">
-      {heights.map((h, i) => (
-        <View
-          key={i}
-          style={[
-            styles.bar,
-            {
-              height: h,
-              backgroundColor: active ? colors.recording : colors.border,
-              opacity: active ? 0.55 + (i % 4) * 0.1 : 0.7,
-            },
-          ]}
-        />
-      ))}
+      {heights.map((h, i) => {
+        const color = active
+          ? i % 3 === 0
+            ? colors.cyan
+            : colors.accent
+          : colors.border;
+        return (
+          <View
+            key={i}
+            style={[
+              styles.bar,
+              {
+                height: h,
+                backgroundColor: color,
+                opacity: active ? 0.55 + (i % 4) * 0.1 : 0.7,
+              },
+            ]}
+          />
+        );
+      })}
     </View>
   );
 }

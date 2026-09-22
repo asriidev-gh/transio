@@ -52,7 +52,7 @@ export function FolderPicker({
   allowCreate = false,
   onFoldersChange,
 }: FolderPickerProps) {
-  const { colors } = useTheme();
+  const { colors, shadows } = useTheme();
   const [draftId, setDraftId] = useState<string | null>(selectedId);
   const [localFolders, setLocalFolders] = useState(folders);
   const [defaultId, setDefaultId] = useState<string | null>(null);
@@ -242,8 +242,17 @@ export function FolderPicker({
                     }}
                     accessibilityRole="button"
                     accessibilityLabel="Cancel create folder"
+                    style={({ pressed }) => [
+                      styles.inlineCancel,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                        opacity: pressed ? 0.9 : 1,
+                      },
+                      shadows.soft,
+                    ]}
                   >
-                    <Text style={[styles.cancelText, { color: colors.inkMuted }]}>Cancel</Text>
+                    <Text style={[styles.cancelText, { color: colors.ink }]}>Cancel</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -280,9 +289,10 @@ export function FolderPicker({
                     styles.cancelBtn,
                     {
                       borderColor: colors.border,
-                      backgroundColor: colors.background,
+                      backgroundColor: colors.surface,
                       opacity: pressed ? 0.85 : 1,
                     },
+                    shadows.soft,
                   ]}
                   accessibilityRole="button"
                   accessibilityLabel="Cancel"
@@ -452,6 +462,15 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     ...typography.caption,
+    fontWeight: '700',
+  },
+  inlineCancel: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   error: {
     ...typography.caption,

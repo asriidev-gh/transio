@@ -35,7 +35,7 @@ export function buildSessionShareText(input: {
     if (transcript.text.length > 4000) lines.push('…');
   }
 
-  lines.push('', '— Shared from SessionAI');
+  lines.push('', '— Shared from Smart Transcriber');
   return lines.filter((line, i, arr) => !(line === '' && arr[i - 1] === '')).join('\n');
 }
 

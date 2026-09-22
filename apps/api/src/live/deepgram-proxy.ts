@@ -61,13 +61,8 @@ function resolveLiveLanguage(raw: string | null | undefined): string {
   return 'tl';
 }
 
-function parseToken(req: IncomingMessage): string | null {
+function parseHeaderToken(req: IncomingMessage): string | null {
   try {
-    const host = req.headers.host ?? 'localhost';
-    const url = new URL(req.url ?? '/', `http://${host}`);
-    const fromQuery = url.searchParams.get('token')?.trim();
-    if (fromQuery) return fromQuery;
-
     const auth = req.headers.authorization;
     if (!auth) return null;
     const [scheme, token] = auth.split(' ');
@@ -102,6 +97,60 @@ function sendJson(socket: WebSocket, payload: Record<string, unknown>): void {
   if (socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(payload));
   }
+}
+
+function dataToUtf8(data: WebSocket.RawData): string {
+  if (typeof data === 'string') return data;
+  if (Buffer.isBuffer(data)) return data.toString('utf8');
+  if (Array.isArray(data)) return Buffer.concat(data).toString('utf8');
+  return Buffer.from(data as ArrayBuffer).toString('utf8');
+}
+
+/**
+ * Wait for `{ "type": "auth", "token": "<jwt>" }` before proxying.
+ * Query-string tokens are rejected (they leak into proxy/access logs).
+ */
+function awaitAuthToken(client: WebSocket, headerToken: string | null): Promise<string> {
+  if (headerToken) return Promise.resolve(headerToken);
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('AUTH_TIMEOUT'));
+    }, 10_000);
+
+    function onMessage(data: WebSocket.RawData, isBinary: boolean) {
+      if (isBinary) return;
+      try {
+        const parsed = JSON.parse(dataToUtf8(data)) as { type?: string; token?: string };
+        if (parsed.type !== 'auth') return;
+        const token = typeof parsed.token === 'string' ? parsed.token.trim() : '';
+        if (!token) {
+          cleanup();
+          reject(new Error('AUTH_MISSING_TOKEN'));
+          return;
+        }
+        cleanup();
+        resolve(token);
+      } catch {
+        // ignore non-JSON until timeout
+      }
+    }
+
+    function onClose() {
+      cleanup();
+      reject(new Error('AUTH_CLOSED'));
+    }
+
+    function cleanup() {
+      clearTimeout(timer);
+      client.off('message', onMessage);
+      client.off('close', onClose);
+    }
+
+    client.on('message', onMessage);
+    client.on('close', onClose);
+  });
 }
 
 function mapDeepgramMessage(raw: unknown): Record<string, unknown> | null {
@@ -166,8 +215,10 @@ function mapDeepgramMessage(raw: unknown): Record<string, unknown> | null {
 
 /**
  * Attach authenticated Deepgram live-transcribe WebSocket proxy.
- * Clients connect to `ws(s)://host/live/transcribe?token=<supabase_jwt>` and
- * send binary linear16 PCM @ 16 kHz (mono).
+ * Clients connect to `ws(s)://host/live/transcribe?language=…`, then send
+ * `{ "type": "auth", "token": "<supabase_jwt>" }` as the first message
+ * (or pass `Authorization: Bearer` on upgrade when the runtime allows headers).
+ * Query-string tokens are not accepted.
  */
 export function attachLiveTranscribeServer(server: HttpServer): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
@@ -202,11 +253,17 @@ async function handleConnection(client: WebSocket, req: IncomingMessage): Promis
     return;
   }
 
-  const token = parseToken(req);
-  if (!token) {
+  let token: string;
+  try {
+    token = await awaitAuthToken(client, parseHeaderToken(req));
+  } catch (err) {
+    const code = err instanceof Error ? err.message : 'AUTH_FAILED';
     sendJson(client, {
       type: 'error',
-      message: 'Authentication required.',
+      message:
+        code === 'AUTH_TIMEOUT'
+          ? 'Send an auth message within 10 seconds.'
+          : 'Authentication required. Send { "type": "auth", "token": "<jwt>" }.',
       code: 'UNAUTHORIZED',
     });
     client.close(4001, 'Unauthorized');
@@ -312,14 +369,7 @@ async function handleConnection(client: WebSocket, req: IncomingMessage): Promis
     }
 
     try {
-      const text =
-        typeof data === 'string'
-          ? data
-          : Buffer.isBuffer(data)
-            ? data.toString('utf8')
-            : Array.isArray(data)
-              ? Buffer.concat(data).toString('utf8')
-              : Buffer.from(data as ArrayBuffer).toString('utf8');
+      const text = dataToUtf8(data);
       const parsed = JSON.parse(text) as { type?: string };
       if (parsed.type === 'CloseStream') {
         cleanup('client_close');
@@ -328,6 +378,7 @@ async function handleConnection(client: WebSocket, req: IncomingMessage): Promis
       if (parsed.type === 'KeepAlive') {
         deepgram.send(JSON.stringify({ type: 'KeepAlive' }));
       }
+      // Ignore late/duplicate auth frames after handshake.
     } catch {
       // ignore non-JSON text
     }
@@ -343,4 +394,10 @@ async function handleConnection(client: WebSocket, req: IncomingMessage): Promis
 }
 
 /** Exported for unit tests. */
-export const __test = { mapDeepgramMessage, isLivePath, LIVE_PATH, resolveLiveLanguage };
+export const __test = {
+  mapDeepgramMessage,
+  isLivePath,
+  LIVE_PATH,
+  resolveLiveLanguage,
+  parseHeaderToken,
+};

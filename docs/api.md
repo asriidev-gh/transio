@@ -129,12 +129,17 @@ upload when notes were already finalized. Migration: `202609210003_session_captu
 
 ### Live captions WebSocket
 
-`ws(s)://<api-host>/live/transcribe?token=<supabase_access_token>`
+`ws(s)://<api-host>/live/transcribe?language=<code>`
 
-Authenticated browser clients send binary audio chunks (e.g. MediaRecorder webm/opus).
-The API proxies to Deepgram Listen using server-only `DEEPGRAM_API_KEY` and forwards
-normalized JSON events (`ready`, `transcript`, `error`, `closed`). Never put the
-Deepgram key in `EXPO_PUBLIC_*`.
+On open, the client must send `{ "type": "auth", "token": "<supabase_access_token>" }`
+as the first text frame (do **not** put the JWT in the query string — it leaks into
+proxy/access logs). `Authorization: Bearer` on the upgrade request is also accepted
+when the runtime can set WebSocket headers.
+
+After auth, clients send binary linear16 PCM @ 16 kHz mono. The API proxies to
+Deepgram Listen using server-only `DEEPGRAM_API_KEY` and forwards normalized JSON
+events (`ready`, `transcript`, `error`, `closed`). Never put the Deepgram key in
+`EXPO_PUBLIC_*`.
 
 Requires uploaded audio for processing. Summarization-only requires a saved transcript.
 Successful uploads best-effort auto-start `/process` when STT + Claude keys are configured.

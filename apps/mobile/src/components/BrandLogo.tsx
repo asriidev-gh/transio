@@ -6,7 +6,7 @@ const LOGO_LIGHT = require('../../assets/images/smart_transcriber_logo_light.png
 const LOGO_DARK = require('../../assets/images/smart_transcriber_logo_dark.png');
 
 /** Natural aspect (width / height) of the Smart Transcriber lockup. */
-const ASPECT = 1920 / 2214;
+const ASPECT = 815 / 1024;
 
 type BrandLogoVariant = 'mark' | 'app';
 

@@ -34,7 +34,7 @@ export async function notifyProcessingComplete(input: {
 
   if (webNotificationSupported() && Notification.permission === 'granted') {
     try {
-      const notification = new Notification('SessionAI — processing complete', {
+      const notification = new Notification('Smart Transcriber — processing complete', {
         body,
         tag: `sessionai-complete-${input.sessionId}`,
       });

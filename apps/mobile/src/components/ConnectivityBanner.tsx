@@ -17,7 +17,7 @@ export function ConnectivityBanner({ reachable, onRetry }: ConnectivityBannerPro
       accessibilityRole="alert"
     >
       <Text style={[styles.text, { color: colors.danger }]}>
-        Can’t reach the SessionAI API. Check your connection.
+        Can’t reach the Smart Transcriber API. Check your connection.
       </Text>
       {onRetry ? (
         <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry connection">

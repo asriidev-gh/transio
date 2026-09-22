@@ -12,14 +12,17 @@ web-build/
 .turbo/
 *.tsbuildinfo
 
-# Environment
+# Environment — ignore all env files except committed examples
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
+!.env*.example
 apps/*/.env
-apps/*/.env.local
+apps/*/.env.*
+!apps/*/.env.example
 packages/*/.env
+packages/*/.env.*
+!packages/*/.env.example
 
 # Logs / debug
 npm-debug.log*

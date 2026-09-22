@@ -38,6 +38,13 @@ function activeSegmentIndex(segments: TranscriptSegment[], currentMs: number): n
   return last;
 }
 
+function speakerHue(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  const hues = ['#6C63FF', '#38BDF8', '#22C55E', '#F59E0B', '#EC4899', '#14B8A6'];
+  return hues[hash % hues.length];
+}
+
 async function promptRename(current: string): Promise<string | null> {
   if (Platform.OS === 'web') {
     const next = globalThis.prompt?.('Rename speaker', current);
@@ -72,6 +79,7 @@ async function promptRename(current: string): Promise<string | null> {
   });
 }
 
+/** Premium document-style transcript with speaker rows and playback sync. */
 export function TranscriptViewer({
   text,
   language,
@@ -92,7 +100,7 @@ export function TranscriptViewer({
     if (activeIndex < 0) return;
     const y = rowOffsets.current[activeIndex];
     if (typeof y === 'number') {
-      scrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - 32), animated: true });
     }
   }, [activeIndex]);
 
@@ -110,34 +118,72 @@ export function TranscriptViewer({
 
   return (
     <View style={styles.wrap}>
-      {language ? (
-        <Text style={[styles.language, { color: colors.inkMuted }]}>Language: {language}</Text>
-      ) : null}
+      <View style={styles.metaRow}>
+        <Text style={[styles.sectionLabel, { color: colors.ink }]}>Transcript</Text>
+        {language ? (
+          <Text style={[styles.language, { color: colors.inkMuted }]}>{language}</Text>
+        ) : null}
+      </View>
       {hasSegments && onRenameSpeaker ? (
-        <Text style={[styles.hint, { color: colors.inkMuted }]}>Tap a speaker name to rename.</Text>
+        <Text style={[styles.hint, { color: colors.inkMuted }]}>
+          Tap a speaker name to rename · tap text to seek
+        </Text>
       ) : null}
+
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.content}
         accessibilityLabel="Transcript text"
       >
-        {hasSegments
-          ? segments.map((seg, index) => {
-              const active = index === activeIndex;
-              return (
-                <View
-                  key={`${seg.startMs}-${index}`}
-                  onLayout={(e) => {
-                    rowOffsets.current[index] = e.nativeEvent.layout.y;
-                  }}
-                  style={[
-                    styles.segment,
-                    active && { backgroundColor: colors.accentSoft },
-                  ]}
-                  accessibilityState={{ selected: active }}
-                >
+        {hasSegments ? (
+          segments.map((seg, index) => {
+            const active = index === activeIndex;
+            const speaker = seg.speaker?.trim() || null;
+            const chip = speaker ? speakerHue(speaker) : colors.accent;
+            return (
+              <View
+                key={`${seg.startMs}-${index}`}
+                onLayout={(e) => {
+                  rowOffsets.current[index] = e.nativeEvent.layout.y;
+                }}
+                style={[
+                  styles.segment,
+                  {
+                    borderColor: active ? colors.accent : 'transparent',
+                    backgroundColor: active ? colors.accentSoft : 'transparent',
+                  },
+                ]}
+                accessibilityState={{ selected: active }}
+              >
+                <View style={[styles.activeRail, { backgroundColor: active ? colors.accent : 'transparent' }]} />
+                <View style={styles.segmentBody}>
                   <View style={styles.segmentMeta}>
+                    {speaker ? (
+                      <Pressable
+                        onPress={() => void handleRename(speaker)}
+                        disabled={busySpeaker === speaker || !onRenameSpeaker}
+                        hitSlop={8}
+                        style={styles.speakerRow}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Rename ${speaker}`}
+                      >
+                        <View style={[styles.avatar, { backgroundColor: chip }]}>
+                          <Text style={styles.avatarText}>{speaker.charAt(0).toUpperCase()}</Text>
+                        </View>
+                        <Text
+                          style={[
+                            styles.speaker,
+                            { color: colors.ink },
+                            active && { color: colors.accentDeep },
+                          ]}
+                        >
+                          {busySpeaker === speaker ? 'Saving…' : speaker}
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <Text style={[styles.speaker, { color: colors.inkMuted }]}>Speaker</Text>
+                    )}
                     <Pressable
                       onPress={() => onSeekMs?.(seg.startMs)}
                       accessibilityRole="button"
@@ -147,36 +193,17 @@ export function TranscriptViewer({
                         style={[
                           styles.time,
                           { color: colors.inkMuted },
-                          active && { color: colors.accentDeep },
+                          active && { color: colors.accent },
                         ]}
                       >
                         {formatDuration(seg.startMs / 1000)}
                       </Text>
                     </Pressable>
-                    {seg.speaker ? (
-                      <Pressable
-                        onPress={() => void handleRename(seg.speaker!)}
-                        disabled={busySpeaker === seg.speaker}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Rename ${seg.speaker}`}
-                      >
-                        <Text
-                          style={[
-                            styles.speaker,
-                            { color: colors.inkMuted },
-                            active && { color: colors.accentDeep },
-                          ]}
-                        >
-                          {busySpeaker === seg.speaker ? 'Saving…' : seg.speaker}
-                        </Text>
-                      </Pressable>
-                    ) : null}
                   </View>
                   <Pressable
                     onPress={() => onSeekMs?.(seg.startMs)}
                     accessibilityRole="button"
-                    accessibilityLabel={`${seg.speaker ?? 'Segment'} at ${formatDuration(seg.startMs / 1000)}`}
+                    accessibilityLabel={`${speaker ?? 'Segment'} at ${formatDuration(seg.startMs / 1000)}`}
                   >
                     <Text
                       style={[
@@ -190,13 +217,14 @@ export function TranscriptViewer({
                     </Text>
                   </Pressable>
                 </View>
-              );
-            })
-          : (
-            <Text style={[styles.text, { color: colors.ink }]} selectable>
-              {text}
-            </Text>
-          )}
+              </View>
+            );
+          })
+        ) : (
+          <Text style={[styles.text, { color: colors.ink }]} selectable>
+            {text}
+          </Text>
+        )}
       </ScrollView>
     </View>
   );
@@ -208,49 +236,87 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: 280,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  sectionLabel: {
+    ...typography.section,
+    fontSize: 18,
+  },
   language: {
     ...typography.caption,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   hint: {
     ...typography.caption,
-    fontFamily: undefined,
   },
   scroll: {
     flex: 1,
   },
   content: {
     paddingBottom: spacing.xxl,
-    gap: spacing.xs,
+    gap: spacing.smd,
   },
   text: {
     ...typography.transcript,
   },
   segment: {
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    gap: 4,
+    flexDirection: 'row',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  activeRail: {
+    width: 3,
+  },
+  segmentBody: {
+    flex: 1,
+    paddingVertical: spacing.smd,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
   },
   segmentMeta: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm,
+  },
+  speakerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexShrink: 1,
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   time: {
     ...typography.caption,
     fontVariant: ['tabular-nums'],
-    fontWeight: '700',
+    fontWeight: '600',
   },
   speaker: {
     ...typography.caption,
-    fontFamily: undefined,
     fontWeight: '700',
-    textDecorationLine: 'underline',
+    fontSize: 13,
   },
   segmentText: {
     ...typography.transcript,
+    fontSize: 16,
+    lineHeight: 26,
   },
   segmentTextActive: {
     fontWeight: '600',

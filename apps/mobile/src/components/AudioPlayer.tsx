@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { Icon } from '@/src/components/ui/Icon';
 import { radii, spacing, typography } from '@/src/theme';
@@ -30,7 +30,7 @@ export function AudioPlayer({
   onProgress,
   seekRequest,
 }: AudioPlayerProps) {
-  const { colors } = useTheme();
+  const { colors, shadows } = useTheme();
   const remote = isRemoteUri(uri);
   // downloadFirst makes remote signed URLs reliably seekable (full file, not range stream).
   const player = useAudioPlayer({ uri }, { updateInterval: 250, downloadFirst: remote });
@@ -232,13 +232,41 @@ export function AudioPlayer({
     setSpeedIndex((i) => (i + 1) % SPEEDS.length);
   }
 
+  function renderSkip(delta: -15 | 15) {
+    const back = delta < 0;
+    return (
+      <Pressable
+        onPress={() => void seekBy(delta)}
+        style={({ pressed }) => [
+          styles.skipBtn,
+          dock ? styles.skipBtnDock : null,
+          {
+            backgroundColor: colors.surfaceAlt,
+            borderColor: colors.border,
+            opacity: controlsDisabled ? 0.45 : pressed ? 0.9 : 1,
+          },
+          shadows.soft,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={back ? 'Seek back 15 seconds' : 'Seek forward 15 seconds'}
+        disabled={controlsDisabled}
+        hitSlop={dock ? 8 : undefined}
+      >
+        {back ? <Icon name="rewind-15" size={dock ? 15 : 16} color={colors.ink} variant="line" /> : null}
+        <Text style={[styles.skipLabel, { color: colors.ink }]}>15</Text>
+        {!back ? <Icon name="forward-15" size={dock ? 15 : 16} color={colors.ink} variant="line" /> : null}
+      </Pressable>
+    );
+  }
+
   return (
     <View
       style={[
         styles.container,
+        dock ? styles.dock : null,
         {
-          borderColor: dock ? colors.border : colors.border,
-          backgroundColor: dock ? colors.player : colors.surface,
+          borderColor: colors.glassBorder,
+          backgroundColor: dock ? colors.glass : colors.surface,
         },
       ]}
       accessibilityLabel={title ? `Audio player for ${title}` : 'Audio player'}
@@ -246,33 +274,11 @@ export function AudioPlayer({
       {!dock ? (
         <Text style={[styles.heading, { color: colors.ink }]}>Recording</Text>
       ) : null}
-      <View style={styles.topRow}>
-        <Pressable
-          onPress={cycleSpeed}
-          style={[styles.speed, { borderColor: dock ? 'rgba(232,240,242,0.25)' : colors.border }]}
-          accessibilityRole="button"
-          accessibilityLabel={`Playback speed ${speed}x`}
-        >
-          <Text style={[styles.speedText, { color: dock ? colors.playerText : colors.ink }]}>
-            {speed.toFixed(2).replace(/\.00$/, '.0')}x
-          </Text>
-        </Pressable>
-        <Text
-          style={[
-            styles.status,
-            { color: error || seekHint ? colors.danger : dock ? colors.playerMuted : colors.inkMuted },
-          ]}
-        >
-          {statusLabel}
-        </Text>
-      </View>
 
       {loading ? (
         <View style={styles.loadingRow}>
           <ActivityIndicator color={colors.accent} />
-          <Text style={[styles.loadingText, { color: dock ? colors.playerMuted : colors.inkMuted }]}>
-            Loading…
-          </Text>
+          <Text style={[styles.loadingText, { color: colors.inkMuted }]}>Loading audio…</Text>
         </View>
       ) : null}
 
@@ -287,69 +293,11 @@ export function AudioPlayer({
         </Pressable>
       ) : null}
 
-      <Pressable
-        style={styles.track}
-        onLayout={(e) => {
-          trackWidthRef.current = e.nativeEvent.layout.width;
-        }}
-        onPress={(event) => {
-          const width = trackWidthRef.current;
-          if (width <= 0 || duration <= 0 || controlsDisabled) return;
-          const locationX = event.nativeEvent.locationX;
-          void seekToRatio(Math.max(0, Math.min(1, locationX / width)));
-        }}
-        accessibilityRole="adjustable"
-        accessibilityLabel="Seek"
-      >
-        <View
-          style={[
-            styles.trackBackground,
-            { backgroundColor: dock ? 'rgba(255,255,255,0.18)' : colors.backgroundAlt },
-          ]}
-        >
-          <View
-            style={[
-              styles.trackFill,
-              { backgroundColor: colors.accent, width: `${progress * 100}%` },
-            ]}
-          />
-        </View>
-      </Pressable>
-
-      <View style={styles.times}>
-        <Text
-          style={[styles.time, { color: dock ? colors.playerMuted : colors.inkMuted }]}
-        >
-          {formatDuration(position)}
-        </Text>
-        <Text
-          style={[styles.time, { color: dock ? colors.playerMuted : colors.inkMuted }]}
-        >
-          {formatDuration(duration)}
-        </Text>
-      </View>
-
-      <View style={styles.controls}>
-        <Pressable
-          onPress={() => void seekBy(-15)}
-          style={[
-            styles.secondary,
-            { borderColor: dock ? 'rgba(232,240,242,0.28)' : colors.border },
-            controlsDisabled && styles.disabled,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Seek back 15 seconds"
-          disabled={controlsDisabled}
-        >
-          <Text style={[styles.secondaryText, { color: dock ? colors.playerText : colors.ink }]}>
-            −15s
-          </Text>
-        </Pressable>
-
+      <View style={styles.compactRow}>
         <Pressable
           onPress={() => void togglePlay()}
           style={[
-            styles.primary,
+            styles.playBtn,
             { backgroundColor: colors.accent },
             controlsDisabled && styles.disabled,
           ]}
@@ -357,24 +305,65 @@ export function AudioPlayer({
           accessibilityLabel={status.playing ? 'Pause' : 'Play'}
           disabled={controlsDisabled}
         >
-          <Icon name={status.playing ? 'pause' : 'play'} size={28} />
+          <Icon name={status.playing ? 'pause' : 'play'} size={22} color="#FFFFFF" />
         </Pressable>
 
+        <Text style={[styles.time, { color: colors.inkMuted }]}>{formatDuration(position)}</Text>
+
         <Pressable
-          onPress={() => void seekBy(15)}
-          style={[
-            styles.secondary,
-            { borderColor: dock ? 'rgba(232,240,242,0.28)' : colors.border },
-            controlsDisabled && styles.disabled,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Seek forward 15 seconds"
-          disabled={controlsDisabled}
+          style={styles.track}
+          onLayout={(e) => {
+            trackWidthRef.current = e.nativeEvent.layout.width;
+          }}
+          onPress={(event) => {
+            const width = trackWidthRef.current;
+            if (width <= 0 || duration <= 0 || controlsDisabled) return;
+            const locationX = event.nativeEvent.locationX;
+            void seekToRatio(Math.max(0, Math.min(1, locationX / width)));
+          }}
+          accessibilityRole="adjustable"
+          accessibilityLabel="Seek"
         >
-          <Text style={[styles.secondaryText, { color: dock ? colors.playerText : colors.ink }]}>
-            +15s
+          <View style={[styles.trackBackground, { backgroundColor: colors.border }]}>
+            <View
+              style={[
+                styles.trackFill,
+                { backgroundColor: colors.accent, width: `${progress * 100}%` },
+              ]}
+            />
+            <View
+              style={[
+                styles.thumb,
+                {
+                  backgroundColor: colors.accent,
+                  left: `${Math.max(0, Math.min(100, progress * 100))}%`,
+                },
+              ]}
+            />
+          </View>
+        </Pressable>
+
+        <Text style={[styles.time, { color: colors.inkMuted }]}>{formatDuration(duration)}</Text>
+
+        <Pressable
+          onPress={cycleSpeed}
+          style={[styles.speed, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}
+          accessibilityRole="button"
+          accessibilityLabel={`Playback speed ${speed}x`}
+        >
+          <Text style={[styles.speedText, { color: colors.ink }]}>
+            {speed.toFixed(2).replace(/\.00$/, '')}x
           </Text>
         </Pressable>
+      </View>
+
+      {(error || seekHint) && statusLabel ? (
+        <Text style={[styles.status, { color: colors.danger }]}>{statusLabel}</Text>
+      ) : null}
+
+      <View style={dock ? styles.dockExtras : styles.controls}>
+        {renderSkip(-15)}
+        {renderSkip(15)}
       </View>
     </View>
   );
@@ -382,26 +371,42 @@ export function AudioPlayer({
 
 const styles = StyleSheet.create({
   container: {
-    borderWidth: 1,
-    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.sm,
+    ...Platform.select({
+      web: { backdropFilter: 'blur(16px)' } as object,
+      default: {},
+    }),
+  },
+  dock: {
+    borderRadius: radii.xl,
+    paddingVertical: spacing.smd,
   },
   heading: {
     ...typography.body,
     fontWeight: '600',
   },
-  topRow: {
+  compactRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: spacing.sm,
+  },
+  playBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   speed: {
     borderWidth: 1,
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm + 2,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 4,
+    minWidth: 44,
+    alignItems: 'center',
   },
   speedText: {
     ...typography.caption,
@@ -409,8 +414,6 @@ const styles = StyleSheet.create({
   },
   status: {
     ...typography.caption,
-    flexShrink: 1,
-    textAlign: 'right',
   },
   loadingRow: {
     flexDirection: 'row',
@@ -430,48 +433,67 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   track: {
-    paddingVertical: spacing.xs,
+    flex: 1,
+    paddingVertical: spacing.sm,
+    justifyContent: 'center',
   },
   trackBackground: {
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
+    height: 6,
+    borderRadius: 3,
+    overflow: 'visible',
+    justifyContent: 'center',
   },
   trackFill: {
-    height: 8,
+    height: 6,
+    borderRadius: 3,
   },
-  times: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  thumb: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginLeft: -7,
+    top: -4,
   },
   time: {
     ...typography.caption,
     fontVariant: ['tabular-nums'],
+    minWidth: 36,
   },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.md,
-    marginTop: spacing.xs,
   },
-  primary: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  dockExtras: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  skipBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  secondary: {
-    borderWidth: 1,
+    gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    minWidth: 72,
-    alignItems: 'center',
+    minWidth: 76,
+    minHeight: 36,
   },
-  secondaryText: {
-    fontWeight: '600',
+  skipBtnDock: {
+    minWidth: 72,
+    minHeight: 34,
+    paddingVertical: 6,
+  },
+  skipLabel: {
+    ...typography.caption,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 0.2,
   },
   disabled: {
     opacity: 0.45,

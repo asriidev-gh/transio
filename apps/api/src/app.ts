@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express from 'express';
 import type { RequestHandler } from 'express';
+import { getEnv } from './lib/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { healthRouter } from './routes/health.js';
@@ -45,10 +46,40 @@ export interface AppDeps {
   authenticate?: RequestHandler;
 }
 
+function buildCorsOrigin() {
+  const env = getEnv();
+  const allowed = env.CORS_ORIGINS.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (allowed.length === 0) {
+    if (env.NODE_ENV === 'production') {
+      logger.warn('CORS_ORIGINS is empty in production — browser cross-origin calls are denied');
+      return (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
+        // Non-browser / same-origin mobile clients often send no Origin.
+        if (!origin) return cb(null, true);
+        return cb(null, false);
+      };
+    }
+    // Local Expo web / simulators.
+    return true;
+  }
+
+  return (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
+    if (!origin || allowed.includes(origin)) return cb(null, true);
+    return cb(null, false);
+  };
+}
+
 export function createApp(deps: AppDeps = {}) {
   const app = express();
 
-  app.use(cors());
+  app.use(
+    cors({
+      origin: buildCorsOrigin(),
+      credentials: false,
+    }),
+  );
   app.use(express.json({ limit: '1mb' }));
 
   app.use((req, _res, next) => {

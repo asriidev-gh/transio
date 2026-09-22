@@ -90,11 +90,12 @@ pipeline stages from backend status (`hasAudio`, `hasTranscript`, `hasSummary`).
 | `GET` | `/sessions/:id/status` | `{ status, hasAudio, hasTranscript, hasSummary }` for polling |
 | `POST` | `/sessions/:id/notes-live` | Merge live speech into structured notes (Live Note Taker) |
 | `POST` | `/sessions/:id/notes/finalize` | Persist notes + mark completed (notes-only modes) |
-| `WS` | `/live/transcribe?token=` | Deepgram live caption proxy (server holds `DEEPGRAM_API_KEY`) |
+| `WS` | `/live/transcribe` + auth frame | Deepgram live caption proxy (server holds `DEEPGRAM_API_KEY`) |
 
 ## Live captions
 
-Recording streams microphone PCM to `ws://…/live/transcribe`. The API proxies
+Recording streams microphone PCM to `ws://…/live/transcribe?language=…`, then authenticates
+with `{ "type": "auth", "token": "<jwt>" }` (never put the JWT in the query string). The API proxies
 binary audio to Deepgram Listen and returns normalized `{ type: "transcript", text, isFinal }`
 events. On stop, finals are saved with `PUT /sessions/:id/transcript`. The processing
 pipeline skips Whisper when a transcript already exists.

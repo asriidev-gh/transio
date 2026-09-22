@@ -1,11 +1,12 @@
 /**
- * Transio design tokens — claymorphism on cream (light) or slate (dark).
+ * Smart Transcriber design tokens — AI-native indigo/cyan on soft light or OLED dark.
  * Screens should prefer useTheme() so light/dark both work.
- * `colors` defaults to the dark slate palette for StyleSheet.create modules.
+ * `colors` defaults to the dark palette for StyleSheet.create modules.
  */
 export {
   darkColors,
   fonts,
+  gradients,
   lightColors,
   makeShadows,
   motion,

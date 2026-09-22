@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Star } from 'lucide-react-native';
 import { Icon, type AppIconName } from '@/src/components/ui/Icon';
-import { radii, spacing, typography } from '@/src/theme';
+import { spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 
 interface SectionHeaderProps {
@@ -12,7 +12,7 @@ interface SectionHeaderProps {
   onAction?: () => void;
 }
 
-/** Section title with an optional compact action. */
+/** Section title with an optional quiet text action. */
 export function SectionHeader({
   title,
   meta,
@@ -20,7 +20,7 @@ export function SectionHeader({
   actionIcon,
   onAction,
 }: SectionHeaderProps) {
-  const { colors, shadows } = useTheme();
+  const { colors } = useTheme();
   return (
     <View style={styles.row}>
       <Text style={[styles.title, { color: colors.ink }]} numberOfLines={1}>
@@ -31,22 +31,15 @@ export function SectionHeader({
           onPress={onAction}
           accessibilityRole="button"
           accessibilityLabel={actionLabel}
-          style={({ pressed }) => [
-            styles.actionCard,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              opacity: pressed ? 0.85 : 1,
-            },
-            shadows.soft,
-          ]}
+          hitSlop={10}
+          style={({ pressed }) => [{ opacity: pressed ? 0.65 : 1 }, styles.action]}
         >
           {actionIcon === 'star-outline' || actionIcon === 'star' ? (
-            <Star size={16} color={colors.accent} fill={colors.accent} />
+            <Star size={14} color={colors.accent} fill={colors.accent} />
           ) : actionIcon ? (
-            <Icon name={actionIcon} size={16} color={colors.accent} />
+            <Icon name={actionIcon} size={14} color={colors.accent} />
           ) : null}
-          <Text style={[styles.actionLabel, { color: colors.ink }]} numberOfLines={1}>
+          <Text style={[styles.actionLabel, { color: colors.accent }]} numberOfLines={1}>
             {actionLabel}
           </Text>
         </Pressable>
@@ -60,14 +53,18 @@ export function SectionHeader({
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
     gap: spacing.sm,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.smd,
+    marginTop: spacing.sm,
     width: '100%',
   },
   title: {
-    ...typography.section,
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '700',
+    letterSpacing: -0.35,
     flex: 1,
     minWidth: 0,
   },
@@ -75,21 +72,16 @@ const styles = StyleSheet.create({
     ...typography.caption,
     flexShrink: 0,
   },
-  actionCard: {
+  action: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    borderWidth: 1,
-    borderRadius: radii.pill,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.smd,
-    minHeight: 36,
+    gap: 4,
     flexShrink: 0,
-    maxWidth: '48%',
+    paddingVertical: 4,
   },
   actionLabel: {
-    ...typography.caption,
-    fontWeight: '700',
-    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
   },
 });

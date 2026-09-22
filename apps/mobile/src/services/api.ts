@@ -90,7 +90,7 @@ async function executeOnce<T>(path: string, options: RequestOptions): Promise<T>
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
   } catch {
-    throw new ApiClientError('NETWORK_ERROR', 'Unable to reach the SessionAI API.', 0);
+    throw new ApiClientError('NETWORK_ERROR', 'Unable to reach the Smart Transcriber API.', 0);
   }
 
   const body = await parseJsonBody<T>(response);
@@ -108,7 +108,7 @@ async function executeOnce<T>(path: string, options: RequestOptions): Promise<T>
 }
 
 /**
- * Thin REST client for the SessionAI API.
+ * Thin REST client for the Smart Transcriber API.
  * Pass `auth: true` to attach the Supabase access token.
  * Retries transient network / provider errors a few times.
  */

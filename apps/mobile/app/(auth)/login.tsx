@@ -56,7 +56,7 @@ export default function LoginScreen() {
         <View style={styles.container}>
           <BrandLogo size={112} />
           <Text style={[styles.brand, { color: colors.ink }]} accessibilityRole="header">
-            Transio
+            Smart Transcriber
           </Text>
           <Text style={[styles.headline, { color: colors.ink }]}>Transcribe every seminar</Text>
           <Text style={[styles.subtitle, { color: colors.inkMuted }]}>

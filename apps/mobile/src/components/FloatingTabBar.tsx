@@ -1,28 +1,48 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { usePathname, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type AppIconName } from '@/src/components/ui/Icon';
-import { radii, spacing } from '@/src/theme';
+import { radii, sizes, spacing } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 
-export const FLOATING_TAB_BAR_CONTENT_INSET = 124;
+/** Extra bottom padding so content clears the floating dock + Record FAB. */
+export const FLOATING_TAB_BAR_CONTENT_INSET = 120;
 
-type TabKey = 'index' | 'favorites' | 'settings';
-type TabIcon = Extract<AppIconName, 'home-outline' | 'star-outline' | 'cog-outline'>;
-type CaptureMode = 'record' | 'import';
+type SideTabKey = 'index' | 'history' | 'translate' | 'settings';
+type TabIcon = Extract<
+  AppIconName,
+  'home-outline' | 'file-music-outline' | 'translate' | 'cog-outline'
+>;
 
-const TABS: Array<{ key: TabKey; label: string; icon: TabIcon; href: Href }> = [
+const LEFT_TABS: Array<{ key: SideTabKey; label: string; icon: TabIcon; href: Href }> = [
   { key: 'index', label: 'Home', icon: 'home-outline', href: '/(app)/(tabs)' },
-  { key: 'favorites', label: 'Favorites', icon: 'star-outline', href: '/(app)/(tabs)/favorites' },
-  { key: 'settings', label: 'Settings', icon: 'cog-outline', href: '/(app)/(tabs)/settings' },
+  {
+    key: 'history',
+    label: 'History',
+    icon: 'file-music-outline',
+    href: '/(app)/(tabs)/history',
+  },
 ];
 
-function hrefForCapture(mode: CaptureMode): string {
-  return mode === 'record' ? '/new-session?mode=record' : '/new-session?mode=import';
-}
+const RIGHT_TABS: Array<{ key: SideTabKey; label: string; icon: TabIcon; href: Href }> = [
+  {
+    key: 'translate',
+    label: 'Translate',
+    icon: 'translate',
+    href: '/(app)/(tabs)/translate',
+  },
+  {
+    key: 'settings',
+    label: 'Settings',
+    icon: 'cog-outline',
+    href: '/(app)/(tabs)/settings',
+  },
+];
 
-function activeTabFromPath(pathname: string): TabKey | null {
-  if (pathname.includes('favorites')) return 'favorites';
+function activeTabFromPath(pathname: string): SideTabKey | null {
+  if (pathname.includes('history') || pathname.includes('favorites')) return 'history';
+  if (pathname.includes('translate') && pathname.includes('(tabs)')) return 'translate';
   if (pathname.includes('settings')) return 'settings';
   if (
     pathname.includes('/session') ||
@@ -35,7 +55,35 @@ function activeTabFromPath(pathname: string): TabKey | null {
   return 'index';
 }
 
-/** Persistent bottom menu for the signed-in app shell. */
+function SideTab({
+  tab,
+  focused,
+  onPress,
+}: {
+  tab: (typeof LEFT_TABS)[number];
+  focused: boolean;
+  onPress: () => void;
+}) {
+  const ink = focused ? '#FFFFFF' : 'rgba(255,255,255,0.55)';
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.tab, pressed && !focused && styles.pressed]}
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: focused }}
+      accessibilityLabel={tab.label}
+    >
+      <View style={styles.tabInner}>
+        <Icon name={tab.icon} size={22} color={ink} variant="line" />
+        <Text style={[styles.tabLabel, { color: ink }]}>{tab.label}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * Dark floating pill nav + raised candy-glass Record FAB (gloss + glare).
+ */
 export function FloatingTabBar() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -43,17 +91,9 @@ export function FloatingTabBar() {
   const { colors, shadows, scheme } = useTheme();
   const bottomPad = Math.max(insets.bottom, spacing.sm);
   const focused = activeTabFromPath(pathname);
+  const rim = scheme === 'light' ? colors.background : colors.backgroundAlt;
 
-  const glassBg =
-    scheme === 'light' ? 'rgba(247, 245, 238, 0.94)' : 'rgba(37, 59, 71, 0.94)';
-  const glassBorder =
-    scheme === 'light' ? 'rgba(214, 209, 194, 0.7)' : 'rgba(110, 139, 151, 0.45)';
-
-  function openCapture(mode: CaptureMode) {
-    router.push(hrefForCapture(mode) as Href);
-  }
-
-  function goTab(tab: (typeof TABS)[number]) {
+  function goTab(tab: (typeof LEFT_TABS)[number]) {
     if (focused === tab.key) {
       router.replace(tab.href);
       return;
@@ -61,102 +101,94 @@ export function FloatingTabBar() {
     router.push(tab.href);
   }
 
-  function renderNavTab(tab: (typeof TABS)[number]) {
-    const isFocused = focused === tab.key;
-    return (
-      <Pressable
-        key={tab.key}
-        style={({ pressed }) => [
-          styles.tab,
-          isFocused && [styles.tabActive, { backgroundColor: colors.accentSoft }],
-          pressed && !isFocused && styles.pressed,
-        ]}
-        onPress={() => goTab(tab)}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: isFocused }}
-        accessibilityLabel={tab.label}
-      >
-        <Icon name={tab.icon} size={24} color={isFocused ? colors.accent : colors.inkMuted} />
-        <Text
-          style={[
-            styles.label,
-            { color: isFocused ? colors.ink : colors.inkMuted },
-            isFocused && styles.labelActive,
-          ]}
-          numberOfLines={1}
-        >
-          {tab.label}
-        </Text>
-      </Pressable>
-    );
+  function onRecord() {
+    router.push('/new-session?mode=record' as Href);
   }
 
   return (
-    <View
-      style={[
-        styles.wrap,
-        { paddingBottom: bottomPad },
-        Platform.OS === 'web' ? ({ position: 'fixed' } as object) : null,
-      ]}
-      pointerEvents="box-none"
-    >
-      <View
-        style={[
-          styles.bar,
-          shadows.float,
-          {
-            backgroundColor: glassBg,
-            borderColor: glassBorder,
-          },
-          Platform.OS === 'web'
-            ? ({
-                backdropFilter: 'blur(18px)',
-                WebkitBackdropFilter: 'blur(18px)',
-              } as const)
-            : null,
-        ]}
-      >
-        <View style={styles.side}>
-          {renderNavTab(TABS[0])}
-          {renderNavTab(TABS[1])}
+    <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: bottomPad }]}>
+      <View style={styles.dock}>
+        <View style={[styles.bar, shadows.float]}>
+          {LEFT_TABS.map((tab) => (
+            <SideTab
+              key={tab.key}
+              tab={tab}
+              focused={focused === tab.key}
+              onPress={() => goTab(tab)}
+            />
+          ))}
+
+          <View style={styles.fabSlot} />
+
+          {RIGHT_TABS.map((tab) => (
+            <SideTab
+              key={tab.key}
+              tab={tab}
+              focused={focused === tab.key}
+              onPress={() => goTab(tab)}
+            />
+          ))}
         </View>
 
         <Pressable
+          onPress={onRecord}
           style={({ pressed }) => [
-            styles.centerBtn,
-            shadows.emboss,
-            {
-              backgroundColor: scheme === 'light' ? '#FFFFFF' : colors.accent,
-              borderColor: scheme === 'light' ? colors.border : colors.background,
-              opacity: pressed ? 0.92 : 1,
-              transform: [{ scale: pressed ? 0.96 : 1 }],
-            },
+            styles.fabWrap,
+            { transform: [{ scale: pressed ? 0.94 : 1 }] },
           ]}
-          onPress={() => openCapture('record')}
           accessibilityRole="button"
-          accessibilityLabel="Start recording"
+          accessibilityLabel="Record"
         >
-          <Icon name="microphone" size={30} />
-        </Pressable>
+          {/* Soft outer candy glow */}
+          <View style={[styles.fabHalo, { backgroundColor: colors.brand + '33' }]} />
+          <View style={[styles.fabHaloInner, { backgroundColor: colors.brandSoft + '40' }]} />
 
-        <View style={styles.side}>
-          <Pressable
-            style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
-            onPress={() => openCapture('import')}
-            accessibilityRole="button"
-            accessibilityLabel="Import audio or video"
-          >
-            <Icon name="download-outline" size={24} color={colors.inkMuted} />
-            <Text style={[styles.label, { color: colors.inkMuted }]} numberOfLines={1}>
-              Import
-            </Text>
-          </Pressable>
-          {renderNavTab(TABS[2])}
-        </View>
+          <View style={[styles.fabShell, { borderColor: rim }, shadows.emboss]}>
+            <LinearGradient
+              colors={[
+                'rgba(160, 100, 255, 0.72)',
+                'rgba(74, 108, 247, 0.78)',
+                'rgba(123, 108, 255, 0.82)',
+              ]}
+              locations={[0, 0.45, 1]}
+              start={{ x: 0.15, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              style={styles.fabFill}
+            >
+              {/* Specular glare across the top curve */}
+              <LinearGradient
+                colors={[
+                  'rgba(255,255,255,0.85)',
+                  'rgba(255,255,255,0.35)',
+                  'rgba(255,255,255,0.06)',
+                  'transparent',
+                ]}
+                locations={[0, 0.28, 0.55, 1]}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={styles.fabGlare}
+                pointerEvents="none"
+              />
+              {/* Side catch-light */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.45)', 'transparent']}
+                start={{ x: 0, y: 0.2 }}
+                end={{ x: 0.55, y: 0.8 }}
+                style={styles.fabCatch}
+                pointerEvents="none"
+              />
+              <View style={styles.fabIcon}>
+                <Icon name="microphone" size={26} color="#FFFFFF" variant="line" />
+              </View>
+            </LinearGradient>
+          </View>
+        </Pressable>
       </View>
     </View>
   );
 }
+
+const FAB = sizes.record;
 
 const styles = StyleSheet.create({
   wrap: {
@@ -164,59 +196,108 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 100,
-    elevation: 100,
+    paddingHorizontal: spacing.lg,
+    zIndex: 40,
+  },
+  dock: {
+    position: 'relative',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
+    justifyContent: 'flex-end',
   },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    backgroundColor: '#0F172A',
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
-    minHeight: 64,
-    width: '100%',
-    maxWidth: 440,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  side: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-evenly',
-    alignItems: 'center',
-    minWidth: 0,
+    paddingHorizontal: spacing.sm,
+    minHeight: 62,
   },
   tab: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    minWidth: 0,
-    flexShrink: 1,
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-    borderRadius: radii.md,
+    minHeight: 48,
   },
-  tabActive: {
-    paddingHorizontal: 8,
+  tabInner: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    minWidth: 52,
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  fabSlot: {
+    width: FAB + 8,
+  },
+  fabWrap: {
+    position: 'absolute',
+    alignSelf: 'center',
+    bottom: 14,
+    width: FAB + 28,
+    height: FAB + 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabHalo: {
+    position: 'absolute',
+    width: FAB + 26,
+    height: FAB + 26,
+    borderRadius: (FAB + 26) / 2,
+    opacity: 0.9,
+  },
+  fabHaloInner: {
+    position: 'absolute',
+    width: FAB + 12,
+    height: FAB + 12,
+    borderRadius: (FAB + 12) / 2,
+  },
+  fabShell: {
+    width: FAB,
+    height: FAB,
+    borderRadius: FAB / 2,
+    borderWidth: 3,
+    overflow: 'hidden',
+    ...Platform.select({
+      web: { backdropFilter: 'blur(12px)' } as object,
+      default: {},
+    }),
+  },
+  fabFill: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  fabGlare: {
+    position: 'absolute',
+    top: 0,
+    left: '8%',
+    right: '8%',
+    height: '52%',
+    borderBottomLeftRadius: FAB,
+    borderBottomRightRadius: FAB,
+  },
+  fabCatch: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: '42%',
+    height: '42%',
+    borderRadius: FAB,
+  },
+  fabIcon: {
+    zIndex: 2,
   },
   pressed: {
     opacity: 0.7,
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  labelActive: {
-    fontWeight: '700',
-  },
-  centerBtn: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    marginHorizontal: spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
   },
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
@@ -11,7 +11,7 @@ import {
 } from '@/src/services/notifications';
 import { resetOnboarding } from '@/src/services/onboarding';
 import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
-import { Button } from '@/src/components/ui/Button';
+import { Icon, type AppIconName } from '@/src/components/ui/Icon';
 import { radii, spacing, typography, type AppearancePreference } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { mobileEnv, isSupabaseConfigured } from '@/src/lib/env';
@@ -23,10 +23,105 @@ const APPEARANCE_OPTIONS: Array<{ key: AppearancePreference; label: string }> = 
   { key: 'dark', label: 'Dark' },
 ];
 
+function notificationStatusLabel(permission: NotificationPermission): string {
+  switch (permission) {
+    case 'granted':
+      return 'Enabled';
+    case 'denied':
+      return 'Blocked';
+    case 'unsupported':
+      return 'Unavailable';
+    default:
+      return 'Off';
+  }
+}
+
+interface SettingsRowProps {
+  icon: AppIconName;
+  label: string;
+  value?: string;
+  onPress?: () => void;
+  showChevron?: boolean;
+  destructive?: boolean;
+  last?: boolean;
+}
+
+function SettingsRow({
+  icon,
+  label,
+  value,
+  onPress,
+  showChevron,
+  destructive,
+  last,
+}: SettingsRowProps) {
+  const { colors } = useTheme();
+  const chevron = showChevron ?? Boolean(onPress);
+  const ink = destructive ? colors.danger : colors.ink;
+  const content = (
+    <>
+      <View style={styles.rowInner}>
+        <Icon name={icon} size={20} color={ink} variant="line" />
+        <Text style={[styles.rowLabel, { color: ink }]} numberOfLines={1}>
+          {label}
+        </Text>
+        {value ? (
+          <Text style={[styles.rowTrailing, { color: colors.inkMuted }]} numberOfLines={1}>
+            {value}
+          </Text>
+        ) : null}
+        {chevron ? <Icon name="chevron-right" size={18} color={colors.inkMuted} variant="line" /> : null}
+      </View>
+      {!last ? (
+        <View style={[styles.rowDivider, { backgroundColor: colors.border }]} />
+      ) : null}
+    </>
+  );
+
+  if (!onPress) {
+    return <View style={styles.row}>{content}</View>;
+  }
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, { opacity: pressed ? 0.72 : 1 }]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
+function SettingsGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  const { colors, shadows } = useTheme();
+  return (
+    <View style={styles.group}>
+      <Text style={[styles.groupTitle, { color: colors.inkMuted }]}>{title}</Text>
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+          shadows.soft,
+        ]}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const { colors, preference, setPreference, scheme } = useTheme();
+  const { colors, preference, setPreference, scheme, shadows } = useTheme();
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
@@ -58,15 +153,16 @@ export default function SettingsScreen() {
   }
 
   async function onEnableNotifications() {
+    if (notifPermission === 'granted' || notifPermission === 'unsupported') return;
     setRequestingNotif(true);
     setError(null);
     try {
       const next = await requestNotificationPermission();
       setNotifPermission(next);
       if (next === 'denied') {
-        setError('Notifications are blocked in the browser. Enable them in site settings.');
+        setError('Notifications are blocked. Enable them in system settings.');
       } else if (next === 'unsupported') {
-        setError('This browser does not support notifications.');
+        setError('This device does not support notifications.');
       }
     } finally {
       setRequestingNotif(false);
@@ -89,104 +185,112 @@ export default function SettingsScreen() {
   return (
     <ScrollView
       contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+      showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
         Settings
       </Text>
 
-      <Text style={[styles.group, { color: colors.inkMuted }]}>Account</Text>
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.rowLabel, { color: colors.inkMuted }]}>Signed in as</Text>
-        <Text style={[styles.rowValue, { color: colors.ink }]}>{user?.email ?? 'Unknown'}</Text>
-      </View>
+      <SettingsGroup title="Account">
+        <SettingsRow
+          icon="account-outline"
+          label="Signed in as"
+          value={user?.email ?? 'Unknown'}
+          last
+        />
+      </SettingsGroup>
 
-      <Text style={[styles.group, { color: colors.inkMuted }]}>Appearance</Text>
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View
-          style={[styles.segment, { backgroundColor: colors.backgroundAlt, borderColor: colors.border }]}
-          accessibilityRole="tablist"
-        >
-          {APPEARANCE_OPTIONS.map((option) => {
-            const selected = preference === option.key;
-            return (
-              <Pressable
-                key={option.key}
-                onPress={() => setPreference(option.key)}
-                style={[
-                  styles.segmentItem,
-                  selected
-                    ? { backgroundColor: colors.ink }
-                    : { backgroundColor: 'transparent' },
-                ]}
-                accessibilityRole="tab"
-                accessibilityState={{ selected }}
-              >
-                <Text
-                  style={[
-                    styles.segmentText,
-                    { color: selected ? colors.onBrand : colors.inkMuted },
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <Text style={[styles.rowLabel, { color: colors.inkMuted, marginTop: spacing.sm }]}>
-          {scheme === 'light'
-            ? 'Cream clay canvas — matched to the light lockup.'
-            : 'Deep slate + mint — matched to the dark lockup.'}
-        </Text>
-      </View>
-
-      <Text style={[styles.group, { color: colors.inkMuted }]}>Notifications</Text>
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.rowValue, { color: colors.ink }]}>
-          {notifPermission === 'granted'
-            ? 'Enabled when processing finishes.'
-            : notifPermission === 'denied'
-              ? 'Blocked in the browser.'
-              : notifPermission === 'unsupported'
-                ? 'Not available here.'
-                : 'Optional — useful when you leave during processing.'}
-        </Text>
-        {notifPermission !== 'granted' && notifPermission !== 'unsupported' ? (
-          <View style={styles.rowAction}>
-            <Button
-              label={requestingNotif ? 'Requesting…' : 'Enable notifications'}
-              onPress={() => void onEnableNotifications()}
-              variant="secondary"
-              disabled={requestingNotif}
+      <SettingsGroup title="Preferences">
+        <View style={styles.appearanceBlock}>
+          <View style={styles.appearanceHeader}>
+            <Icon
+              name={
+                preference === 'dark'
+                  ? 'moon-waning-crescent'
+                  : preference === 'light'
+                    ? 'white-balance-sunny'
+                    : 'theme-light-dark'
+              }
+              size={20}
+              color={colors.ink}
+              variant="line"
             />
+            <Text style={[styles.rowLabel, { color: colors.ink }]}>Appearance</Text>
           </View>
-        ) : null}
-      </View>
-
-      <Text style={[styles.group, { color: colors.inkMuted }]}>Connection</Text>
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.rowLabel, { color: colors.inkMuted }]}>API</Text>
-        <Text style={[styles.rowMono, { color: colors.ink }]}>{mobileEnv.apiBaseUrl}</Text>
-        <Text style={[styles.rowLabel, { color: colors.inkMuted, marginTop: spacing.sm }]}>
-          Supabase
-        </Text>
-        <Text style={[styles.rowValue, { color: colors.ink }]}>
-          {isSupabaseConfigured() ? 'Configured' : 'Not configured — see .env.example'}
-        </Text>
-      </View>
-
-      <Text style={[styles.group, { color: colors.inkMuted }]}>About</Text>
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.rowValue, { color: colors.ink }]}>
-          Transio transcribes seminars and discussions on the server. Secrets never leave the API.
-        </Text>
-        <Text style={[styles.rowLabel, { color: colors.inkMuted, marginTop: spacing.sm }]}>
-          Version {appVersion}
-        </Text>
-        <View style={styles.rowAction}>
-          <Button label="Replay onboarding" onPress={onReplayOnboarding} variant="ghost" />
+          <View
+            style={[
+              styles.segment,
+              { backgroundColor: colors.backgroundAlt, borderColor: colors.border },
+            ]}
+            accessibilityRole="tablist"
+          >
+            {APPEARANCE_OPTIONS.map((option) => {
+              const selected = preference === option.key;
+              return (
+                <Pressable
+                  key={option.key}
+                  onPress={() => setPreference(option.key)}
+                  style={[
+                    styles.segmentItem,
+                    selected
+                      ? { backgroundColor: colors.ink }
+                      : { backgroundColor: 'transparent' },
+                  ]}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected }}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: selected ? colors.onBrand : colors.inkMuted },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={[styles.hint, { color: colors.inkMuted }]}>
+            {scheme === 'light'
+              ? 'Light canvas matched to the brand lockup.'
+              : 'Deep slate + mint matched to the dark lockup.'}
+          </Text>
         </View>
-      </View>
+        <View style={[styles.rowDividerFull, { backgroundColor: colors.border }]} />
+        <SettingsRow
+          icon="bell-outline"
+          label={requestingNotif ? 'Requesting…' : 'Notifications'}
+          value={notificationStatusLabel(notifPermission)}
+          onPress={
+            notifPermission !== 'granted' && notifPermission !== 'unsupported'
+              ? () => void onEnableNotifications()
+              : undefined
+          }
+          showChevron={notifPermission !== 'granted' && notifPermission !== 'unsupported'}
+          last
+        />
+      </SettingsGroup>
+
+      <SettingsGroup title="Connection">
+        <SettingsRow icon="sine-wave" label="API" value={mobileEnv.apiBaseUrl} last={false} />
+        <SettingsRow
+          icon="lock"
+          label="Supabase"
+          value={isSupabaseConfigured() ? 'Configured' : 'Not configured'}
+          last
+        />
+      </SettingsGroup>
+
+      <SettingsGroup title="About">
+        <SettingsRow icon="rocket" label="Version" value={appVersion} last={false} />
+        <SettingsRow
+          icon="bulb"
+          label="Replay onboarding"
+          onPress={onReplayOnboarding}
+          last
+        />
+      </SettingsGroup>
 
       {error ? (
         <Text style={[styles.error, { color: colors.danger }]} accessibilityRole="alert">
@@ -194,13 +298,26 @@ export default function SettingsScreen() {
         </Text>
       ) : null}
 
-      <Button
-        label={signingOut ? 'Signing out…' : 'Sign out'}
+      <Pressable
         onPress={onSignOut}
-        variant="danger"
         disabled={signingOut}
-        loading={signingOut}
-      />
+        style={({ pressed }) => [
+          styles.signOut,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            opacity: signingOut ? 0.5 : pressed ? 0.85 : 1,
+          },
+          shadows.soft,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Sign out"
+      >
+        <Icon name="logout" size={20} color={colors.danger} variant="line" />
+        <Text style={[styles.signOutLabel, { color: colors.danger }]}>
+          {signingOut ? 'Signing out…' : 'Sign out'}
+        </Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -208,42 +325,83 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
     paddingBottom: FLOATING_TAB_BAR_CONTENT_INSET,
-    gap: spacing.md,
+    gap: spacing.lgSoft,
   },
   title: {
     ...typography.pageTitle,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   group: {
+    gap: spacing.sm,
+  },
+  groupTitle: {
     ...typography.caption,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginTop: spacing.sm,
+    letterSpacing: 0.9,
+    fontWeight: '700',
+    paddingHorizontal: spacing.xs,
   },
   card: {
-    borderWidth: 1,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    gap: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.card,
+    overflow: 'hidden',
+  },
+  row: {
+    minHeight: 52,
+    justifyContent: 'center',
+  },
+  rowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.smd,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.smd,
+    minHeight: 52,
   },
   rowLabel: {
-    ...typography.caption,
-  },
-  rowValue: {
     ...typography.body,
+    fontWeight: '600',
+    flexShrink: 1,
+    flexGrow: 1,
   },
-  rowMono: {
-    ...typography.mono,
+  rowTrailing: {
+    ...typography.caption,
+    fontWeight: '600',
+    maxWidth: '46%',
+    textAlign: 'right',
   },
-  rowAction: {
-    marginTop: spacing.sm,
+  rowDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: spacing.md + 20 + spacing.smd,
+    marginRight: spacing.md,
+  },
+  rowDividerFull: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: spacing.md,
+    marginRight: spacing.md,
+  },
+  appearanceBlock: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.smd,
+    gap: spacing.sm,
+  },
+  appearanceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.smd,
+  },
+  hint: {
+    ...typography.caption,
+    lineHeight: 18,
   },
   segment: {
     flexDirection: 'row',
     borderRadius: radii.md,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: 4,
     gap: 4,
   },
@@ -260,5 +418,20 @@ const styles = StyleSheet.create({
   },
   error: {
     ...typography.caption,
+    paddingHorizontal: spacing.xs,
+  },
+  signOut: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: 52,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  signOutLabel: {
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

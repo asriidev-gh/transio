@@ -52,9 +52,10 @@ import { useTheme } from '@/src/theme/ThemeContext';
 export default function NewSessionScreen() {
   const router = useRouter();
   const { colors, shadows } = useTheme();
-  const { mode, folderId: folderIdParam } = useLocalSearchParams<{
+  const { mode, folderId: folderIdParam, captions: captionsParam } = useLocalSearchParams<{
     mode?: string;
     folderId?: string;
+    captions?: string;
   }>();
   const preferImport = mode === 'import';
   const [step, setStep] = useState<'mode' | 'details'>(preferImport ? 'details' : 'mode');
@@ -67,9 +68,20 @@ export default function NewSessionScreen() {
   const [loading, setLoading] = useState(false);
   const [picked, setPicked] = useState<PickedAudio | null>(null);
   const [mediaUrl, setMediaUrl] = useState('');
-  const [captionsMode, setCaptionsMode] = useState<RecordCaptionsMode>(
-    isLiveCaptionsModeAvailable() ? 'live' : 'batch',
-  );
+  const [captionsMode, setCaptionsMode] = useState<RecordCaptionsMode>(() => {
+    if (
+      captionsParam === 'live' ||
+      captionsParam === 'batch' ||
+      captionsParam === 'notes' ||
+      captionsParam === 'live_notes'
+    ) {
+      if (captionsParam === 'live' || captionsParam === 'live_notes') {
+        return isLiveCaptionsModeAvailable() ? captionsParam : 'batch';
+      }
+      return captionsParam;
+    }
+    return isLiveCaptionsModeAvailable() ? 'live' : 'batch';
+  });
   const [folders, setFolders] = useState<SessionFolder[]>([]);
   const [folderId, setFolderId] = useState<string | null>(
     typeof folderIdParam === 'string' && folderIdParam ? folderIdParam : null,
@@ -87,7 +99,14 @@ export default function NewSessionScreen() {
           getRecordCaptionsModePref(),
         ]);
         setCustomTypes(customs);
-        setCaptionsMode(pref);
+        if (
+          captionsParam !== 'live' &&
+          captionsParam !== 'batch' &&
+          captionsParam !== 'notes' &&
+          captionsParam !== 'live_notes'
+        ) {
+          setCaptionsMode(pref);
+        }
         const def = await ensureDefaultFolder(rows);
         const merged = sortFoldersWithDefaultFirst(
           dedupeFoldersByName(rows.some((f) => f.id === def.id) ? rows : [...rows, def]),
@@ -101,7 +120,7 @@ export default function NewSessionScreen() {
         setFolders([]);
       }
     })();
-  }, []);
+  }, [captionsParam]);
 
   function resolveTitle(): string | null {
     const typed = title.trim();
@@ -567,7 +586,7 @@ export default function NewSessionScreen() {
                   />
                   <Button
                     label="Cancel"
-                    variant="ghost"
+                    variant="secondary"
                     onPress={() => {
                       setComposingFolder(false);
                       setNewFolderName('');
@@ -677,7 +696,7 @@ export default function NewSessionScreen() {
               <Button
                 label="Cancel"
                 onPress={onCancel}
-                variant="ghost"
+                variant="secondary"
                 disabled={loading}
               />
             ) : preferImport ? (
@@ -697,7 +716,7 @@ export default function NewSessionScreen() {
                 <Button
                   label="Cancel"
                   onPress={onCancel}
-                  variant="ghost"
+                  variant="secondary"
                   disabled={loading}
                 />
               </>
@@ -722,7 +741,7 @@ export default function NewSessionScreen() {
                 <Button
                   label="Cancel"
                   onPress={onCancel}
-                  variant="ghost"
+                  variant="secondary"
                   disabled={loading}
                 />
               </>

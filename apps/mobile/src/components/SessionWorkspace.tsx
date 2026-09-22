@@ -13,8 +13,8 @@ import { ActionItemsPanel } from '@/src/components/ActionItemsPanel';
 import { AskSessionPanel } from '@/src/components/AskSessionPanel';
 import { ContentFeedback } from '@/src/components/ContentFeedback';
 import { ErrorState } from '@/src/components/ErrorState';
-import { LoadingState } from '@/src/components/LoadingState';
 import { MindMapView } from '@/src/components/MindMapView';
+import { SessionContentSkeleton } from '@/src/components/Skeleton';
 import { SessionTabs, type SessionTabKey } from '@/src/components/SessionTabs';
 import { SummarySections } from '@/src/components/SummarySections';
 import { TranscriptViewer } from '@/src/components/TranscriptViewer';
@@ -237,7 +237,7 @@ export function SessionWorkspace({
         </Text>
       ) : null}
 
-      {loading ? <LoadingState message="Loading session content…" /> : null}
+      {loading ? <SessionContentSkeleton /> : null}
 
       {!loading && error ? (
         <ErrorState title="Couldn’t load content" description={error} onRetry={() => void load()} />

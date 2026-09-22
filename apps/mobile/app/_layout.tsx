@@ -1,5 +1,11 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
+// Import weight entry points only — the package barrel requires every italic file and breaks Metro on web.
+import { PlusJakartaSans_500Medium } from '@expo-google-fonts/plus-jakarta-sans/500Medium';
+import { PlusJakartaSans_600SemiBold } from '@expo-google-fonts/plus-jakarta-sans/600SemiBold';
+import { PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans/700Bold';
+import { Fraunces_600SemiBold } from '@expo-google-fonts/fraunces/600SemiBold';
+import { Fraunces_700Bold } from '@expo-google-fonts/fraunces/700Bold';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
@@ -23,6 +29,11 @@ function AuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [fontsLoaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    Fraunces_600SemiBold,
+    Fraunces_700Bold,
   });
   const [onboardingReady, setOnboardingReady] = useState(false);
   const [seenOnboarding, setSeenOnboarding] = useState(false);
@@ -85,7 +96,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   if (isLoading || !fontsLoaded || !onboardingReady) {
     return (
       <View style={[styles.boot, { backgroundColor: colors.background }]}>
-        <LoadingState message="Starting Transio…" />
+        <LoadingState message="Starting Smart Transcriber…" />
       </View>
     );
   }

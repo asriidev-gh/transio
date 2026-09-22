@@ -393,9 +393,9 @@ export function InsightsListModal({
 
 const styles = StyleSheet.create({
   frame: { flex: 1 },
-  backdrop: { ...StyleSheet.absoluteFillObject },
+  backdrop: { ...StyleSheet.absoluteFill },
   center: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     padding: spacing.lg,
   },

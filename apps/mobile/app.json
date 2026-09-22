@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SessionAI",
+    "name": "Smart Transcriber",
     "slug": "sessionai",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -11,7 +11,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.sessionai.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "SessionAI needs microphone access to record seminars, lectures, and group discussions."
+        "NSMicrophoneUsageDescription": "Smart Transcriber needs microphone access to record seminars, lectures, and group discussions."
       }
     },
     "android": {
@@ -52,7 +52,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "SessionAI needs microphone access to record seminars, lectures, and group discussions.",
+          "microphonePermission": "Smart Transcriber needs microphone access to record seminars, lectures, and group discussions.",
           "recordAudioAndroid": true
         }
       ]

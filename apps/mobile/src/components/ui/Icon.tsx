@@ -34,23 +34,27 @@ import {
   Play,
   Plus,
   Rocket,
+  RotateCcw,
+  RotateCw,
   Search,
   Settings2,
   Share,
   Square,
   Star,
+  StickyNote,
   Sun,
   TrendingUp,
   Trophy,
   TriangleAlert,
+  Video,
   X,
 } from 'lucide-react-native';
 import { sizes } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 
 /**
- * Feature glyphs use [3dicons](https://3dicons.co) dynamic-color PNGs (CC0).
- * Tiny chrome (close, stop, theme, translate) stays on Lucide so controls stay sharp.
+ * Feature / empty-state art uses 3dicons PNGs.
+ * Chrome (nav, lists, controls) prefers Lucide line icons — matches premium banking UIs.
  */
 export type AppIconName =
   | 'microphone'
@@ -97,7 +101,13 @@ export type AppIconName =
   | 'mail'
   | 'rocket'
   | 'trophy'
-  | 'map-pin';
+  | 'map-pin'
+  | 'rewind-15'
+  | 'forward-15'
+  | 'video'
+  | 'sticky-note';
+
+export type IconVariant = 'auto' | 'line' | '3d';
 
 const ICONS_3D: Partial<Record<AppIconName, ImageSourcePropType>> = {
   microphone: require('../../../assets/icons/3d/mic.png'),
@@ -186,26 +196,59 @@ const LUCIDE: Record<AppIconName, LucideIcon> = {
   rocket: Rocket,
   trophy: Trophy,
   'map-pin': MapPin,
+  'rewind-15': RotateCcw,
+  'forward-15': RotateCw,
+  video: Video,
+  'sticky-note': StickyNote,
 };
 
 const FILLED: Partial<Record<AppIconName, boolean>> = {
   star: true,
 };
 
+/** Chrome / nav / list controls — always line. */
+const CHROME: Set<AppIconName> = new Set([
+  'home-outline',
+  'file-music-outline',
+  'translate',
+  'cog-outline',
+  'close',
+  'chevron-right',
+  'plus',
+  'stop',
+  'check',
+  'magnify',
+  'bell-outline',
+  'white-balance-sunny',
+  'moon-waning-crescent',
+  'theme-light-dark',
+  'share-variant-outline',
+  'logout',
+  'rewind-15',
+  'forward-15',
+  'video',
+  'sticky-note',
+]);
+
 interface IconProps {
   name: AppIconName;
   size?: number;
   color?: string;
+  /** `line` = Lucide stroke (premium chrome). `3d` = illustrative PNG. */
+  variant?: IconVariant;
 }
 
-export function Icon({ name, size = sizes.icon, color }: IconProps) {
+export function Icon({ name, size = sizes.icon, color, variant = 'auto' }: IconProps) {
   const { colors } = useTheme();
-  const source = ICONS_3D[name];
+  const png = ICONS_3D[name];
+  const use3d =
+    Boolean(png) &&
+    (variant === '3d' || (variant === 'auto' && !CHROME.has(name)));
 
-  if (source) {
+  if (use3d && png) {
     return (
       <Image
-        source={source}
+        source={png}
         accessible={false}
         resizeMode="contain"
         style={{ width: size, height: size }}
@@ -221,7 +264,7 @@ export function Icon({ name, size = sizes.icon, color }: IconProps) {
     <Glyph
       size={size}
       color={tint}
-      strokeWidth={1.75}
+      strokeWidth={1.85}
       fill={filled ? tint : 'none'}
       absoluteStrokeWidth
     />

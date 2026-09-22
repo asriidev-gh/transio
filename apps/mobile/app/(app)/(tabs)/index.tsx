@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   AppState,
@@ -23,17 +24,18 @@ import { ErrorState } from '@/src/components/ErrorState';
 import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
 import { HorizontalCarousel } from '@/src/components/HorizontalCarousel';
 import {
-  HomeActionCard,
   InsightSessionCard,
   InsightStat,
 } from '@/src/components/HomeDashboard';
+import { SessionCard } from '@/src/components/SessionCard';
 import {
   InsightsCalendarModal,
   InsightsListModal,
 } from '@/src/components/InsightsCalendarModal';
-import { LoadingState } from '@/src/components/LoadingState';
+import { HomeLibrarySkeleton } from '@/src/components/Skeleton';
 import { SectionHeader } from '@/src/components/ui/SectionHeader';
 import { Icon } from '@/src/components/ui/Icon';
+import { IconSquircle } from '@/src/components/ui/IconWell';
 import { useApiReachable } from '@/src/hooks/useApiReachable';
 import { useAuth } from '@/src/hooks/useAuth';
 import { ApiClientError } from '@/src/services/api';
@@ -54,7 +56,7 @@ import {
 import { notifyProcessingComplete } from '@/src/services/notifications';
 import { clearLocalAudioUri } from '@/src/services/local-audio';
 import { deleteSession, listSessions } from '@/src/services/sessions';
-import { radii, spacing, typography } from '@/src/theme';
+import { radii, spacing, typography, gradients } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { formatDurationHuman } from '@/src/utils/format';
 import { confirmDestructive } from '@/src/utils/confirm';
@@ -98,7 +100,7 @@ function sortRecent(a: Session, b: Session): number {
 export default function HomeScreen() {
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
-  const { colors, shadows } = useTheme();
+  const { colors, shadows, scheme } = useTheme();
   const { user } = useAuth();
   const { reachable, refresh: refreshReachable } = useApiReachable();
 
@@ -241,6 +243,11 @@ export default function HomeScreen() {
     [sessions],
   );
 
+  const recentSessions = useMemo(
+    () => [...sessions].sort(sortRecent).slice(0, 5),
+    [sessions],
+  );
+
   const capturedSessions = useMemo(
     () => [...sessions].sort(sortRecent),
     [sessions],
@@ -286,6 +293,21 @@ export default function HomeScreen() {
     }
   }
 
+  async function onDeleteSession(session: Session) {
+    const ok = await confirmDestructive(
+      'Delete session?',
+      `“${session.title}” and its transcript/summary will be permanently removed.`,
+    );
+    if (!ok) return;
+    try {
+      await deleteSession(session.id);
+      await clearLocalAudioUri(session.id);
+      setSessions((prev) => prev.filter((row) => row.id !== session.id));
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Could not delete this session.');
+    }
+  }
+
   async function onDeleteFolder(folder: SessionFolder) {
     if (isDefaultFolder(folder)) {
       setError('The Default folder can’t be deleted.');
@@ -321,6 +343,14 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+      <LinearGradient
+        colors={[
+          scheme === 'dark' ? 'rgba(108, 99, 255, 0.16)' : 'rgba(108, 99, 255, 0.10)',
+          'transparent',
+        ]}
+        style={styles.atmosphere}
+        pointerEvents="none"
+      />
       <ScrollView
         contentContainerStyle={[styles.container, { paddingHorizontal: pagePad }]}
         style={styles.scroll}
@@ -361,18 +391,12 @@ export default function HomeScreen() {
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
             <View style={styles.greetingBlock}>
-              <Text
-                style={[styles.greeting, { color: colors.ink }]}
-                numberOfLines={1}
-                accessibilityRole="header"
-              >
+              <Text style={[styles.brandName, { color: colors.inkMuted }]}>Smart Transcriber</Text>
+              <Text style={[styles.greeting, { color: colors.ink }]} accessibilityRole="header">
                 {greeting}
               </Text>
-              <Text
-                style={[styles.pageTitle, { color: colors.inkMuted }]}
-                numberOfLines={2}
-              >
-                Ready to capture your thoughts?
+              <Text style={[styles.pageTitle, { color: colors.inkMuted }]}>
+                Capture, transcribe, and understand — fast.
               </Text>
             </View>
             <View style={styles.headerActions}>
@@ -382,7 +406,111 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {loading ? <LoadingState message="Loading your insights…" /> : null}
+        <View style={styles.actionGrid}>
+          <Pressable
+            onPress={() => openCapture('record')}
+            accessibilityRole="button"
+            accessibilityLabel="Record"
+            style={({ pressed }) => [
+              styles.actionTile,
+              styles.actionTilePrimary,
+              { transform: [{ scale: pressed ? 0.98 : 1 }], opacity: pressed ? 0.96 : 1 },
+              shadows.emboss,
+            ]}
+          >
+            <LinearGradient
+              colors={[...gradients.primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.actionTileGradient}
+            >
+              <View style={styles.actionIconOnBrand}>
+                <Icon name="microphone" size={24} color="#FFFFFF" variant="line" />
+              </View>
+              <View>
+                <Text style={styles.actionTitleOnBrand}>Record</Text>
+                <Text style={styles.actionHintOnBrand}>Start speaking</Text>
+              </View>
+            </LinearGradient>
+          </Pressable>
+
+          <Pressable
+            onPress={() => openCapture('import')}
+            accessibilityRole="button"
+            accessibilityLabel="Upload audio or video"
+            style={({ pressed }) => [
+              styles.actionTile,
+              styles.actionTilePad,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                opacity: pressed ? 0.92 : 1,
+              },
+              shadows.soft,
+            ]}
+          >
+            <IconSquircle
+              name="download-outline"
+              tint={colors.actionImport}
+              color={colors.cyan}
+              size={22}
+            />
+            <Text style={[styles.actionTitle, { color: colors.ink }]}>Upload</Text>
+            <Text style={[styles.actionHint, { color: colors.inkMuted }]}>Audio or video</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/(app)/(tabs)/translate' as Href)}
+            accessibilityRole="button"
+            accessibilityLabel="Translate"
+            style={({ pressed }) => [
+              styles.actionTile,
+              styles.actionTilePad,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                opacity: pressed ? 0.92 : 1,
+              },
+              shadows.soft,
+            ]}
+          >
+            <IconSquircle
+              name="translate"
+              tint={colors.accentSoft}
+              color={colors.accent}
+              size={22}
+            />
+            <Text style={[styles.actionTitle, { color: colors.ink }]}>Translate</Text>
+            <Text style={[styles.actionHint, { color: colors.inkMuted }]}>Live or saved</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/(app)/(tabs)/history' as Href)}
+            accessibilityRole="button"
+            accessibilityLabel="Favorites and history"
+            style={({ pressed }) => [
+              styles.actionTile,
+              styles.actionTilePad,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                opacity: pressed ? 0.92 : 1,
+              },
+              shadows.soft,
+            ]}
+          >
+            <IconSquircle
+              name="star-outline"
+              tint={colors.actionFav}
+              color={colors.warning}
+              size={22}
+            />
+            <Text style={[styles.actionTitle, { color: colors.ink }]}>Library</Text>
+            <Text style={[styles.actionHint, { color: colors.inkMuted }]}>History & favorites</Text>
+          </Pressable>
+        </View>
+
+        {loading ? <HomeLibrarySkeleton /> : null}
 
         {!loading && error && !hasLibrary ? (
           <ErrorState
@@ -396,12 +524,10 @@ export default function HomeScreen() {
           <EmptyState
             variant="hero"
             icon="microphone"
-            title="No recordings yet"
-            description="Record a conversation, meeting, lecture, or idea — or import audio, video, or a file link — and insights will show up here."
-            actionLabel="Record"
+            title="Your conversations will appear here"
+            description="Record your first conversation and Smart Transcriber will turn it into searchable text."
+            actionLabel="Start recording"
             onAction={() => openCapture('record')}
-            secondaryLabel="Import audio or video"
-            onSecondary={() => openCapture('import')}
           />
         ) : null}
 
@@ -413,23 +539,6 @@ export default function HomeScreen() {
               </Text>
             ) : null}
 
-            <View style={styles.actions}>
-              <HomeActionCard
-                label="Record"
-                hint="Capture a live conversation"
-                icon="microphone"
-                tint={colors.actionRecord}
-                onPress={() => openCapture('record')}
-              />
-              <HomeActionCard
-                label="Import"
-                hint="Audio, video, or a link"
-                icon="download-outline"
-                tint={colors.actionImport}
-                onPress={() => openCapture('import')}
-              />
-            </View>
-
             <SectionHeader title="Insights" />
             <View style={styles.stats}>
               <InsightStat
@@ -437,36 +546,61 @@ export default function HomeScreen() {
                 value={String(insights.weekCount)}
                 icon="calendar"
                 tint={colors.actionImport}
+                accent={colors.cyan}
                 onPress={() => setInsightBrowse('calendar')}
               />
               <InsightStat
                 label="Captured"
                 value={insights.totalTime}
                 icon="sine-wave"
-                tint={colors.actionFav}
+                tint={colors.actionRecord}
+                accent={colors.accent}
                 onPress={() => setInsightBrowse('captured')}
               />
               <InsightStat
                 label="Favorites"
                 value={String(insights.favoriteCount)}
                 icon="star-outline"
-                tint={colors.actionSettings}
-                onPress={() => router.push('/(app)/(tabs)/favorites' as Href)}
+                tint={colors.actionFav}
+                accent={colors.warning}
+                onPress={() => router.push('/(app)/(tabs)/history' as Href)}
               />
               <InsightStat
                 label="Processing"
                 value={String(insights.processingCount)}
                 icon="alert"
-                tint={colors.actionRecord}
+                tint={colors.actionSettings}
+                accent={colors.inkMuted}
                 onPress={() => setInsightBrowse('processing')}
               />
             </View>
 
             <SectionHeader
+              title="Recent"
+              actionLabel="See all"
+              onAction={() => router.push('/(app)/(tabs)/history' as Href)}
+            />
+            {recentSessions.length === 0 ? (
+              <Text style={[styles.hint, { color: colors.inkMuted }]}>
+                New transcripts show up here after you record or import.
+              </Text>
+            ) : (
+              <View style={styles.recentList}>
+                {recentSessions.map((session) => (
+                  <SessionCard
+                    key={session.id}
+                    session={session}
+                    onPress={() => router.push(`/session/${session.id}`)}
+                    onDelete={() => void onDeleteSession(session)}
+                  />
+                ))}
+              </View>
+            )}
+
+            <SectionHeader
               title="Continue"
-              actionLabel="Favs"
-              actionIcon="star-outline"
-              onAction={() => router.push('/(app)/(tabs)/favorites' as Href)}
+              actionLabel="History"
+              onAction={() => router.push('/(app)/(tabs)/history' as Href)}
             />
             {continueSessions.length === 0 ? (
               <Text style={[styles.hint, { color: colors.inkMuted }]}>
@@ -536,9 +670,17 @@ export default function HomeScreen() {
                   }}
                   accessibilityRole="button"
                   accessibilityLabel="Cancel new folder"
-                  style={styles.composerCancel}
+                  style={({ pressed }) => [
+                    styles.composerCancel,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      opacity: pressed ? 0.9 : 1,
+                    },
+                    shadows.soft,
+                  ]}
                 >
-                  <Text style={[styles.composerCancelText, { color: colors.inkMuted }]}>Cancel</Text>
+                  <Text style={[styles.composerCancelText, { color: colors.ink }]}>Cancel</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -629,17 +771,24 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  atmosphere: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 280,
+  },
   scroll: { flex: 1, width: '100%' },
   container: {
     paddingTop: spacing.md,
     paddingBottom: FLOATING_TAB_BAR_CONTENT_INSET,
-    gap: spacing.md,
+    gap: spacing.lgSoft,
     width: '100%',
     maxWidth: '100%',
     alignSelf: 'stretch',
   },
   topBar: {
-    gap: spacing.md,
+    gap: spacing.smd,
     paddingTop: spacing.sm,
     width: '100%',
   },
@@ -650,16 +799,23 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     width: '100%',
   },
+  brandName: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
   greetingBlock: {
     flex: 1,
+    gap: 4,
     minWidth: 0,
-    gap: spacing.xs,
   },
   greeting: {
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: '700',
-    letterSpacing: -0.4,
+    ...typography.display,
+    fontSize: 30,
+    lineHeight: 36,
+    letterSpacing: -0.7,
   },
   headerActions: {
     flexDirection: 'row',
@@ -671,11 +827,80 @@ const styles = StyleSheet.create({
   pageTitle: {
     ...typography.body,
     fontSize: 15,
-    lineHeight: 21,
+    lineHeight: 22,
+  },
+  actionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.smd,
+    width: '100%',
+  },
+  actionTile: {
+    width: '47%',
+    flexGrow: 1,
+    minWidth: 148,
+    minHeight: 128,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  actionTilePrimary: {
+    borderWidth: 0,
+  },
+  actionTilePad: {
+    padding: spacing.md,
+    justifyContent: 'flex-end',
+  },
+  actionTileGradient: {
+    flex: 1,
+    padding: spacing.md,
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+    minHeight: 128,
+  },
+  actionIconOnBrand: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionTitleOnBrand: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  actionHintOnBrand: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+  },
+  actionIconSoft: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  actionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    marginTop: spacing.sm,
+  },
+  actionHint: {
+    ...typography.caption,
+    marginTop: 2,
+  },
+  recentList: {
+    gap: spacing.smd,
+    width: '100%',
   },
   dashboard: {
-    gap: spacing.md,
-    marginTop: spacing.sm,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
     width: '100%',
   },
   actions: {
@@ -686,12 +911,12 @@ const styles = StyleSheet.create({
   stats: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: spacing.smd,
     width: '100%',
   },
   folderChip: {
-    borderWidth: 1,
-    borderRadius: radii.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.sm,
   },
@@ -701,13 +926,14 @@ const styles = StyleSheet.create({
   folderMark: {
     width: 44,
     height: 44,
-    borderRadius: radii.lg,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   folderTitle: {
-    ...typography.body,
+    fontSize: 15,
     fontWeight: '600',
+    letterSpacing: -0.2,
   },
   folderMeta: {
     ...typography.caption,
@@ -725,8 +951,7 @@ const styles = StyleSheet.create({
     ...typography.meta,
   },
   inlineError: {
-    ...typography.body,
-    fontSize: 14,
+    ...typography.meta,
   },
   composer: {
     flexDirection: 'row',
@@ -735,16 +960,17 @@ const styles = StyleSheet.create({
   },
   composerInput: {
     flex: 1,
-    borderWidth: 1,
-    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.lg,
     paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    paddingVertical: 12,
     fontSize: 16,
+    minHeight: 48,
   },
   composerBtn: {
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
-    minHeight: 40,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -753,9 +979,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   composerCancel: {
-    paddingHorizontal: spacing.xs,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   composerCancelText: {
-    ...typography.caption,
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

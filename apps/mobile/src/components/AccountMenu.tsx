@@ -23,7 +23,8 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { key: 'favorites', label: 'Favorites', icon: 'star-outline', href: '/(app)/(tabs)/favorites' },
+  { key: 'history', label: 'History', icon: 'file-music-outline', href: '/(app)/(tabs)/history' },
+  { key: 'translate', label: 'Translate', icon: 'translate', href: '/(app)/(tabs)/translate' },
   { key: 'settings', label: 'Settings', icon: 'cog-outline', href: '/(app)/(tabs)/settings' },
 ];
 

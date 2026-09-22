@@ -18,6 +18,8 @@ SessionAI MVP can run in production with the same monorepo layout. Keep secrets 
 | `TRANSCRIPTION_API_KEY` | Whisper-compatible STT |
 | `TRANSCRIPTION_BASE_URL` | Optional; default OpenAI |
 | `LOG_SENSITIVE` | Keep `false` in production |
+| `CORS_ORIGINS` | Comma-separated browser origins (required for Expo web in production) |
+| `DEEPGRAM_API_KEY` | Live captions WS proxy (optional) |
 
 ### Mobile (`apps/mobile/.env` / EAS secrets)
 
@@ -33,7 +35,7 @@ Never put `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, or `TRANSCRIPTION_AP
 
 1. Apply all SQL migrations under `supabase/migrations/` (sessions, storage, transcripts, summaries).
 2. Confirm `session-audio` bucket exists and is **private**.
-3. Deploy the API behind HTTPS; enable CORS only for your mobile/web origins if you tighten defaults.
+3. Deploy the API behind HTTPS; set `CORS_ORIGINS` to your Expo web / site origins (empty deny browsers in production).
 4. Point mobile `EXPO_PUBLIC_API_BASE_URL` at the public API URL.
 5. Build the app with EAS or `expo export` / store builds; keep splash + icons from `apps/mobile/assets/images/`.
 6. Verify `/health` returns `supabaseConfigured: true` and run a short record → process smoke test.
