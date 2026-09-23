@@ -35,10 +35,16 @@ Never put `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, or `TRANSCRIPTION_AP
 
 1. Apply all SQL migrations under `supabase/migrations/` (sessions, storage, transcripts, summaries).
 2. Confirm `session-audio` bucket exists and is **private**.
-3. Deploy the API behind HTTPS; set `CORS_ORIGINS` to your Expo web / site origins (empty deny browsers in production).
-4. Point mobile `EXPO_PUBLIC_API_BASE_URL` at the public API URL.
-5. Build the app with EAS or `expo export` / store builds; keep splash + icons from `apps/mobile/assets/images/`.
-6. Verify `/health` returns `supabaseConfigured: true` and run a short record → process smoke test.
+3. Enable **Anonymous sign-ins** in Supabase Auth (paywall → app without email). See [docs/auth.md](./auth.md).
+4. Deploy the API behind HTTPS; set `CORS_ORIGINS` to your Expo web / site origins (empty deny browsers in production).
+5. Point mobile `EXPO_PUBLIC_API_BASE_URL` at the public API URL.
+6. Build the app with EAS or `expo export` / store builds; keep splash + icons from `apps/mobile/assets/images/`.
+7. Verify `/health` returns `supabaseConfigured: true` and run a short record → process smoke test.
+
+## Subscriptions
+
+Free trial + Pro plan pricing are documented in **[docs/pricing.md](./pricing.md)**.  
+Wire App Store / Play Billing (e.g. RevenueCat) before public launch — the current paywall unlock is local/dev only.
 
 ## Runtime
 
@@ -46,5 +52,16 @@ Never put `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, or `TRANSCRIPTION_AP
 npm run api:build
 npm run api:start
 ```
+
+## Render (web service)
+
+Monorepo from repo root (leave **Root Directory** empty):
+
+| Field | Value |
+| --- | --- |
+| Build | `npm install && npm run build:shared && npm run api:build` |
+| Start | `npm run api:start` |
+
+Keep `NODE_ENV=production` in env vars. TypeScript and `@types/*` live in **dependencies** so production installs can still compile on the host.
 
 Mobile production builds use Expo Application Services or local `eas build` with the production env vars above.

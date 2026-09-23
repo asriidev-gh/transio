@@ -18,10 +18,10 @@
     "test": "bash -c 'node --import tsx --test $(find src -name \"*.test.ts\" | sort)'"
   },
   "dependencies": {
+    "typescript": "^5.7.3",
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "tsx": "^4.19.2"
   }
 }
