@@ -74,7 +74,7 @@ export function registerNotesRoutes(
     }
   });
 
-  /** Persist final notes and mark session completed (notes-only modes). */
+  /** Persist edited notes. Notes-only modes also mark the session completed. */
   router.post('/:id/notes/finalize', async (req, res, next) => {
     try {
       if (!req.user) {
@@ -89,20 +89,17 @@ export function registerNotesRoutes(
         throw new AppError('NOT_FOUND', 'Session not found', 404);
       }
 
-      if (!isNotesOnlyCaptureMode(session.captureMode)) {
-        throw new AppError(
-          'VALIDATION_ERROR',
-          'Notes finalize is only for Record Notes or Live Note Taker sessions.',
-          400,
-        );
-      }
-
       const record = await createSummaryRepository(req).upsertForSession(id, notes, 'notes');
-      const updated = await sessions.update(req.user.id, id, {
-        status: 'completed',
-      });
-      if (!updated) {
-        throw new AppError('NOT_FOUND', 'Session not found', 404);
+
+      // Live captions and record-then-transcribe keep their processing status.
+      // Completing them here would skip transcription still in progress.
+      if (isNotesOnlyCaptureMode(session.captureMode)) {
+        const updated = await sessions.update(req.user.id, id, {
+          status: 'completed',
+        });
+        if (!updated) {
+          throw new AppError('NOT_FOUND', 'Session not found', 404);
+        }
       }
 
       res.status(200).json(apiSuccess(SummaryRecordSchema.parse(record)));

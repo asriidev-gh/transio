@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -70,6 +71,9 @@ export default function SessionDetailsScreen() {
   const [folders, setFolders] = useState<SessionFolder[]>([]);
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [movingFolder, setMovingFolder] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [savingTitle, setSavingTitle] = useState(false);
   const [shareSummary, setShareSummary] = useState<SummaryRecord | null>(null);
   const [shareTranscript, setShareTranscript] = useState<Transcript | null>(null);
   const [workspaceHasSummary, setWorkspaceHasSummary] = useState(false);
@@ -226,6 +230,47 @@ export default function SessionDetailsScreen() {
     },
     [id, session],
   );
+
+  const onStartTitleEdit = useCallback(() => {
+    if (!session || savingTitle) return;
+    setTitleDraft(session.title);
+    setEditingTitle(true);
+    setError(null);
+  }, [savingTitle, session]);
+
+  const onCancelTitleEdit = useCallback(() => {
+    if (savingTitle) return;
+    setEditingTitle(false);
+    setTitleDraft('');
+  }, [savingTitle]);
+
+  const onSaveTitle = useCallback(() => {
+    if (!id || typeof id !== 'string' || !session) return;
+    const trimmed = titleDraft.trim();
+    if (!trimmed) {
+      setError('Title is required.');
+      return;
+    }
+    if (trimmed === session.title) {
+      setEditingTitle(false);
+      return;
+    }
+    void (async () => {
+      setSavingTitle(true);
+      setError(null);
+      try {
+        const updated = await updateSession(id, { title: trimmed });
+        setSession(updated);
+        setEditingTitle(false);
+      } catch (err) {
+        setError(
+          err instanceof ApiClientError ? err.message : 'Could not rename this session.',
+        );
+      } finally {
+        setSavingTitle(false);
+      }
+    })();
+  }, [id, session, titleDraft]);
 
   const onToggleFavorite = useCallback(() => {
     if (!id || typeof id !== 'string' || !session) return;
@@ -439,9 +484,87 @@ export default function SessionDetailsScreen() {
             <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
             <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
           </View>
-          <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
-            {session.title}
-          </Text>
+          {editingTitle ? (
+            <View style={styles.titleEdit}>
+              <TextInput
+                value={titleDraft}
+                onChangeText={setTitleDraft}
+                multiline
+                autoFocus
+                maxLength={200}
+                editable={!savingTitle}
+                placeholder="Session title"
+                placeholderTextColor={colors.inkMuted}
+                style={[
+                  styles.title,
+                  styles.titleInput,
+                  {
+                    color: colors.ink,
+                    borderColor: colors.border,
+                    backgroundColor: colors.surface,
+                  },
+                ]}
+                accessibilityLabel="Session title"
+              />
+              <View style={styles.titleActions}>
+                <Pressable
+                  onPress={onCancelTitleEdit}
+                  disabled={savingTitle}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel rename"
+                  style={({ pressed }) => [
+                    styles.titleChip,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      opacity: pressed || savingTitle ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.titleChipText, { color: colors.ink }]}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={onSaveTitle}
+                  disabled={savingTitle || !titleDraft.trim()}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save title"
+                  style={({ pressed }) => [
+                    styles.titleChip,
+                    {
+                      backgroundColor: colors.accentSoft,
+                      borderColor: colors.accent,
+                      opacity: pressed || savingTitle || !titleDraft.trim() ? 0.7 : 1,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.titleChipText, { color: colors.accent }]}>
+                    {savingTitle ? 'Saving…' : 'Done'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <Pressable
+              onPress={onStartTitleEdit}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit title, ${session.title}`}
+              style={styles.titleHit}
+            >
+              <Text style={[styles.title, styles.titleText, { color: colors.ink }]}>
+                {session.title}
+              </Text>
+              <View
+                style={[
+                  styles.titlePencil,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+              >
+                <Icon name="edit" size={16} color={colors.ink} variant="line" />
+              </View>
+            </Pressable>
+          )}
           <Text style={[styles.metaLine, { color: colors.inkMuted }]}>
             {SESSION_TYPE_LABELS[session.sessionType]}
             {' · '}
@@ -787,6 +910,51 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.pageTitle,
+  },
+  titleHit: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  titleText: {
+    flex: 1,
+  },
+  titlePencil: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  titleEdit: {
+    gap: spacing.sm,
+  },
+  titleInput: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    minHeight: 72,
+  },
+  titleActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
+  titleChip: {
+    borderWidth: 1,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleChipText: {
+    ...typography.caption,
+    fontWeight: '700',
   },
   metaLine: {
     ...typography.meta,

@@ -19,6 +19,7 @@ import { MindMapView } from '@/src/components/MindMapView';
 import { PaperNotesView } from '@/src/components/PaperNotesView';
 import { SessionContentSkeleton } from '@/src/components/Skeleton';
 import { SessionTabs, type SessionTabKey } from '@/src/components/SessionTabs';
+import { SummaryGeneratingBanner } from '@/src/components/SummaryGeneratingBanner';
 import { SummarySections } from '@/src/components/SummarySections';
 import { TranscriptViewer } from '@/src/components/TranscriptViewer';
 import { TranslateOnDemand } from '@/src/components/TranslateOnDemand';
@@ -162,7 +163,7 @@ export function SessionWorkspace({
 
       let nextNotes = remoteNotes;
       let persisted = Boolean(remoteNotes);
-      if (!nextNotes && notesOnly) {
+      if (!nextNotes) {
         const draft = await readNotesDraft(sessionId);
         if (draft && (draft.keyPoints.length > 0 || draft.overview?.trim())) {
           nextNotes = draftAsRecord(sessionId, draft);
@@ -260,10 +261,14 @@ export function SessionWorkspace({
     (tab === 'map' && Boolean(summary)) ||
     (tab === 'transcript' && Boolean(transcript));
 
+  /** Saved or drafted notes win over raw transcript bullets on every capture mode. */
+  const notesTabUsesSavedNotes = notesOnly || Boolean(notes);
+
   const ensureTranslation = useCallback(
     async (language: TranslateLanguage): Promise<boolean> => {
       const usingTranscript =
-        tab === 'transcript' || (tab === 'notes' && Boolean(transcript) && !notesOnly);
+        tab === 'transcript' ||
+        (tab === 'notes' && Boolean(transcript) && !notesTabUsesSavedNotes);
       const scope = usingTranscript ? ('transcript' as const) : ('summary' as const);
       const summaryKind =
         scope === 'summary'
@@ -303,7 +308,7 @@ export function SessionWorkspace({
         setTranslating(false);
       }
     },
-    [notesCache, notesOnly, sessionId, summaryCache, tab, transcript, transcriptCache],
+    [notesCache, notesTabUsesSavedNotes, sessionId, summaryCache, tab, transcript, transcriptCache],
   );
 
   async function onSelectLanguage(language: TranslateLanguage | null) {
@@ -337,6 +342,7 @@ export function SessionWorkspace({
       const payload = recordToSummary(notes);
       await finalizeSessionNotes(sessionId, payload);
       await writeNotesDraft(sessionId, payload);
+      setNotesCache({});
       const remote = await getSessionNotes(sessionId).catch(() => null);
       if (remote) {
         setNotes(remote);
@@ -401,6 +407,7 @@ export function SessionWorkspace({
       };
       await finalizeSessionNotes(sessionId, payload);
       await writeNotesDraft(sessionId, payload);
+      setNotesCache({});
       const remote = await getSessionNotes(sessionId).catch(() => null);
       const next = remote ?? draftAsRecord(sessionId, payload);
       setNotes(next);
@@ -486,10 +493,10 @@ export function SessionWorkspace({
 
   const displayNotes = useMemo(() => {
     if (!notes) return null;
-    if (!translateLanguage || tab !== 'notes' || !notesOnly) return notes;
+    if (!translateLanguage || tab !== 'notes' || !notesTabUsesSavedNotes) return notes;
     const translated = notesCache[translateLanguage];
     return translated ? applyTranslatedSummary(notes, translated) : notes;
-  }, [notes, notesCache, notesOnly, tab, translateLanguage]);
+  }, [notes, notesCache, notesTabUsesSavedNotes, tab, translateLanguage]);
 
   const displaySummary = useMemo(() => {
     if (!summary) return null;
@@ -513,13 +520,13 @@ export function SessionWorkspace({
   }, [tab, transcript, transcriptCache, translateLanguage]);
 
   const noteBullets = useMemo(() => {
-    if (notesOnly) {
-      return displayNotes ? bulletsFromNotes(displayNotes) : [];
+    if (notesTabUsesSavedNotes && displayNotes) {
+      return bulletsFromNotes(displayNotes);
     }
-    const text = displayTranscript?.text?.trim();
+    const text = !notesOnly ? displayTranscript?.text?.trim() : '';
     if (text) return splitIntoSentences(text);
     return displayNotes ? bulletsFromNotes(displayNotes) : [];
-  }, [displayNotes, displayTranscript, notesOnly]);
+  }, [displayNotes, displayTranscript, notesOnly, notesTabUsesSavedNotes]);
 
   const structureForActions = displaySummary ?? (notesOnly ? displayNotes : null);
   const showGenerate =
@@ -529,10 +536,10 @@ export function SessionWorkspace({
     (Boolean(notes) || Boolean(transcript) || hasNotes || hasTranscript);
 
   const notesTranslatedLanguages = useMemo(() => {
-    const usingTranscript = Boolean(transcript) && !notesOnly;
+    const usingTranscript = Boolean(transcript) && !notesTabUsesSavedNotes;
     const cache = usingTranscript ? transcriptCache : notesCache;
     return (Object.keys(cache) as TranslateLanguage[]).filter((code) => Boolean(cache[code]));
-  }, [notesCache, notesOnly, transcript, transcriptCache]);
+  }, [notesCache, notesTabUsesSavedNotes, transcript, transcriptCache]);
 
   const transcriptTranslatedLanguages = useMemo(
     () =>
@@ -599,94 +606,85 @@ export function SessionWorkspace({
       ) : null}
 
       {!loading && !error && tab === 'notes' ? (
-        noteBullets.length > 0 || editingNotes ? (
-          <View style={styles.stack}>
-            <NotesLanguageToggle
-              activeLanguage={translateLanguage}
-              availableLanguages={notesTranslatedLanguages}
-              onSelect={(language) => {
-                setTranslateLanguage(language);
-                setTranslateError(null);
-              }}
-            />
-            <PaperNotesView
-              bullets={editingNotes ? draftBullets : noteBullets}
-              emptyLabel="No notes yet."
-              editable={!translateLanguage}
-              editing={editingNotes}
-              saving={savingNotes}
-              onEditPress={onStartEditNotes}
-              onChangeBullets={setDraftBullets}
-              onDoneEditing={() => void onDoneEditNotes()}
-              onCancelEditing={onCancelEditNotes}
-            />
-            {notesOnly && !notesPersisted && !editingNotes ? (
-              <Button
-                label={savingNotes ? 'Saving…' : 'Save'}
-                onPress={() => void onSaveNotes()}
-                loading={savingNotes}
-                disabled={savingNotes || !notes}
+        <View style={styles.stack}>
+          {generatingSummary ? <SummaryGeneratingBanner /> : null}
+          {noteBullets.length > 0 || editingNotes ? (
+            <>
+              <NotesLanguageToggle
+                activeLanguage={translateLanguage}
+                availableLanguages={notesTranslatedLanguages}
+                onSelect={(language) => {
+                  setTranslateLanguage(language);
+                  setTranslateError(null);
+                }}
               />
-            ) : null}
-            {!notesOnly && !editingNotes ? (
-              <Button
-                label={translating ? 'Translating…' : 'Translate'}
-                onPress={() => setTranslateSheetOpen(true)}
-                variant="secondary"
-                loading={translating}
-                disabled={translating}
+              <PaperNotesView
+                bullets={editingNotes ? draftBullets : noteBullets}
+                emptyLabel="No notes yet."
+                editable={!translateLanguage}
+                editing={editingNotes}
+                saving={savingNotes}
+                onEditPress={onStartEditNotes}
+                onChangeBullets={setDraftBullets}
+                onDoneEditing={() => void onDoneEditNotes()}
+                onCancelEditing={onCancelEditNotes}
               />
-            ) : null}
-            {showGenerate && !editingNotes ? (
-              <Button
-                label="Generate summary"
-                onPress={() => void onGenerateSummary()}
-                variant="secondary"
-              />
-            ) : null}
-            {generatingSummary ? (
+              {notesOnly && !notesPersisted && !editingNotes ? (
+                <Button
+                  label={savingNotes ? 'Saving…' : 'Save'}
+                  onPress={() => void onSaveNotes()}
+                  loading={savingNotes}
+                  disabled={savingNotes || !notes}
+                />
+              ) : null}
+              {!notesOnly && !editingNotes ? (
+                <Button
+                  label={translating ? 'Translating…' : 'Translate'}
+                  onPress={() => setTranslateSheetOpen(true)}
+                  variant="secondary"
+                  loading={translating}
+                  disabled={translating}
+                />
+              ) : null}
+              {showGenerate && !editingNotes ? (
+                <Button
+                  label="Generate summary"
+                  onPress={() => void onGenerateSummary()}
+                  variant="secondary"
+                />
+              ) : null}
+            </>
+          ) : (
+            <>
               <Text style={[styles.empty, { color: colors.inkMuted }]}>
-                Generating AI summary…
+                {notesOnly
+                  ? 'Notes aren’t ready yet. Finish recording, or tap the pencil to write them.'
+                  : 'No notes yet. Tap the pencil to write them, or open Processing to transcribe.'}
               </Text>
-            ) : null}
-          </View>
-        ) : (
-          <View style={styles.stack}>
-            <Text style={[styles.empty, { color: colors.inkMuted }]}>
-              {notesOnly
-                ? 'Notes aren’t ready yet. Finish recording or processing first.'
-                : 'No transcript yet. Open Processing to transcribe, then notes appear here as sentence bullets.'}
-            </Text>
-            {notesOnly ? (
               <PaperNotesView
                 bullets={[]}
-                emptyLabel="No notes yet — tap edit to add some."
-                editable
+                emptyLabel="No notes yet — tap the pencil to add some."
+                editable={!translateLanguage}
                 editing={false}
                 onEditPress={onStartEditNotes}
               />
-            ) : null}
-            {notesOnly && notes && !notesPersisted ? (
-              <Button
-                label={savingNotes ? 'Saving…' : 'Save'}
-                onPress={() => void onSaveNotes()}
-                loading={savingNotes}
-                disabled={savingNotes}
-              />
-            ) : null}
-            {showGenerate ? (
-              <Button
-                label="Generate summary"
-                onPress={() => void onGenerateSummary()}
-              />
-            ) : null}
-            {generatingSummary ? (
-              <Text style={[styles.empty, { color: colors.inkMuted }]}>
-                Generating AI summary…
-              </Text>
-            ) : null}
-          </View>
-        )
+              {notesOnly && notes && !notesPersisted ? (
+                <Button
+                  label={savingNotes ? 'Saving…' : 'Save'}
+                  onPress={() => void onSaveNotes()}
+                  loading={savingNotes}
+                  disabled={savingNotes}
+                />
+              ) : null}
+              {showGenerate ? (
+                <Button
+                  label="Generate summary"
+                  onPress={() => void onGenerateSummary()}
+                />
+              ) : null}
+            </>
+          )}
+        </View>
       ) : null}
 
       <TranslateLanguageSheet

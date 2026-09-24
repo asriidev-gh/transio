@@ -107,4 +107,55 @@ describe('notes routes', () => {
       'Final overview',
     );
   });
+
+  it('saves edited notes for live captions without changing status', async () => {
+    const sessions = new InMemorySessionRepository();
+    const summaries = new InMemorySummaryRepository();
+    const app = createApp({
+      authenticate: testAuthenticate,
+      createSessionRepository: () => sessions,
+      createSummaryRepository: () => summaries,
+      createSummaryProvider: () => new FakeSummaryProvider(),
+    });
+
+    const created = await request(app).post(
+      '/sessions',
+      {
+        title: 'Live captions notes',
+        sessionType: 'lecture',
+        captureMode: 'live',
+      },
+      { Authorization: 'Bearer token-a' },
+    );
+    const id = (created.body.data as { id: string }).id;
+    assert.equal((created.body.data as { status: string }).status, 'recording');
+
+    const res = await request(app).post(
+      `/sessions/${id}/notes/finalize`,
+      {
+        overview: 'Edited live notes',
+        keyPoints: ['Shipsmart line', 'A second line'],
+        topics: [],
+        questionsDiscussed: [],
+        actionItems: [],
+        importantInsights: [],
+        quotes: [],
+      },
+      { Authorization: 'Bearer token-a' },
+    );
+    assert.equal(res.status, 200);
+    assert.deepEqual((res.body.data as { keyPoints: string[] }).keyPoints, [
+      'Shipsmart line',
+      'A second line',
+    ]);
+
+    const getRes = await request(app).get(`/sessions/${id}`, {
+      Authorization: 'Bearer token-a',
+    });
+    assert.equal((getRes.body.data as { status: string }).status, 'recording');
+    assert.equal(
+      await summaries.getBySessionId(id, 'notes').then((s) => s?.overview),
+      'Edited live notes',
+    );
+  });
 });
