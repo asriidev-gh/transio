@@ -91,5 +91,14 @@ export const LiveTranslateChunkResultSchema = z.object({
 });
 
 export type LiveTranslateChunkResult = z.infer<typeof LiveTranslateChunkResultSchema>;
+/** Push-to-talk voice interpreter: audio in ? transcribed + translated text out. */
+export const VoiceTranslateResultSchema = z.object({
+  sourceText: z.string().min(1),
+  translatedText: z.string().min(1),
+  detectedLanguage: z.string().nullable().optional(),
+  targetLanguage: TranslateLanguageSchema,
+  targetLanguageLabel: z.string(),
+});
 
+export type VoiceTranslateResult = z.infer<typeof VoiceTranslateResultSchema>;
 export type { SessionSummary, TranscriptSegment };

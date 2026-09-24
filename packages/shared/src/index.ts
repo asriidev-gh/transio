@@ -112,6 +112,7 @@ export {
   TranslateResultSchema,
   LiveTranslateChunkRequestSchema,
   LiveTranslateChunkResultSchema,
+  VoiceTranslateResultSchema,
   TRANSLATE_LANGUAGE_LABELS,
   TRANSLATE_LANGUAGE_OPTIONS,
   type TranslateLanguage,
@@ -122,6 +123,7 @@ export {
   type TranslateResult,
   type LiveTranslateChunkRequest,
   type LiveTranslateChunkResult,
+  type VoiceTranslateResult,
 } from './translate.js';
 
 export {
