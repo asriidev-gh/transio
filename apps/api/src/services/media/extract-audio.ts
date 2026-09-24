@@ -2,10 +2,32 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
+import ffmpegStatic from 'ffmpeg-static';
 import { AppError } from '../../middleware/error-handler.js';
+import { getEnv } from '../../lib/env.js';
 import { logger } from '../../lib/logger.js';
 
 export const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
+/** Supabase `session-audio` bucket cap is 100 MB; stay just under it. */
+export const STORAGE_MAX_BYTES = 99 * 1024 * 1024;
+/** Long meeting recordings can take a while to convert. */
+const FFMPEG_TIMEOUT_MS = 15 * 60 * 1000;
+
+/** Largest prepared (post-conversion) file the active transcription provider can take. */
+export function transcriptionMaxBytes(): number {
+  return getEnv().TRANSCRIPTION_PROVIDER === 'deepgram' ? STORAGE_MAX_BYTES : WHISPER_MAX_BYTES;
+}
+
+function maxMinutesAt64k(bytes: number): number {
+  // 64 kbps mono mp3 = 480 KB per minute.
+  return Math.floor(bytes / (480 * 1024));
+}
+
+/** Prefer a system ffmpeg; fall back to the bundled ffmpeg-static binary. */
+function ffmpegCommand(): string {
+  const bundled = typeof ffmpegStatic === 'string' ? ffmpegStatic : null;
+  return process.env.FFMPEG_PATH?.trim() || bundled || 'ffmpeg';
+}
 
 const WHISPER_AUDIO_MIME = new Set([
   'audio/mpeg',
@@ -79,7 +101,7 @@ function looksLikeWhisperContainer(mimeType: string, fileName: string): boolean 
 
 async function ffmpegAvailable(): Promise<boolean> {
   return new Promise((resolve) => {
-    const child = spawn('ffmpeg', ['-version'], { windowsHide: true });
+    const child = spawn(ffmpegCommand(), ['-version'], { windowsHide: true });
     let settled = false;
     const done = (ok: boolean) => {
       if (settled) return;
@@ -97,7 +119,7 @@ async function ffmpegAvailable(): Promise<boolean> {
 
 function runFfmpeg(args: string[], timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn('ffmpeg', args, { windowsHide: true });
+    const child = spawn(ffmpegCommand(), args, { windowsHide: true });
     let stderr = '';
     const timer = setTimeout(() => {
       child.kill();
@@ -149,7 +171,7 @@ async function extractWithFfmpeg(input: MediaBytes): Promise<MediaBytes | null> 
         'mp3',
         outputPath,
       ],
-      5 * 60 * 1000,
+      FFMPEG_TIMEOUT_MS,
     );
     const data = await readFile(outputPath);
     if (data.byteLength < 32) return null;
@@ -170,11 +192,12 @@ async function extractWithFfmpeg(input: MediaBytes): Promise<MediaBytes | null> 
 }
 
 /**
- * Prefer compact speech audio for Whisper (25 MB cap). Video is remuxed when ffmpeg is installed.
+ * Prefer compact speech audio (24 MB cap for Whisper, ~99 MB for Deepgram). Video is remuxed when ffmpeg is installed.
  */
 export async function prepareMediaForTranscription(input: MediaBytes): Promise<MediaBytes> {
+  const maxBytes = transcriptionMaxBytes();
   const needsExtract =
-    isVideoMedia(input.mimeType, input.fileName) || input.data.byteLength > WHISPER_MAX_BYTES;
+    isVideoMedia(input.mimeType, input.fileName) || input.data.byteLength > maxBytes;
 
   if (!needsExtract && looksLikeWhisperAudio(input.mimeType, input.fileName)) {
     return input;
@@ -183,10 +206,10 @@ export async function prepareMediaForTranscription(input: MediaBytes): Promise<M
   if (needsExtract) {
     const extracted = await extractWithFfmpeg(input);
     if (extracted) {
-      if (extracted.data.byteLength > WHISPER_MAX_BYTES) {
+      if (extracted.data.byteLength > maxBytes) {
         throw new AppError(
           'VALIDATION_ERROR',
-          'That recording is too long for transcription after converting to audio. Try a shorter clip.',
+          `That recording is too long for transcription after converting to audio (limit about ${maxMinutesAt64k(maxBytes)} minutes). Try a shorter clip.`,
           400,
         );
       }
@@ -195,10 +218,10 @@ export async function prepareMediaForTranscription(input: MediaBytes): Promise<M
   }
 
   if (looksLikeWhisperContainer(input.mimeType, input.fileName)) {
-    if (input.data.byteLength > WHISPER_MAX_BYTES) {
+    if (input.data.byteLength > maxBytes) {
       throw new AppError(
         'VALIDATION_ERROR',
-        'File is too large for transcription (max ~25 MB without ffmpeg). Install ffmpeg on the API host or upload a shorter/compressed file.',
+        `File is too large for transcription (max ~${Math.floor(maxBytes / (1024 * 1024))} MB when audio cannot be converted). Upload a shorter or compressed file.`,
         400,
       );
     }

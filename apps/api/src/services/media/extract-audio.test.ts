@@ -27,3 +27,25 @@ describe('extract-audio helpers', () => {
     assert.equal(out.data, input.data);
   });
 });
+
+describe('transcription size limits', () => {
+  it('uses the Whisper cap by default and a larger cap for Deepgram', async () => {
+    const { resetEnvCache } = await import('../../lib/env.js');
+    const { transcriptionMaxBytes, WHISPER_MAX_BYTES, STORAGE_MAX_BYTES } = await import(
+      './extract-audio.js'
+    );
+    const prev = process.env.TRANSCRIPTION_PROVIDER;
+    try {
+      delete process.env.TRANSCRIPTION_PROVIDER;
+      resetEnvCache();
+      assert.equal(transcriptionMaxBytes(), WHISPER_MAX_BYTES);
+      process.env.TRANSCRIPTION_PROVIDER = 'deepgram';
+      resetEnvCache();
+      assert.equal(transcriptionMaxBytes(), STORAGE_MAX_BYTES);
+    } finally {
+      if (prev === undefined) delete process.env.TRANSCRIPTION_PROVIDER;
+      else process.env.TRANSCRIPTION_PROVIDER = prev;
+      resetEnvCache();
+    }
+  });
+});

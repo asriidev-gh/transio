@@ -18,6 +18,7 @@ import { ConfirmHost } from '@/src/components/ConfirmHost';
 import { BootLoading } from '@/src/components/BootLoading';
 import { mobileEnv } from '@/src/lib/env';
 import { hasSeenOnboarding } from '@/src/services/onboarding';
+import { ShareIntentHandler } from '@/src/components/ShareIntentHandler';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -151,6 +152,7 @@ function ThemedRoot() {
       <AuthProvider>
         <StatusBar style={scheme === 'light' ? 'dark' : 'light'} />
         <AuthGate>
+          <ShareIntentHandler />
           <Stack
             screenOptions={{
               headerStyle: { backgroundColor: colors.background },

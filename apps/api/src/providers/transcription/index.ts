@@ -2,6 +2,7 @@ import { getEnv } from '../../lib/env.js';
 import { logger } from '../../lib/logger.js';
 import { withProviderRetry } from '../../lib/retry.js';
 import { AppError } from '../../middleware/error-handler.js';
+import { DeepgramTranscriptionProvider } from './deepgram.js';
 import type {
   TranscriptionInput,
   TranscriptionProvider,
@@ -182,6 +183,18 @@ export class FakeTranscriptionProvider implements TranscriptionProvider {
 
 export function createTranscriptionProvider(): TranscriptionProvider {
   const env = getEnv();
+
+  if (env.TRANSCRIPTION_PROVIDER === 'deepgram') {
+    if (!env.DEEPGRAM_API_KEY) {
+      throw new AppError(
+        'SERVICE_UNAVAILABLE',
+        'Transcription is not configured. Set DEEPGRAM_API_KEY on the API.',
+        503,
+      );
+    }
+    return new DeepgramTranscriptionProvider(env.DEEPGRAM_API_KEY);
+  }
+
   const baseUrl = env.TRANSCRIPTION_BASE_URL.trim() || 'https://api.openai.com/v1';
 
   if (!env.TRANSCRIPTION_API_KEY) {

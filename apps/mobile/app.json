@@ -41,6 +41,13 @@
       "expo-router",
       "expo-document-picker",
       [
+        "expo-share-intent",
+        {
+          "disableIOS": true,
+          "androidIntentFilters": ["audio/*", "video/*", "text/*"]
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/app-icon.png",

@@ -17,6 +17,9 @@ SessionAI MVP can run in production with the same monorepo layout. Keep secrets 
 | `ANTHROPIC_MODEL` | Optional; default `claude-sonnet-4-5` |
 | `TRANSCRIPTION_API_KEY` | Whisper-compatible STT |
 | `TRANSCRIPTION_BASE_URL` | Optional; default OpenAI |
+| `TRANSCRIPTION_PROVIDER` | `whisper` (default) or `deepgram` (speaker diarization, meetings; uses `DEEPGRAM_API_KEY`) |
+| `MAX_UPLOAD_MB` | Optional raw upload/link cap before conversion (default 100, max 1000). Held in RAM, so size to the host |
+| `FFMPEG_PATH` | Optional; overrides the bundled `ffmpeg-static` binary |
 | `LOG_SENSITIVE` | Keep `false` in production |
 | `CORS_ORIGINS` | Comma-separated browser origins (required for Expo web in production) |
 | `DEEPGRAM_API_KEY` | Live captions WS proxy (optional) |

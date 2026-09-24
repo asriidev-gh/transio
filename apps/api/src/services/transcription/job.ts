@@ -65,7 +65,9 @@ export async function runTranscriptionJob(
       fileName,
     });
 
-    const segments = await labelSegmentsBestEffort({
+    const segments = result.diarized
+          ? (result.segments ?? [])
+          : await labelSegmentsBestEffort({
       title: session.title,
       sessionType: session.sessionType,
       segments: result.segments ?? [],

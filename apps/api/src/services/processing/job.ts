@@ -60,7 +60,9 @@ export async function runProcessingPipeline(
       transcriptText = result.text;
 
       if (!notesOnly) {
-        const segments = await labelSegmentsBestEffort({
+        const segments = result.diarized
+          ? (result.segments ?? [])
+          : await labelSegmentsBestEffort({
           title: session.title,
           sessionType: session.sessionType,
           segments: result.segments ?? [],

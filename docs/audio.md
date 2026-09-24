@@ -59,3 +59,14 @@ Ownership is verified before upload or signing. Paths must start with the caller
 1. Apply both SQL migrations (sessions + storage bucket).
 2. Confirm bucket `session-audio` exists and is **not** public.
 3. Ensure API + mobile Supabase env vars are set.
+
+## Recording length limits
+
+Video is converted to 64 kbps mono mp3 (about 480 KB per minute) with ffmpeg, which ships with the API via `ffmpeg-static`.
+
+| Provider | Max prepared file | About |
+| --- | --- | --- |
+| `whisper` (default) | 24 MB | 50 minutes |
+| `deepgram` | 99 MB (Supabase bucket is 100 MB) | 3.4 hours |
+
+The raw upload or link download is capped by `MAX_UPLOAD_MB` (default 100) before conversion. Live captions and Live Note Taker stream to Deepgram and have no server-side duration cap.

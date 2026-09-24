@@ -21,6 +21,7 @@ import { IconWell } from '@/src/components/ui/IconWell';
 import { ApiClientError } from '@/src/services/api';
 import { saveLocalAudioUri } from '@/src/services/local-audio';
 import {
+  mimeTypeFromFileName,
   pickAudioFile,
   titleFromMediaName,
   titleFromMediaUrl,
@@ -63,10 +64,22 @@ export default function NewSessionScreen() {
   const router = useRouter();
   const { colors, shadows } = useTheme();
   const tabBarInset = useFloatingTabBarContentInset();
-  const { mode, folderId: folderIdParam, captions: captionsParam } = useLocalSearchParams<{
+  const {
+    mode,
+    folderId: folderIdParam,
+    captions: captionsParam,
+    sharedUri,
+    sharedName,
+    sharedMime,
+    sharedUrl,
+  } = useLocalSearchParams<{
     mode?: string;
     folderId?: string;
     captions?: string;
+    sharedUri?: string;
+    sharedName?: string;
+    sharedMime?: string;
+    sharedUrl?: string;
   }>();
   const preferImport = mode === 'import';
   const [step, setStep] = useState<'mode' | 'details'>(preferImport ? 'details' : 'mode');
@@ -102,6 +115,24 @@ export default function NewSessionScreen() {
   const [composingFolder, setComposingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
+
+  // Recording shared in from Zoom / Meet / Drive via the Android share sheet.
+  useEffect(() => {
+    if (sharedUri) {
+      const name = sharedName || 'Shared recording';
+      setPicked({
+        uri: sharedUri,
+        name,
+        mimeType: sharedMime || mimeTypeFromFileName(name),
+      });
+      setMediaUrl('');
+      const suggested = titleFromMediaName(name);
+      if (suggested) setTitle((current) => current || suggested);
+    } else if (sharedUrl) {
+      setPicked(null);
+      setMediaUrl(sharedUrl);
+    }
+  }, [sharedUri, sharedName, sharedMime, sharedUrl]);
 
   useEffect(() => {
     void (async () => {

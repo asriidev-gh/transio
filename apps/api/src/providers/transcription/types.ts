@@ -20,6 +20,8 @@ export interface TranscriptionResult {
   text: string;
   language?: string | null;
   segments?: TranscriptionSegment[];
+  /** True when speaker labels come from acoustic diarization (skip text-based relabeling). */
+  diarized?: boolean;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { isIP } from 'node:net';
 import { AppError } from '../../middleware/error-handler.js';
+import { maxUploadBytes } from '../../lib/limits.js';
 
 const BLOCKED_HOST_SUFFIXES = [
   'youtube.com',
@@ -22,7 +23,7 @@ const BLOCKED_HOST_SUFFIXES = [
 const PAGE_LINK_MESSAGE =
   'That looks like a video page, not a file. Download the video yourself, then upload it — or paste a direct link to an .mp4, .webm, .mp3, or similar file.';
 
-export const MAX_REMOTE_MEDIA_BYTES = 100 * 1024 * 1024;
+export const MAX_REMOTE_MEDIA_BYTES = maxUploadBytes();
 
 export function hostnameOf(url: URL): string {
   return url.hostname.replace(/^\[|\]$/g, '').toLowerCase();

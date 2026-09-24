@@ -17,6 +17,8 @@ const envSchema = z.object({
   ANTHROPIC_TRANSLATE_MODEL: z.string().optional().default('claude-haiku-4-5'),
   TRANSCRIPTION_API_KEY: z.string().optional().default(''),
   TRANSCRIPTION_BASE_URL: z.string().default(''),
+  /** Batch STT engine: whisper (default) or deepgram (real speaker diarization; uses DEEPGRAM_API_KEY). */
+  TRANSCRIPTION_PROVIDER: z.enum(['whisper', 'deepgram']).default('whisper'),
   /** Live captions WebSocket proxy (Deepgram Listen). Server-only. */
   DEEPGRAM_API_KEY: z.string().optional().default(''),
   /**

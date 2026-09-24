@@ -1,3 +1,4 @@
+import { maxUploadBytes } from '../../lib/limits.js';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { AppError } from '../../middleware/error-handler.js';
@@ -115,7 +116,7 @@ export async function fetchRemoteMedia(
     if (lengthHeader) {
       const length = Number(lengthHeader);
       if (Number.isFinite(length) && length > MAX_REMOTE_MEDIA_BYTES) {
-        throw new AppError('VALIDATION_ERROR', 'Remote file is too large (max 100 MB)', 400);
+        throw new AppError('VALIDATION_ERROR', `Remote file is too large (max ${Math.round(maxUploadBytes() / (1024 * 1024))} MB)`, 400);
       }
     }
 
@@ -129,7 +130,7 @@ export async function fetchRemoteMedia(
     if (!response.body) {
       const buf = Buffer.from(await response.arrayBuffer());
       if (buf.byteLength > MAX_REMOTE_MEDIA_BYTES) {
-        throw new AppError('VALIDATION_ERROR', 'Remote file is too large (max 100 MB)', 400);
+        throw new AppError('VALIDATION_ERROR', `Remote file is too large (max ${Math.round(maxUploadBytes() / (1024 * 1024))} MB)`, 400);
       }
       return { data: buf, mimeType, fileName };
     }
@@ -142,7 +143,7 @@ export async function fetchRemoteMedia(
       total += value.byteLength;
       if (total > MAX_REMOTE_MEDIA_BYTES) {
         await reader.cancel().catch(() => undefined);
-        throw new AppError('VALIDATION_ERROR', 'Remote file is too large (max 100 MB)', 400);
+        throw new AppError('VALIDATION_ERROR', `Remote file is too large (max ${Math.round(maxUploadBytes() / (1024 * 1024))} MB)`, 400);
       }
       chunks.push(Buffer.from(value));
     }

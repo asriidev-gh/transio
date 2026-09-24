@@ -1,3 +1,4 @@
+import { maxUploadBytes } from '../lib/limits.js';
 import { apiError } from '@sessionai/shared';
 import type { NextFunction, Request, Response } from 'express';
 import { MulterError } from 'multer';
@@ -36,7 +37,7 @@ export function errorHandler(
     if (err.code === 'LIMIT_FILE_SIZE') {
       res
         .status(400)
-        .json(apiError('VALIDATION_ERROR', 'File is too large (max 100 MB)'));
+        .json(apiError('VALIDATION_ERROR', `File is too large (max ${Math.round(maxUploadBytes() / (1024 * 1024))} MB)`));
       return;
     }
     res.status(400).json(apiError('VALIDATION_ERROR', err.message));

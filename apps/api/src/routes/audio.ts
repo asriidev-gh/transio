@@ -8,6 +8,7 @@ import {
 } from '@sessionai/shared';
 import type { Request } from 'express';
 import { AppError } from '../middleware/error-handler.js';
+import { maxUploadBytes } from '../lib/limits.js';
 import { getSupabaseServiceClient } from '../lib/supabase.js';
 import {
   isAllowedUploadMedia,
@@ -24,7 +25,7 @@ import {
 import type { SessionRepoFactory } from './sessions.js';
 
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour
-const MAX_AUDIO_BYTES = 100 * 1024 * 1024;
+const MAX_AUDIO_BYTES = maxUploadBytes();
 
 export const audioUpload = multer({
   storage: multer.memoryStorage(),
