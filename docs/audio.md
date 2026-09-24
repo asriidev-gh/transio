@@ -70,3 +70,5 @@ Video is converted to 64 kbps mono mp3 (about 480 KB per minute) with ffmpeg, wh
 | `deepgram` | 99 MB (Supabase bucket is 100 MB) | 3.4 hours |
 
 The raw upload or link download is capped by `MAX_UPLOAD_MB` (default 100) before conversion. Live captions and Live Note Taker stream to Deepgram and have no server-side duration cap.
+
+`GET /limits` (public) returns `maxUploadMb` and `maxAudioMinutes` for the active provider. The mobile app reads it to show the limits on the import screen and to warn before uploading a recording that is too long.

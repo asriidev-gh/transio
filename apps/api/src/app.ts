@@ -5,6 +5,7 @@ import { getEnv } from './lib/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { healthRouter } from './routes/health.js';
+import { limitsRouter } from './routes/limits.js';
 import { meRouter } from './routes/me.js';
 import type { AudioStorageFactory, MediaPreparer, RemoteMediaFetcher } from './routes/audio.js';
 import {
@@ -89,6 +90,7 @@ export function createApp(deps: AppDeps = {}) {
   });
 
   app.use(healthRouter);
+  app.use(limitsRouter);
   app.use(meRouter);
   app.use(
     '/folders',

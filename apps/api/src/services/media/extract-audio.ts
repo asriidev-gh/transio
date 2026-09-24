@@ -18,7 +18,7 @@ export function transcriptionMaxBytes(): number {
   return getEnv().TRANSCRIPTION_PROVIDER === 'deepgram' ? STORAGE_MAX_BYTES : WHISPER_MAX_BYTES;
 }
 
-function maxMinutesAt64k(bytes: number): number {
+export function maxMinutesAt64k(bytes: number): number {
   // 64 kbps mono mp3 = 480 KB per minute.
   return Math.floor(bytes / (480 * 1024));
 }
@@ -233,4 +233,9 @@ export async function prepareMediaForTranscription(input: MediaBytes): Promise<M
     'Could not read audio from that file. Upload mp3, m4a, wav, mp4, or webm.',
     400,
   );
+}
+
+/** Longest recording (minutes of speech) the active provider can transcribe. */
+export function maxAudioMinutes(): number {
+  return maxMinutesAt64k(transcriptionMaxBytes());
 }

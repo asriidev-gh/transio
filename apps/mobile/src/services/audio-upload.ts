@@ -2,6 +2,8 @@ import type { AudioUploadResult, SignedAudioUrl } from '@sessionai/shared';
 import { mobileEnv } from '@/src/lib/env';
 import { getCurrentSession } from '@/src/services/auth';
 import { ApiClientError, apiGet, apiRequest } from '@/src/services/api';
+import { getLocalFileSize } from '@/src/services/local-file-size';
+import { getCachedUploadLimits, uploadSizeError } from '@/src/services/upload-limits';
 
 export interface UploadProgress {
   loaded: number;
@@ -59,6 +61,12 @@ export function uploadSessionAudio(
         const token = (await getCurrentSession())?.access_token;
         if (!token) {
           reject(new ApiClientError('UNAUTHORIZED', 'You must be signed in.', 401));
+          return;
+        }
+
+        const tooLarge = uploadSizeError(getLocalFileSize(localUri));
+        if (tooLarge) {
+          reject(new ApiClientError('FILE_TOO_LARGE', tooLarge, 413));
           return;
         }
 
@@ -121,7 +129,14 @@ export function uploadSessionAudio(
         };
 
         xhr.onerror = () => {
-          reject(new ApiClientError('NETWORK_ERROR', 'Upload failed. Check your connection.', 0));
+          // The server drops the connection mid-upload when a file is over the limit.
+          reject(
+            new ApiClientError(
+              'NETWORK_ERROR',
+              `Upload failed. Check your connection, and make sure the file is under ${getCachedUploadLimits().maxUploadMb} MB.`,
+              0,
+            ),
+          );
         };
 
         xhr.onload = () => {

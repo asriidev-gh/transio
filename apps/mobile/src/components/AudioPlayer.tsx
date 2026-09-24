@@ -13,6 +13,8 @@ interface AudioPlayerProps {
   variant?: 'card' | 'dock';
   /** Fires as playback position updates (seconds). */
   onProgress?: (currentTimeSec: number) => void;
+  /** Fires once the total length (seconds) is known. */
+  onDuration?: (durationSec: number) => void;
   /** When set to a new id, seeks to `sec`. */
   seekRequest?: { id: number; sec: number } | null;
 }
@@ -28,6 +30,7 @@ export function AudioPlayer({
   title,
   variant = 'card',
   onProgress,
+  onDuration,
   seekRequest,
 }: AudioPlayerProps) {
   const { colors, shadows } = useTheme();
@@ -50,6 +53,10 @@ export function AudioPlayer({
   const progress = duration > 0 ? Math.min(1, position / duration) : 0;
   // Some Android/signed-URL loads report duration before isLoaded flips true.
   const effectivelyLoaded = status.isLoaded || duration > 0;
+
+  useEffect(() => {
+    if (duration > 0) onDuration?.(duration);
+  }, [duration, onDuration]);
   const loading = !error && (!ready || !effectivelyLoaded);
   const speed = SPEEDS[speedIndex];
   const controlsDisabled = Boolean(error) || loading;

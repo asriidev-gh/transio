@@ -27,6 +27,8 @@ import { Button } from '@/src/components/ui/Button';
 import { Icon } from '@/src/components/ui/Icon';
 import { ApiClientError } from '@/src/services/api';
 import { getSignedAudioUrl, uploadSessionAudio } from '@/src/services/audio-upload';
+import { fetchUploadLimits } from '@/src/services/fetch-upload-limits';
+import { durationLimitError } from '@/src/services/upload-limits';
 import {
   clearLocalAudioUri,
   getLocalAudioUri,
@@ -79,6 +81,12 @@ export default function SessionDetailsScreen() {
   const [workspaceHasSummary, setWorkspaceHasSummary] = useState(false);
   const [workspaceHasNotes, setWorkspaceHasNotes] = useState(false);
   const seekIdRef = useRef(0);
+  const localDurationRef = useRef<number | null>(null);
+  const [localDurationSec, setLocalDurationSec] = useState<number | null>(null);
+  const handleDuration = useCallback((sec: number) => {
+    localDurationRef.current = sec;
+    setLocalDurationSec(sec);
+  }, []);
   const liveNotesUploadRef = useRef(false);
 
   const runUploadAndProcess = useCallback(
@@ -88,6 +96,14 @@ export default function SessionDetailsScreen() {
       setUploadProgress(0);
       setUploadMessage(undefined);
       try {
+        await fetchUploadLimits();
+        const tooLong = durationLimitError(localDurationRef.current);
+        if (tooLong) {
+          setUploadStatus('error');
+          setUploadMessage(tooLong);
+          return false;
+        }
+
         const readable = await isLocalAudioReadable(uri);
         if (!readable) {
           await clearLocalAudioUri(sessionId);
@@ -407,6 +423,23 @@ export default function SessionDetailsScreen() {
     })();
   }, [session, id, localUri, proceeding, uploadStatus, runUploadAndProcess]);
 
+  // Warn as soon as the local recording's length is known, before any upload.
+  useEffect(() => {
+    if (!localUri || localDurationSec == null) return;
+    let cancelled = false;
+    void fetchUploadLimits().then((limits) => {
+      if (cancelled) return;
+      const tooLong = durationLimitError(localDurationSec, limits);
+      if (tooLong) {
+        setUploadStatus('error');
+        setUploadMessage(tooLong);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [localUri, localDurationSec]);
+
   async function onRefresh() {
     setRefreshing(true);
     try {
@@ -677,6 +710,7 @@ export default function SessionDetailsScreen() {
                   title={session.title}
                   variant="dock"
                   onProgress={setPlaybackTimeSec}
+                  onDuration={handleDuration}
                   seekRequest={seekRequest}
                 />
               ) : null}
@@ -752,6 +786,7 @@ export default function SessionDetailsScreen() {
               title={session.title}
               variant="dock"
               onProgress={setPlaybackTimeSec}
+              onDuration={handleDuration}
               seekRequest={seekRequest}
             />
           ) : null}

@@ -27,7 +27,15 @@ import {
   titleFromMediaUrl,
   type PickedAudio,
 } from '@/src/services/pick-audio';
+import { fetchUploadLimits } from '@/src/services/fetch-upload-limits';
 import { importSessionMediaFromUrl } from '@/src/services/audio-upload';
+import {
+  DEFAULT_UPLOAD_LIMITS,
+  formatFileSize,
+  uploadLimitHint,
+  uploadSizeError,
+  type UploadLimits,
+} from '@/src/services/upload-limits';
 import {
   DEFAULT_FOLDER_NAME,
   dedupeFoldersByName,
@@ -91,6 +99,7 @@ export default function NewSessionScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [picked, setPicked] = useState<PickedAudio | null>(null);
+  const [limits, setLimits] = useState<UploadLimits>(DEFAULT_UPLOAD_LIMITS);
   const [mediaUrl, setMediaUrl] = useState('');
   const [captionsMode, setCaptionsMode] = useState<RecordCaptionsMode>(() => {
     if (
@@ -115,6 +124,10 @@ export default function NewSessionScreen() {
   const [composingFolder, setComposingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
+
+  useEffect(() => {
+    void fetchUploadLimits().then(setLimits);
+  }, []);
 
   // Recording shared in from Zoom / Meet / Drive via the Android share sheet.
   useEffect(() => {
@@ -244,6 +257,11 @@ export default function NewSessionScreen() {
     try {
       const next = await pickAudioFile();
       if (next) {
+        const tooLarge = uploadSizeError(next.size, limits);
+        if (tooLarge) {
+          setError(tooLarge);
+          return;
+        }
         setPicked(next);
         setMediaUrl('');
         if (!title.trim()) {
@@ -811,7 +829,11 @@ export default function NewSessionScreen() {
                   {picked ? picked.name : 'Choose audio or video'}
                 </Text>
                 <Text style={[styles.dropHint, { color: colors.inkMuted }]}>
-                  {picked ? picked.mimeType : 'MP3, M4A, WAV, MP4, MOV, WebM'}
+                  {picked
+                    ? [picked.mimeType, picked.size ? formatFileSize(picked.size) : null]
+                        .filter(Boolean)
+                        .join(' · ')
+                    : uploadLimitHint(limits)}
                 </Text>
               </Pressable>
 
@@ -846,7 +868,7 @@ export default function NewSessionScreen() {
                   />
                 </View>
                 <Text style={[styles.dropHint, { color: colors.tertiary, textAlign: 'left' }]}>
-                  Direct links to mp4, webm, or mp3 files. Not YouTube or Vimeo pages.
+                  Direct links to mp4, webm, or mp3 files, up to {limits.maxUploadMb} MB. Not YouTube or Vimeo pages.
                 </Text>
               </View>
             </View>

@@ -16,6 +16,8 @@ export interface PickedAudio {
   uri: string;
   name: string;
   mimeType: string;
+  /** Size in bytes when the picker reports it. */
+  size?: number;
 }
 
 const MEDIA_ACCEPT = [
@@ -112,6 +114,7 @@ async function pickMediaNative(): Promise<PickedAudio | null> {
     uri: asset.uri,
     name,
     mimeType,
+    size: asset.size,
   };
 }
 
