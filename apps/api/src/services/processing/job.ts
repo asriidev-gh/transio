@@ -1,4 +1,4 @@
-import { isNotesOnlyCaptureMode } from '@sessionai/shared';
+import { isNotesOnlyCaptureMode, rawNotesFromText } from '@sessionai/shared';
 import { logger } from '../../lib/logger.js';
 import { AppError } from '../../middleware/error-handler.js';
 import { labelSegmentsBestEffort } from '../../providers/speakers/index.js';
@@ -88,28 +88,41 @@ export async function runProcessingPipeline(
       throw new AppError('VALIDATION_ERROR', 'Transcription produced empty text', 400);
     }
 
-    await deps.sessions.update(deps.userId, sessionId, { status: 'summarizing' });
+    // Capture notes modes: persist raw speech as sentence bullets (no AI).
+    // Opt-in AI summary is created later via POST /summarize.
+    if (notesOnly) {
+      // Live Note Taker already saved caption bullets on stop — never overwrite
+      // with a Whisper re-pass (that collapses punctuation into one paragraph).
+      if (session.captureMode === 'live_notes') {
+        const existing = await deps.summaries.getBySessionId(sessionId, 'notes');
+        if (existing && (existing.keyPoints.length > 0 || existing.overview?.trim())) {
+          await deps.sessions.update(deps.userId, sessionId, { status: 'completed' });
+          logger.info('Notes-only pipeline skipped (live notes already saved)', {
+            sessionId,
+            keyPointCount: existing.keyPoints.length,
+          });
+          return;
+        }
+      }
 
-    const refreshed = await deps.sessions.getById(deps.userId, sessionId);
-    if (!refreshed) {
-      throw new AppError('NOT_FOUND', 'Session not found', 404);
+      const notes = rawNotesFromText(transcriptText);
+      await deps.summaries.upsertForSession(sessionId, notes, 'notes');
+      await deps.sessions.update(deps.userId, sessionId, { status: 'completed' });
+
+      logger.info('Notes-only pipeline completed', {
+        sessionId,
+        transcriptionProvider: deps.transcriptionProvider.name,
+        keyPointCount: notes.keyPoints.length,
+      });
+      return;
     }
 
-    const summary = await deps.summaryProvider.summarize({
-      transcriptText,
-      sessionType: refreshed.sessionType,
-      title: refreshed.title,
-    });
-
-    await deps.summaries.upsertForSession(sessionId, summary);
-    await deps.sessions.update(deps.userId, sessionId, { status: 'completed' });
-
-    logger.info('Pipeline completed', {
+    // Transcript sessions: stop after transcription. AI summary is opt-in.
+    await deps.sessions.update(deps.userId, sessionId, { status: 'transcribed' });
+    logger.info('Pipeline transcription stage completed (summary deferred)', {
       sessionId,
       transcriptionProvider: deps.transcriptionProvider.name,
-      summaryProvider: deps.summaryProvider.name,
-      keyPointCount: summary.keyPoints.length,
-      notesOnly,
+      textLength: transcriptText.length,
     });
   } catch (err) {
     logger.error('Processing pipeline failed', {

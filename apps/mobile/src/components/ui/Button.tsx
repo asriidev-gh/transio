@@ -11,41 +11,49 @@ interface ButtonProps {
   variant?: Variant;
   disabled?: boolean;
   loading?: boolean;
+  /** Default true — set false for inline row actions (e.g. Add folder). */
+  fullWidth?: boolean;
   accessibilityLabel?: string;
 }
 
+/**
+ * Shared CTA. Height lives on the fill (gradient / solid), not only the Pressable —
+ * Android LinearGradient + flex rows otherwise collapse primary buttons to a thin strip.
+ */
 export function Button({
   label,
   onPress,
   variant = 'primary',
   disabled = false,
   loading = false,
+  fullWidth = true,
   accessibilityLabel,
 }: ButtonProps) {
   const { colors, shadows } = useTheme();
   const idle = disabled || loading;
 
-  // Secondary/ghost always get a solid surface so they read as real controls on soft canvases.
-  const background =
+  const textColor =
+    variant === 'primary' || variant === 'danger' ? colors.onBrand : colors.ink;
+
+  const solidBg =
     variant === 'danger'
       ? colors.danger
-      : variant === 'primary'
+      : variant === 'ghost'
         ? 'transparent'
         : colors.surface;
 
   const borderColor =
     variant === 'primary' || variant === 'danger' ? 'transparent' : colors.border;
 
-  const textColor =
-    variant === 'primary' || variant === 'danger' ? colors.onBrand : colors.ink;
-
-  const elevate = variant === 'primary' || variant === 'secondary' || variant === 'ghost';
-
   const content = loading ? (
     <ActivityIndicator color={textColor} />
   ) : (
-    <Text style={[styles.label, { color: textColor }]}>{label}</Text>
+    <Text style={[styles.label, { color: textColor }]} numberOfLines={1}>
+      {label}
+    </Text>
   );
+
+  const fillStyle = [styles.fill, fullWidth ? styles.fillFull : styles.fillInline];
 
   return (
     <Pressable
@@ -54,15 +62,13 @@ export function Button({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       style={({ pressed }) => [
-        styles.base,
-        elevate && variant !== 'primary' ? shadows.soft : null,
-        variant === 'primary' ? shadows.emboss : null,
+        styles.pressable,
+        fullWidth ? styles.pressableFull : styles.pressableInline,
+        variant === 'primary' ? shadows.emboss : shadows.soft,
         {
-          backgroundColor: background,
           borderColor,
           opacity: idle ? 0.45 : pressed ? 0.92 : 1,
           transform: [{ scale: pressed && !idle ? 0.98 : 1 }],
-          overflow: 'hidden',
         },
       ]}
     >
@@ -71,43 +77,51 @@ export function Button({
           colors={[...gradients.primary]}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
-          style={styles.gradientFill}
+          style={fillStyle}
         >
           {content}
         </LinearGradient>
       ) : (
-        <View style={styles.plainFill}>{content}</View>
+        <View style={[fillStyle, { backgroundColor: solidBg }]}>{content}</View>
       )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  base: {
-    minHeight: sizes.button,
+  pressable: {
     borderRadius: radii.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'stretch',
-    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  gradientFill: {
-    flex: 1,
+  pressableFull: {
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  pressableInline: {
+    alignSelf: 'center',
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  fill: {
+    height: sizes.button,
     minHeight: sizes.button,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
-    borderRadius: radii.pill,
   },
-  plainFill: {
-    flex: 1,
-    minHeight: sizes.button,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
+  fillFull: {
+    width: '100%',
+  },
+  fillInline: {
+    minWidth: 72,
+    paddingHorizontal: spacing.md,
   },
   label: {
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.15,
+    lineHeight: 22,
+    textAlign: 'center',
   },
 });

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const ProcessAcceptedSchema = z.object({
   sessionId: z.string().uuid(),
-  status: z.enum(['transcribing', 'summarizing', 'completed']),
+  status: z.enum(['transcribing', 'transcribed', 'summarizing', 'completed']),
   stage: z.enum(['transcribe', 'summarize', 'done']),
 });
 

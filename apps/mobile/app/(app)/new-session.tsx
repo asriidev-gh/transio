@@ -9,14 +9,15 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SessionFolder, SessionType } from '@sessionai/shared';
 import { CAPTURE_MODE_LABELS } from '@sessionai/shared';
 import { SessionTypePicker } from '@/src/components/SessionTypePicker';
-import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
+import { useFloatingTabBarContentInset } from '@/src/components/FloatingTabBar';
 import { Button } from '@/src/components/ui/Button';
-import { Icon } from '@/src/components/ui/Icon';
+import { Icon, type AppIconName } from '@/src/components/ui/Icon';
+import { IconWell } from '@/src/components/ui/IconWell';
 import { ApiClientError } from '@/src/services/api';
 import { saveLocalAudioUri } from '@/src/services/local-audio';
 import {
@@ -46,12 +47,22 @@ import {
   type RecordCaptionsMode,
 } from '@/src/services/record-mode';
 import { createSession } from '@/src/services/sessions';
+import { consumeFeature } from '@/src/services/entitlements';
+import { ensureFeatureAccess } from '@/src/utils/feature-gate';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
+
+const MODE_ICONS: Record<RecordCaptionsMode, AppIconName> = {
+  live: 'sine-wave',
+  batch: 'microphone',
+  notes: 'download-outline',
+  live_notes: 'sticky-note',
+};
 
 export default function NewSessionScreen() {
   const router = useRouter();
   const { colors, shadows } = useTheme();
+  const tabBarInset = useFloatingTabBarContentInset();
   const { mode, folderId: folderIdParam, captions: captionsParam } = useLocalSearchParams<{
     mode?: string;
     folderId?: string;
@@ -78,6 +89,8 @@ export default function NewSessionScreen() {
       if (captionsParam === 'live' || captionsParam === 'live_notes') {
         return isLiveCaptionsModeAvailable() ? captionsParam : 'batch';
       }
+      // Legacy `notes` deep-link → same screen as home Upload.
+      if (captionsParam === 'notes') return 'batch';
       return captionsParam;
     }
     return isLiveCaptionsModeAvailable() ? 'live' : 'batch';
@@ -105,7 +118,7 @@ export default function NewSessionScreen() {
           captionsParam !== 'notes' &&
           captionsParam !== 'live_notes'
         ) {
-          setCaptionsMode(pref);
+          setCaptionsMode(pref === 'notes' ? 'batch' : pref);
         }
         const def = await ensureDefaultFolder(rows);
         const merged = sortFoldersWithDefaultFirst(
@@ -161,13 +174,18 @@ export default function NewSessionScreen() {
     });
   }
 
+  async function ensureSessionQuota(): Promise<boolean> {
+    return ensureFeatureAccess('session', router);
+  }
+
   async function onStartRecording() {
     const trimmed = resolveTitle();
     if (!trimmed) return;
+    if (!(await ensureSessionQuota())) return;
 
     let modeToUse = captionsMode;
     if (modeNeedsLiveStt(modeToUse) && !isLiveCaptionsModeAvailable()) {
-      modeToUse = modeToUse === 'live_notes' ? 'notes' : 'batch';
+      modeToUse = 'batch';
     }
 
     setLoading(true);
@@ -175,6 +193,7 @@ export default function NewSessionScreen() {
     try {
       await setRecordCaptionsModePref(modeToUse);
       const session = await createDraft(trimmed, modeToUse);
+      await consumeFeature('session');
       router.replace(`/recording?id=${session.id}&captions=${modeToUse}`);
     } catch (err) {
       setError(
@@ -214,11 +233,13 @@ export default function NewSessionScreen() {
       setError('Choose a file or paste a media URL first.');
       return;
     }
+    if (!(await ensureSessionQuota())) return;
 
     setLoading(true);
     setError(null);
     try {
       const session = await createDraft(trimmed);
+      await consumeFeature('session');
       if (picked) {
         await saveLocalAudioUri(session.id, picked.uri);
         router.replace(`/session/${session.id}`);
@@ -253,6 +274,13 @@ export default function NewSessionScreen() {
     setCaptionsMode(next);
     setError(null);
     setStep('details');
+  }
+
+  /** Same destination as home Upload. */
+  function chooseFileTranscribe() {
+    const qs = new URLSearchParams({ mode: 'import' });
+    if (folderId) qs.set('folderId', folderId);
+    router.replace(`/new-session?${qs.toString()}` as Href);
   }
 
   function switchMode() {
@@ -306,6 +334,14 @@ export default function NewSessionScreen() {
     disabled: boolean,
   ) {
     const selected = captionsMode === optionMode;
+    const tint =
+      optionMode === 'live'
+        ? colors.actionImport
+        : optionMode === 'batch'
+          ? colors.actionRecord
+          : optionMode === 'notes'
+            ? colors.actionFav
+            : colors.accentSoft;
     return (
       <Pressable
         key={optionMode}
@@ -315,7 +351,7 @@ export default function NewSessionScreen() {
           styles.modeOption,
           {
             borderColor: selected ? colors.accent : colors.border,
-            backgroundColor: colors.background,
+            backgroundColor: selected ? colors.accentSoft : colors.background,
             opacity: disabled ? 0.55 : 1,
           },
         ]}
@@ -323,8 +359,17 @@ export default function NewSessionScreen() {
         accessibilityState={{ selected, disabled }}
         accessibilityLabel={titleText}
       >
-        <Text style={[styles.modeTitle, { color: colors.ink }]}>{titleText}</Text>
-        <Text style={[styles.modeHint, { color: colors.inkMuted }]}>{hint}</Text>
+        <IconWell
+          name={MODE_ICONS[optionMode]}
+          tint={tint}
+          color={selected ? colors.accent : colors.ink}
+          size={20}
+          wellSize={40}
+        />
+        <View style={styles.modeCopy}>
+          <Text style={[styles.modeTitle, { color: colors.ink }]}>{titleText}</Text>
+          <Text style={[styles.modeHint, { color: colors.inkMuted }]}>{hint}</Text>
+        </View>
       </Pressable>
     );
   }
@@ -339,32 +384,34 @@ export default function NewSessionScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[styles.container, { paddingBottom: tabBarInset }]}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.hero}>
-            <View
-              style={[
-                styles.heroMark,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                },
-                shadows.soft,
-              ]}
-            >
-              <Icon
-                name={preferImport ? 'download-outline' : 'microphone'}
-                size={36}
-              />
+            <View style={styles.heroTitleRow}>
+              <View
+                style={[
+                  styles.heroMark,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                  shadows.soft,
+                ]}
+              >
+                <Icon
+                  name={preferImport ? 'download-outline' : 'microphone'}
+                  size={20}
+                />
+              </View>
+              <Text style={[styles.title, { color: colors.ink }]} numberOfLines={2}>
+                {preferImport
+                  ? 'Transcribe Audio/Video File'
+                  : showModeStep
+                    ? 'How to capture speech'
+                    : 'New recording'}
+              </Text>
             </View>
-            <Text style={[styles.title, { color: colors.ink }]}>
-              {preferImport
-                ? 'Import to transcribe'
-                : showModeStep
-                  ? 'How to capture speech'
-                  : 'New recording'}
-            </Text>
             <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
               {preferImport
                 ? 'Upload audio or video, or paste a direct file link. YouTube pages aren’t supported — download those first.'
@@ -387,33 +434,101 @@ export default function NewSessionScreen() {
             >
               <View style={styles.modeList}>
                 {renderModeOption(
-                  'live',
-                  'Live captions',
-                  isLiveCaptionsModeAvailable()
-                    ? 'See speech as you talk. Choose Tagalog or English on the recording screen.'
-                    : 'Needs a development or EAS build with native audio streaming. Use “Record, then transcribe” in Expo Go.',
-                  !isLiveCaptionsModeAvailable(),
-                )}
-                {renderModeOption(
                   'batch',
-                  'Record, then transcribe',
+                  CAPTURE_MODE_LABELS.batch,
                   'Save audio only while recording. Transcribe after you upload and proceed — quieter and uses less data.',
                   false,
                 )}
-                {renderModeOption(
-                  'notes',
-                  'Auto Notes',
-                  'Record quietly, then we write structured notes from the audio. No transcript is saved.',
-                  false,
+                <Pressable
+                  onPress={chooseFileTranscribe}
+                  style={[
+                    styles.modeOption,
+                    {
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Transcribe Audio/Video File"
+                >
+                  <IconWell
+                    name="download-outline"
+                    tint={colors.actionFav}
+                    color={colors.ink}
+                    size={20}
+                    wellSize={40}
+                  />
+                  <View style={styles.modeCopy}>
+                    <Text style={[styles.modeTitle, { color: colors.ink }]}>
+                      Transcribe Audio/Video File
+                    </Text>
+                    <Text style={[styles.modeHint, { color: colors.inkMuted }]}>
+                      Upload an audio or video file, or paste a direct file link — same as Home →
+                      Upload.
+                    </Text>
+                  </View>
+                </Pressable>
+                {isLiveCaptionsModeAvailable() ? (
+                  <>
+                    {renderModeOption(
+                      'live_notes',
+                      'Live Note Taker',
+                      'Notes grow while you speak. Audio is kept; transcript is not saved.',
+                      false,
+                    )}
+                    {renderModeOption(
+                      'live',
+                      'Live captions',
+                      'See speech as you talk. Choose Tagalog or English on the recording screen.',
+                      false,
+                    )}
+                  </>
+                ) : (
+                  <View
+                    style={[
+                      styles.devBuildHint,
+                      {
+                        backgroundColor: colors.accentSoft,
+                        borderColor: colors.brand + '33',
+                      },
+                    ]}
+                  >
+                    <Icon name="bulb" size={18} color={colors.brand} variant="line" />
+                    <Text style={[styles.devBuildHintText, { color: colors.ink }]}>
+                      Live Note Taker and Live captions need a development or EAS build (not Expo
+                      Go). Use Record Audio and Transcribe or Transcribe Audio/Video File here.
+                    </Text>
+                  </View>
                 )}
-                {renderModeOption(
-                  'live_notes',
-                  'Live Note Taker',
-                  isLiveCaptionsModeAvailable()
-                    ? 'Notes grow while you speak. Audio is kept; transcript is not saved.'
-                    : 'Needs a development or EAS build with native audio streaming. Use Auto Notes in Expo Go.',
-                  !isLiveCaptionsModeAvailable(),
-                )}
+                <Pressable
+                  onPress={async () => {
+                    if (!(await ensureFeatureAccess('voiceTranslate', router))) return;
+                    router.push('/voice-translate' as Href);
+                  }}
+                  style={[
+                    styles.modeOption,
+                    {
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Live Translator"
+                >
+                  <IconWell
+                    name="translate"
+                    tint={colors.actionImport}
+                    color={colors.ink}
+                    size={20}
+                    wellSize={40}
+                  />
+                  <View style={styles.modeCopy}>
+                    <Text style={[styles.modeTitle, { color: colors.ink }]}>Live Translator</Text>
+                    <Text style={[styles.modeHint, { color: colors.inkMuted }]}>
+                      Hold to talk — we translate and your phone speaks it back. No session file.
+                    </Text>
+                  </View>
+                </Pressable>
               </View>
             </View>
           ) : null}
@@ -578,21 +693,42 @@ export default function NewSessionScreen() {
                     accessibilityLabel="New folder name"
                     onSubmitEditing={() => void onCreateFolder()}
                   />
-                  <Button
-                    label={creatingFolder ? '…' : 'Add'}
+                  <Pressable
                     onPress={() => void onCreateFolder()}
                     disabled={creatingFolder || loading || !newFolderName.trim()}
-                    loading={creatingFolder}
-                  />
-                  <Button
-                    label="Cancel"
-                    variant="secondary"
+                    accessibilityRole="button"
+                    accessibilityLabel="Add folder"
+                    style={[
+                      styles.createFolderAction,
+                      {
+                        backgroundColor: colors.accent,
+                        opacity: creatingFolder || loading || !newFolderName.trim() ? 0.5 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.createFolderActionText, { color: colors.onBrand }]}>
+                      {creatingFolder ? '…' : 'Add'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
                     onPress={() => {
                       setComposingFolder(false);
                       setNewFolderName('');
                     }}
                     disabled={creatingFolder || loading}
-                  />
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancel create folder"
+                    style={[
+                      styles.createFolderCancel,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.surface,
+                        opacity: creatingFolder || loading ? 0.5 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.createFolderActionText, { color: colors.ink }]}>Cancel</Text>
+                  </Pressable>
                 </View>
               ) : (
                 <Pressable
@@ -730,9 +866,7 @@ export default function NewSessionScreen() {
                         ? 'Start with live captions'
                         : captionsMode === 'live_notes'
                           ? 'Start Live Note Taker'
-                          : captionsMode === 'notes'
-                            ? 'Start Auto Notes'
-                            : 'Start recording'
+                          : 'Start recording'
                   }
                   onPress={() => void onStartRecording()}
                   loading={loading}
@@ -759,24 +893,30 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: FLOATING_TAB_BAR_CONTENT_INSET,
     gap: spacing.lg,
   },
   hero: {
     alignItems: 'flex-start',
     gap: spacing.sm,
   },
+  heroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    maxWidth: '100%',
+  },
   heroMark: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.lg,
+    width: 36,
+    height: 36,
+    borderRadius: radii.md,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.xs,
+    flexShrink: 0,
   },
   title: {
     ...typography.pageTitle,
+    flexShrink: 1,
   },
   subtitle: {
     ...typography.body,
@@ -842,23 +982,65 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'nowrap',
     gap: spacing.sm,
-    flexWrap: 'wrap',
+  },
+  createFolderAction: {
+    flexShrink: 0,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createFolderCancel: {
+    flexShrink: 0,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createFolderActionText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   createFolderInput: {
-    flexGrow: 1,
-    flexBasis: 140,
-    minWidth: 120,
+    flex: 1,
+    minWidth: 0,
   },
   modeList: {
     gap: spacing.sm,
   },
-  modeOption: {
+  devBuildHint: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
     borderWidth: 1,
     borderRadius: radii.lg,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
+  },
+  devBuildHintText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
+  },
+  modeOption: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.smd,
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  modeCopy: {
+    flex: 1,
     gap: spacing.xs,
+    paddingTop: 2,
   },
   modeTitle: {
     fontSize: 15,
@@ -924,5 +1106,14 @@ const styles = StyleSheet.create({
   actions: {
     gap: spacing.sm,
     paddingTop: spacing.xs,
+  },
+  notesActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.sm,
+  },
+  notesActionHalf: {
+    flex: 1,
+    minWidth: 0,
   },
 });

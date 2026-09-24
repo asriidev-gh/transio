@@ -5,7 +5,8 @@ export const SESSION_AUDIO_BUCKET = 'session-audio' as const;
 export const AudioUploadResultSchema = z.object({
   sessionId: z.string().uuid(),
   audioPath: z.string().min(1),
-  status: z.literal('uploaded'),
+  /** DB status after store — live notes may stay `completed`. */
+  status: z.enum(['uploaded', 'completed']),
 });
 
 export type AudioUploadResult = z.infer<typeof AudioUploadResultSchema>;

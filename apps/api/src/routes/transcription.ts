@@ -243,12 +243,15 @@ export function registerTranscriptionRoutes(
         throw new AppError('NOT_FOUND', 'Session not found', 404);
       }
 
-      const [transcript, summary] = await Promise.all([
+      const [transcript, summary, notes] = await Promise.all([
         createTranscriptRepository(req)
           .getBySessionId(id)
           .catch(() => null),
         createSummaryRepository(req)
-          .getBySessionId(id)
+          .getBySessionId(id, 'ai_summary')
+          .catch(() => null),
+        createSummaryRepository(req)
+          .getBySessionId(id, 'notes')
           .catch(() => null),
       ]);
       const payload = SessionStatusResponseSchema.parse({
@@ -257,6 +260,7 @@ export function registerTranscriptionRoutes(
         hasAudio: Boolean(session.audioPath),
         hasTranscript: Boolean(transcript),
         hasSummary: Boolean(summary),
+        hasNotes: Boolean(notes),
       });
 
       res.status(200).json(apiSuccess(payload));

@@ -114,7 +114,7 @@ export function registerTranslateRoutes(
       }
 
       const { id } = SessionIdParamSchema.parse(req.params);
-      const { language, scope } = TranslateRequestSchema.parse(req.body);
+      const { language, scope, summaryKind } = TranslateRequestSchema.parse(req.body);
       const languageLabel = TRANSLATE_LANGUAGE_LABELS[language];
 
       const session = await options.createRepository(req).getById(req.user.id, id);
@@ -125,11 +125,18 @@ export function registerTranslateRoutes(
       const provider = createProvider();
 
       if (scope === 'summary') {
-        const summary = await createSummaryRepository(req).getBySessionId(id);
+        let summary = summaryKind
+          ? await createSummaryRepository(req).getBySessionId(id, summaryKind)
+          : null;
+        if (!summary) {
+          summary =
+            (await createSummaryRepository(req).getBySessionId(id, 'ai_summary')) ??
+            (await createSummaryRepository(req).getBySessionId(id, 'notes'));
+        }
         if (!summary) {
           throw new AppError(
             'VALIDATION_ERROR',
-            'Generate a summary before translating.',
+            'Generate notes or a summary before translating.',
             400,
           );
         }

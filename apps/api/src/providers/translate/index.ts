@@ -62,6 +62,29 @@ function languageInstruction(label: string): string {
   ].join(' ');
 }
 
+/** Strip quotes / light preamble so short voice captions aren't rejected. */
+function sanitizeLiveTranslation(raw: string): string {
+  let text = raw.trim();
+  // Drop a single leading label line like "Translation:" / "English:"
+  text = text.replace(/^(?:translation|translated|english|output)\s*:\s*/i, '');
+  text = text.replace(/^["'«»]+|["'«»]+$/g, '').trim();
+  // If the model added a short preamble then a blank line, keep the body.
+  const parts = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2 && /^(sure|here|okay|ok|certainly)\b/i.test(parts[0]!)) {
+    text = parts.slice(1).join('\n\n').trim();
+  }
+  return text.replace(/^["'«»]+|["'«»]+$/g, '').trim();
+}
+
+function isChattyTranslatorReply(output: string, source: string): boolean {
+  const chatty =
+    /^(?:i'?m ready|sure[,!]?\s+please share|please share the|i can help translate|however,? i don'?t)\b/i;
+  if (chatty.test(output)) return true;
+  // Extremely long vs source — likely an essay / refusal, not a caption.
+  const limit = Math.max(800, source.length * 20);
+  return output.length > limit;
+}
+
 async function mapPool<T, R>(
   items: T[],
   concurrency: number,
@@ -211,10 +234,10 @@ export class ClaudeTranslateProvider implements TranslateProvider {
       ? ` Source language: ${input.sourceLanguageLabel}.`
       : '';
     const system = [
-      `You are a speech-caption translator.`,
+      `You are a speech-caption translator for a live voice interpreter.`,
       `Translate the user message into ${input.languageLabel}.${sourceHint}`,
-      `Reply with ONLY the translated caption text.`,
-      `Do not explain, greet, ask questions, or wrap the answer in quotes.`,
+      `Output ONLY the translation — one or a few spoken sentences.`,
+      `No quotes, labels, markdown, preambles, or offers to help.`,
       `If the input is already in ${input.languageLabel}, return it unchanged.`,
     ].join(' ');
 
@@ -223,21 +246,21 @@ export class ClaudeTranslateProvider implements TranslateProvider {
       model: this.model,
       system,
       user: input.text,
-      maxTokens: Math.min(1024, Math.max(128, input.text.length * 3)),
+      maxTokens: Math.min(1024, Math.max(256, input.text.length * 4)),
     });
 
-    const text = raw
-      .trim()
-      .replace(/^["'«»]+|["'«»]+$/g, '')
-      .trim();
+    const text = sanitizeLiveTranslation(raw);
     if (!text) {
       throw new AppError('TRANSLATE_ERROR', 'Claude returned an empty live translation.', 502);
     }
-    // Guard against chatty model replies that aren't a caption translation.
-    if (
-      text.length > Math.max(120, input.text.length * 8) ||
-      /i'?m ready|please share|however,? i don'?t|i can help translate/i.test(text)
-    ) {
+
+    // Reject only clear assistant-meta replies, not long-but-valid translations.
+    if (isChattyTranslatorReply(text, input.text)) {
+      logger.warn('Rejected chatty live translation', {
+        sourceChars: input.text.length,
+        outChars: text.length,
+        preview: text.slice(0, 160),
+      });
       throw new AppError(
         'TRANSLATE_ERROR',
         'Live translation returned an invalid response. Try again.',

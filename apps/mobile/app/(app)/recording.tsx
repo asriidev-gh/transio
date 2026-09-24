@@ -13,6 +13,7 @@ import {
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import {
   RecordingPresets,
+  requestNotificationPermissionsAsync,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
@@ -48,13 +49,15 @@ import {
   parseRecordCaptionsMode,
   type RecordCaptionsMode,
 } from '@/src/services/record-mode';
-import { finalizeSessionNotes, mergeLiveNotesChunk } from '@/src/services/live-notes';
+import { finalizeSessionNotes } from '@/src/services/live-notes';
+import { writeNotesDraft } from '@/src/services/notes-draft';
 import { saveLocalAudioUri } from '@/src/services/local-audio';
 import { getSession, updateSession } from '@/src/services/sessions';
+import { PaperNotesView } from '@/src/components/PaperNotesView';
 import { radii, sizes, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { confirmAction } from '@/src/utils/confirm';
-import type { SessionSummary, TranslateLanguage } from '@sessionai/shared';
+import { bulletsFromCaptionFinals, rawNotesFromFinals, type TranslateLanguage } from '@sessionai/shared';
 
 type PermissionState = 'checking' | 'granted' | 'denied' | 'unavailable';
 
@@ -111,15 +114,17 @@ export default function RecordingScreen() {
   const translatedCountRef = useRef(0);
   const translateQueueRef = useRef(Promise.resolve());
   const translateGenRef = useRef(0);
-  const notesSentCountRef = useRef(0);
-  const notesFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const notesInFlightRef = useRef(false);
-  const notesFinalsRef = useRef<string[]>([]);
-  const notesGenRef = useRef(0);
-  const liveNotesRef = useRef<SessionSummary | null>(null);
   const captionsModeRef = useRef<RecordCaptionsMode | null>(
     parseRecordCaptionsMode(captionsParam),
   );
+  /** Keep latest live finals so stop can finalize even if React state is stale. */
+  const captionsFinalsRef = useRef<string[]>([]);
+  const captionsInterimRef = useRef('');
+
+  useEffect(() => {
+    captionsFinalsRef.current = captions.finals;
+    captionsInterimRef.current = captions.interim;
+  }, [captions.finals, captions.interim]);
 
   const { colors, shadows } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -171,15 +176,43 @@ export default function RecordingScreen() {
     setStarting(true);
     setRecordError(null);
     try {
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        allowsRecording: true,
-        allowsBackgroundRecording: true,
-        interruptionMode: 'doNotMix',
-        shouldPlayInBackground: true,
-        shouldRouteThroughEarpiece: false,
-      });
-      await recorder.prepareToRecordAsync();
+      let allowBackground = false;
+      if (Platform.OS === 'android') {
+        try {
+          const notif = await requestNotificationPermissionsAsync();
+          allowBackground = notif.granted;
+        } catch {
+          allowBackground = false;
+        }
+      }
+
+      const applyAudioMode = async (background: boolean) => {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          allowsRecording: true,
+          interruptionMode: 'doNotMix',
+          shouldRouteThroughEarpiece: false,
+          ...(background
+            ? { allowsBackgroundRecording: true, shouldPlayInBackground: true }
+            : {}),
+        });
+      };
+
+      await applyAudioMode(allowBackground);
+      try {
+        await recorder.prepareToRecordAsync();
+      } catch (prepareErr) {
+        const msg =
+          prepareErr instanceof Error ? prepareErr.message.toLowerCase() : '';
+        // Android 13+: background recording requires POST_NOTIFICATIONS.
+        if (allowBackground || msg.includes('post_notifications') || msg.includes('background')) {
+          await applyAudioMode(false);
+          await recorder.prepareToRecordAsync();
+        } else {
+          throw prepareErr;
+        }
+      }
+
       recorder.record();
       startedRef.current = true;
       activeRef.current = true;
@@ -195,9 +228,18 @@ export default function RecordingScreen() {
           }, delay);
         }
       }
-    } catch {
-      setRecordError('We could not start recording. Check microphone access and try again.');
+    } catch (err) {
+      const detail =
+        err instanceof Error && err.message.trim()
+          ? err.message.trim()
+          : 'Check microphone access and try again.';
+      const friendly =
+        /post_notifications|notification/i.test(detail)
+          ? 'Allow notifications if you want recording with the screen locked, or try again to record in the foreground.'
+          : detail;
+      setRecordError(`We could not start recording. ${friendly}`);
       activeRef.current = false;
+      startedRef.current = false;
     } finally {
       setStarting(false);
     }
@@ -260,108 +302,6 @@ export default function RecordingScreen() {
         .catch(() => undefined);
     }
   }, [captions.finals, liveEnabled, id, translateTarget]);
-
-  const flushLiveNotesRef = useRef<(sessionId: string, gen: number) => Promise<void>>(
-    async () => undefined,
-  );
-  const armLiveNotesFlushRef = useRef<(sessionId: string) => void>(() => undefined);
-  const notesChainRef = useRef(Promise.resolve());
-
-  const armLiveNotesFlush = useCallback((sessionId: string) => {
-    if (notesFinalsRef.current.length <= notesSentCountRef.current) return;
-    // Never reset a pending timer — continuous Deepgram finals were cancelling debounce forever.
-    if (notesFlushTimerRef.current) return;
-
-    const delayMs = liveNotesRef.current ? 900 : 250;
-    const gen = notesGenRef.current;
-    notesFlushTimerRef.current = setTimeout(() => {
-      notesFlushTimerRef.current = null;
-      void flushLiveNotesRef.current(sessionId, gen);
-    }, delayMs);
-  }, []);
-  armLiveNotesFlushRef.current = armLiveNotesFlush;
-
-  const flushLiveNotes = useCallback(async (sessionId: string, gen: number) => {
-    const run = async () => {
-      if (gen !== notesGenRef.current) return;
-      const start = notesSentCountRef.current;
-      const finals = notesFinalsRef.current;
-      const end = finals.length;
-      if (end <= start) return;
-      const chunk = finals.slice(start, end).join(' ').trim();
-      if (!chunk) {
-        notesSentCountRef.current = end;
-        return;
-      }
-
-      notesInFlightRef.current = true;
-      setNotesError(null);
-      try {
-        const result = await mergeLiveNotesChunk(
-          sessionId,
-          chunk,
-          liveNotesRef.current ?? undefined,
-        );
-        if (gen !== notesGenRef.current) return;
-        notesSentCountRef.current = end;
-        liveNotesRef.current = result;
-      } catch (err) {
-        if (gen !== notesGenRef.current) return;
-        setNotesError(
-          err instanceof ApiClientError
-            ? err.message
-            : 'Live notes paused — recording continues.',
-        );
-      } finally {
-        notesInFlightRef.current = false;
-        if (
-          gen === notesGenRef.current &&
-          notesFinalsRef.current.length > notesSentCountRef.current
-        ) {
-          armLiveNotesFlushRef.current(sessionId);
-        }
-      }
-    };
-
-    // Serialize merges so stop can await the full chain (no early-return while in-flight).
-    const next = notesChainRef.current.then(run, run);
-    notesChainRef.current = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    await next;
-  }, []);
-  flushLiveNotesRef.current = flushLiveNotes;
-
-  // Keep a live ref of finals (including when only interim text changes).
-  useEffect(() => {
-    notesFinalsRef.current = captions.finals;
-  }, [captions.finals]);
-
-  // When finalized phrase count grows, arm a one-shot flush (never reset while pending).
-  useEffect(() => {
-    if (!liveNotesEnabled || !id || typeof id !== 'string') return;
-    if (captions.finals.length <= notesSentCountRef.current) return;
-    armLiveNotesFlush(id);
-  }, [captions.finals.length, liveNotesEnabled, id, armLiveNotesFlush]);
-
-  // Clear flush timer only on unmount or when leaving live-notes mode.
-  useEffect(() => {
-    if (liveNotesEnabled) return;
-    if (notesFlushTimerRef.current) {
-      clearTimeout(notesFlushTimerRef.current);
-      notesFlushTimerRef.current = null;
-    }
-  }, [liveNotesEnabled]);
-
-  useEffect(() => {
-    return () => {
-      if (notesFlushTimerRef.current) {
-        clearTimeout(notesFlushTimerRef.current);
-        notesFlushTimerRef.current = null;
-      }
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -492,6 +432,10 @@ export default function RecordingScreen() {
     setStopping(true);
     setRecordError(null);
     try {
+      // Snapshot notes before tearing down the live stream.
+      const pendingFinals = [...captionsFinalsRef.current];
+      const pendingInterim = captionsInterimRef.current.trim();
+
       let liveResult: Awaited<ReturnType<LiveCaptionController['stop']>> | null = null;
       try {
         if (liveSttEnabled && liveRef.current) {
@@ -500,6 +444,11 @@ export default function RecordingScreen() {
       } catch {
         liveResult = null;
       }
+
+      const elapsedAtStop = Math.max(
+        elapsedSeconds,
+        Math.floor((recorder.getStatus().durationMillis ?? 0) / 1000),
+      );
 
       await recorder.stop();
       activeRef.current = false;
@@ -510,9 +459,13 @@ export default function RecordingScreen() {
         throw new Error('Recording URI missing');
       }
 
+      // After stop(), some platforms report durationMillis=0 — don't trust that alone.
+      const stoppedMillis = recorder.getStatus().durationMillis ?? 0;
       const durationSeconds = Math.max(
         1,
-        Math.floor((recorder.getStatus().durationMillis ?? elapsedSeconds * 1000) / 1000),
+        Math.floor(
+          (stoppedMillis > 0 ? stoppedMillis : elapsedAtStop * 1000) / 1000,
+        ),
       );
 
       // Save locally only — user chooses Proceed or Re-record on the session screen.
@@ -529,33 +482,33 @@ export default function RecordingScreen() {
       }
 
       if (liveNotesEnabled) {
-        // Merge any speech that hadn't flushed yet, then persist.
         try {
-          if (notesFlushTimerRef.current) {
-            clearTimeout(notesFlushTimerRef.current);
-            notesFlushTimerRef.current = null;
-          }
-          // Prefer controller snapshot (includes trailing interim promoted on stop);
-          // React `captions` state may not have flushed yet.
           const snap = liveRef.current?.getSnapshot();
-          notesFinalsRef.current = snap?.finals?.length
-            ? snap.finals
-            : liveResult?.text
-              ? [liveResult.text]
-              : captions.finals;
-          await flushLiveNotes(id, notesGenRef.current);
-          // Drain any merge that was already in flight before this flush.
-          await notesChainRef.current;
-        } catch {
-          // Best-effort final merge.
-        }
-        const notes = liveNotesRef.current;
-        if (notes) {
-          try {
+          const fromSnap = snap?.finals?.filter((c) => c.trim()) ?? [];
+          const fromLive = liveResult?.text?.trim() ? [liveResult.text.trim()] : [];
+          const fromPending = pendingFinals.filter((c) => c.trim());
+          const finals =
+            fromSnap.length > 0
+              ? fromSnap
+              : fromPending.length > 0
+                ? fromPending
+                : fromLive.length > 0
+                  ? fromLive
+                  : captions.finals.filter((c) => c.trim());
+          const interim =
+            snap?.interim?.trim() || pendingInterim || captions.interim.trim() || '';
+          const chunks = interim ? [...finals, interim] : finals;
+          if (chunks.some((c) => c.trim())) {
+            const notes = rawNotesFromFinals(chunks);
             await finalizeSessionNotes(id, notes);
-          } catch {
-            // Non-fatal — user can still upload; notes may be incomplete.
+            await writeNotesDraft(id, notes);
           }
+        } catch (err) {
+          setNotesError(
+            err instanceof ApiClientError
+              ? err.message
+              : 'Could not save notes — audio is still saved.',
+          );
         }
       } else if (liveResult?.text) {
         try {
@@ -673,14 +626,8 @@ export default function RecordingScreen() {
       </View>
 
       {liveNotesEnabled ? (
-        <View
-          style={[
-            styles.captionCard,
-            { backgroundColor: colors.surface, borderColor: colors.border },
-          ]}
-          accessibilityLiveRegion="polite"
-        >
-          <Text style={[styles.captionLabel, { color: colors.inkMuted }]}>Hearing</Text>
+        <View style={styles.liveNotesWrap} accessibilityLiveRegion="polite">
+          <Text style={[styles.captionLabel, { color: colors.inkMuted }]}>Notes</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -693,9 +640,6 @@ export default function RecordingScreen() {
                 <Pressable
                   key={opt.code}
                   onPress={() => {
-                    notesGenRef.current += 1;
-                    notesSentCountRef.current = 0;
-                    liveNotesRef.current = null;
                     setNotesError(null);
                     captionLanguageRef.current = opt.code;
                     setCaptionLanguage(opt.code);
@@ -727,27 +671,20 @@ export default function RecordingScreen() {
           {notesError ? (
             <Text style={[styles.captionText, { color: colors.danger }]}>{notesError}</Text>
           ) : null}
-          {captions.finals.length > 0 || Boolean(captions.interim.trim()) ? (
-            <Text style={[styles.captionText, { color: colors.ink }]}>
-              {captions.finals.join(' ')}
-              {captions.interim.trim() ? (
-                <Text style={{ color: colors.inkMuted }}>
-                  {captions.finals.length > 0 ? ' ' : ''}
-                  {captions.interim}
-                </Text>
-              ) : null}
-            </Text>
-          ) : (
-            <Text style={[styles.captionText, { color: colors.inkMuted }]}>
-              {captions.status === 'connecting'
+          <PaperNotesView
+            bullets={bulletsFromCaptionFinals(captions.finals)}
+            interim={captions.interim}
+            emptyLabel={
+              captions.status === 'connecting'
                 ? 'Connecting…'
                 : captions.error
                   ? captions.error
                   : captions.status === 'error'
                     ? 'Mic text unavailable — recording continues.'
-                    : 'Speak to see text…'}
-            </Text>
-          )}
+                    : 'Speak to write notes…'
+            }
+            compact
+          />
         </View>
       ) : null}
 
@@ -942,12 +879,13 @@ export default function RecordingScreen() {
         </Text>
       ) : captionsMode === 'live_notes' && !liveNotesEnabled ? (
         <Text style={[styles.hint, { color: colors.inkMuted }]}>
-          Live Note Taker needs a development or EAS build (not Expo Go). Use Auto Notes instead, or
-          recording continues without live notes.
+          Live Note Taker needs a development or EAS build (not Expo Go). Use Record Audio and
+          Transcribe or Transcribe Audio/Video File instead, or recording continues without live
+          notes.
         </Text>
       ) : captionsMode === 'notes' ? (
         <Text style={[styles.hint, { color: colors.inkMuted }]}>
-          Auto Notes: we will write structured notes after you upload — no transcript is saved.
+          File notes: we will write notes after you upload — no transcript is saved.
         </Text>
       ) : null}
 
@@ -1008,11 +946,11 @@ export default function RecordingScreen() {
 
       <Text style={[styles.hint, { color: colors.inkMuted }]}>
         {liveNotesEnabled
-          ? 'Notes update as you speak. When you stop, we save notes and keep the audio — no transcript.'
+          ? 'Each spoken phrase becomes a bullet. When you stop, we save those notes and keep the audio — no transcript.'
           : liveEnabled
             ? 'Captions appear as you speak. When you stop, we save audio plus any finals, then you can proceed to summarize.'
             : captionsMode === 'notes'
-              ? 'Recording audio only. After upload we generate notes automatically without saving a transcript.'
+              ? 'Recording audio only. After upload we turn speech into sentence notes without saving a transcript.'
               : 'Recording audio only. When you stop, review locally, then proceed to upload and transcribe.'}
       </Text>
     </ScrollView>
@@ -1035,6 +973,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.lg,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   kicker: {
     ...typography.caption,
@@ -1063,6 +1002,11 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 960,
     gap: spacing.md,
+  },
+  liveNotesWrap: {
+    width: '100%',
+    maxWidth: 960,
+    gap: spacing.sm,
   },
   captionPanesRow: {
     flexDirection: 'row',

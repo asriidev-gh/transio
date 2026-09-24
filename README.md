@@ -177,12 +177,15 @@ Zod (`SessionSummary`) before persistence. See [docs/ai.md](./docs/ai.md).
 
 ## Documentation
 
+- [CLAUDE.md](./CLAUDE.md) — agent / Claude onboarding context
+- [Product context](./docs/product-context.md) — what’s built (features, modes, gaps)
 - [Architecture](./docs/architecture.md)
 - [Authentication](./docs/auth.md)
 - [Database](./docs/database.md)
 - [API](./docs/api.md)
 - [Audio](./docs/audio.md)
 - [AI](./docs/ai.md)
+- [Pricing](./docs/pricing.md)
 - [Android](./docs/android.md)
 - [Production](./docs/production.md)
 

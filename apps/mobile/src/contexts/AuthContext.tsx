@@ -17,8 +17,14 @@ interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   isConfigured: boolean;
+  /** Guest (anonymous) session — can use the app before saving an email. */
+  isAnonymous: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<{ needsEmailConfirmation: boolean }>;
+  /** Enter the app without email — creates/keeps an anonymous Supabase session. */
+  continueAsGuest: () => Promise<void>;
+  /** Attach email/password to the current guest (same user id, keeps cloud data). */
+  saveGuestAccount: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -85,10 +91,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { needsEmailConfirmation: result.needsEmailConfirmation };
   }, []);
 
+  const continueAsGuest = useCallback(async () => {
+    if (session) return;
+    const next = await authService.signInAnonymously();
+    setSession(next);
+  }, [session]);
+
+  const saveGuestAccount = useCallback(async (email: string, password: string) => {
+    await authService.convertAnonymousToEmail(email, password);
+    const next = await authService.getCurrentSession();
+    setSession(next);
+  }, []);
+
   const signOut = useCallback(async () => {
     await authService.signOut();
     setSession(null);
   }, []);
+
+  const isAnonymous = authService.isAnonymousUser(session?.user);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -96,11 +116,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       isLoading,
       isConfigured,
+      isAnonymous,
       signIn,
       signUp,
+      continueAsGuest,
+      saveGuestAccount,
       signOut,
     }),
-    [session, isLoading, isConfigured, signIn, signUp, signOut],
+    [
+      session,
+      isLoading,
+      isConfigured,
+      isAnonymous,
+      signIn,
+      signUp,
+      continueAsGuest,
+      saveGuestAccount,
+      signOut,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

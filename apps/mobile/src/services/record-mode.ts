@@ -26,8 +26,10 @@ export async function getRecordCaptionsModePref(): Promise<RecordCaptionsMode> {
     const raw = await AsyncStorage.getItem(PREF_KEY);
     if (raw && ALL_MODES.includes(raw as RecordCaptionsMode)) {
       const mode = raw as RecordCaptionsMode;
+      // Legacy notes pref → file-upload flow uses batch transcript.
+      if (mode === 'notes') return 'batch';
       if (modeNeedsLiveStt(mode) && !isLiveCaptionsModeAvailable()) {
-        return mode === 'live_notes' ? 'notes' : 'batch';
+        return 'batch';
       }
       return mode;
     }

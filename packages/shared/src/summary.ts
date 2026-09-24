@@ -49,6 +49,10 @@ export const SummaryRecordSchema = z.object({
 
 export type SummaryRecord = z.infer<typeof SummaryRecordSchema>;
 
+/** Capture notes vs opt-in AI summary (same session may store both). */
+export const SummaryKindSchema = z.enum(['notes', 'ai_summary']);
+export type SummaryKind = z.infer<typeof SummaryKindSchema>;
+
 export const SummarizeAcceptedSchema = z.object({
   sessionId: z.string().uuid(),
   status: z.literal('summarizing'),

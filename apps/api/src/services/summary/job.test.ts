@@ -43,7 +43,7 @@ describe('runSummaryJob', () => {
       },
     });
 
-    const saved = await summaries.getBySessionId(session.id);
+    const saved = await summaries.getBySessionId(session.id, 'ai_summary');
     assert.equal(saved?.overview, 'Unit overview');
     const updated = await sessions.getById(userId, session.id);
     assert.equal(updated?.status, 'completed');
@@ -78,6 +78,6 @@ describe('runSummaryJob', () => {
 
     const updated = await sessions.getById(userId, session.id);
     assert.equal(updated?.status, 'failed');
-    assert.equal(await summaries.getBySessionId(session.id), null);
+    assert.equal(await summaries.getBySessionId(session.id, 'ai_summary'), null);
   });
 });

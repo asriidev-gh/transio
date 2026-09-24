@@ -68,6 +68,53 @@ export async function signOut(): Promise<void> {
   }
 }
 
+/** True when the user is an anonymous (guest) Supabase session. */
+export function isAnonymousUser(user: User | null | undefined): boolean {
+  if (!user) return false;
+  return user.is_anonymous === true;
+}
+
+/**
+ * Create a guest session so the app works before email sign-in.
+ * Requires Anonymous sign-ins enabled in the Supabase project.
+ */
+export async function signInAnonymously(): Promise<Session> {
+  assertConfigured();
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error || !data.session) {
+    throw toAuthError(error);
+  }
+  return data.session;
+}
+
+/**
+ * Attach email/password to the current anonymous user (keeps the same user id / data).
+ */
+export async function convertAnonymousToEmail(
+  email: string,
+  password: string,
+): Promise<User> {
+  assertConfigured();
+  const supabase = getSupabaseClient();
+  const { data: current, error: sessionError } = await supabase.auth.getUser();
+  if (sessionError || !current.user) {
+    throw toAuthError(sessionError);
+  }
+  if (!isAnonymousUser(current.user)) {
+    throw new AuthServiceError('You are already signed in with an email account.');
+  }
+
+  const { data, error } = await supabase.auth.updateUser({
+    email: email.trim(),
+    password,
+  });
+  if (error || !data.user) {
+    throw toAuthError(error);
+  }
+  return data.user;
+}
+
 export async function getCurrentSession(): Promise<Session | null> {
   if (!isSupabaseConfigured()) {
     return null;

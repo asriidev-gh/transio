@@ -90,7 +90,11 @@ async function executeOnce<T>(path: string, options: RequestOptions): Promise<T>
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
   } catch {
-    throw new ApiClientError('NETWORK_ERROR', 'Unable to reach the Smart Transcriber API.', 0);
+    throw new ApiClientError(
+      'NETWORK_ERROR',
+      'Unable to reach the Smart Transcriber API. Check Wi‑Fi, that the API is running, and EXPO_PUBLIC_API_BASE_URL uses your computer’s LAN IP (then restart Expo).',
+      0,
+    );
   }
 
   const body = await parseJsonBody<T>(response);

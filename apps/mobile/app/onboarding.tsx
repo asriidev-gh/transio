@@ -22,7 +22,7 @@ import { useTheme } from '@/src/theme/ThemeContext';
 
 const { width: PAGE_WIDTH } = Dimensions.get('window');
 
-type SlideKey = 'capture' | 'notes' | 'privacy';
+type SlideKey = 'capture' | 'notes' | 'translate' | 'privacy';
 
 interface Slide {
   key: SlideKey;
@@ -42,6 +42,11 @@ const SLIDES: Slide[] = [
     key: 'notes',
     title: 'Notes that land.',
     subtitle: 'Summaries, replay, and share — ready when you are.',
+  },
+  {
+    key: 'translate',
+    title: 'Speak. Hear.',
+    subtitle: 'Hold to talk — Voice translate speaks back in their language.',
   },
   {
     key: 'privacy',
@@ -449,9 +454,99 @@ function PrivacyArt() {
   );
 }
 
+function TranslateArt() {
+  const { colors, shadows } = useTheme();
+  const float = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(float, {
+          toValue: 0,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [float]);
+
+  const lift = float.interpolate({ inputRange: [0, 1], outputRange: [0, -5] });
+
+  return (
+    <View style={styles.translateStage}>
+      <Animated.View
+        style={[
+          styles.translateCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            transform: [{ translateY: lift }],
+          },
+          shadows.soft,
+        ]}
+      >
+        <View style={styles.translateLangRow}>
+          <Text style={[styles.translateLang, { color: colors.inkMuted }]}>Auto-detect</Text>
+          <Icon name="translate" size={16} color={colors.brand} variant="line" />
+          <Text style={[styles.translateLang, { color: colors.cyan }]}>English</Text>
+        </View>
+
+        <View
+          style={[
+            styles.translateBubble,
+            styles.translateSpeaker,
+            { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+          ]}
+        >
+          <Text style={[styles.translateLabel, { color: colors.inkMuted }]}>Speaker</Text>
+          <Text style={[styles.translateBody, { color: colors.ink }]}>Salamat!</Text>
+        </View>
+
+        <View
+          style={[
+            styles.translateBubble,
+            styles.translateOut,
+            { backgroundColor: colors.actionImport, borderColor: colors.cyan + '44' },
+          ]}
+        >
+          <View style={styles.translateOutHeader}>
+            <Text style={[styles.translateLabel, { color: colors.cyan }]}>Translation</Text>
+            <View style={[styles.translatePlay, { backgroundColor: colors.surface }]}>
+              <Icon name="play" size={12} color={colors.cyan} variant="line" />
+            </View>
+          </View>
+          <Text style={[styles.translateBody, { color: colors.ink }]}>Thank you!</Text>
+        </View>
+
+        <View style={styles.translateMicRow}>
+          <LinearGradient
+            colors={[...gradients.primary]}
+            start={{ x: 0.15, y: 0 }}
+            end={{ x: 0.9, y: 1 }}
+            style={styles.translateMic}
+          >
+            <Icon name="microphone" size={22} color="#FFFFFF" variant="line" />
+          </LinearGradient>
+          <Text style={[styles.translateHint, { color: colors.inkMuted }]}>Hold to talk</Text>
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
 function SlideArt({ slideKey }: { slideKey: SlideKey }) {
   if (slideKey === 'capture') return <WaveformArt />;
   if (slideKey === 'notes') return <NotesArt />;
+  if (slideKey === 'translate') return <TranslateArt />;
   return <PrivacyArt />;
 }
 
@@ -486,7 +581,7 @@ export default function OnboardingScreen() {
     if (finishing) return;
     setFinishing(true);
     await markOnboardingSeen();
-    router.replace('/');
+    router.replace('/paywall');
   }
 
   return (
@@ -689,7 +784,7 @@ const styles = StyleSheet.create({
   waveWrap: {
     width: '100%',
     flex: 1,
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     gap: spacing.md,
     paddingTop: spacing.xs,
   },
@@ -876,6 +971,86 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Translate art
+  translateStage: {
+    width: '100%',
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  translateCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  translateLangRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  translateLang: {
+    fontFamily: fonts.sansBold,
+    fontSize: 13,
+  },
+  translateBubble: {
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: spacing.md,
+    gap: 4,
+    maxWidth: '92%',
+  },
+  translateSpeaker: {
+    alignSelf: 'flex-start',
+  },
+  translateOut: {
+    alignSelf: 'flex-end',
+  },
+  translateOutHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  translateLabel: {
+    fontFamily: fonts.sansBold,
+    fontSize: 10,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  translateBody: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 17,
+    lineHeight: 24,
+  },
+  translatePlay: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  translateMicRow: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  translateMic: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  translateHint: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 12,
   },
 
   // Privacy art

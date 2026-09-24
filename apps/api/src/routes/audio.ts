@@ -57,7 +57,7 @@ async function storePreparedMedia(options: {
   media: MediaBytes;
   repo: SessionRepository;
   storage: AudioStorage;
-}): Promise<{ audioPath: string }> {
+}): Promise<{ audioPath: string; status: string }> {
   const audioPath = resolveUploadPath(
     options.userId,
     options.sessionId,
@@ -69,14 +69,22 @@ async function storePreparedMedia(options: {
     options.media.data,
     options.media.mimeType || 'application/octet-stream',
   );
+
+  const existing = await options.repo.getById(options.userId, options.sessionId);
+  // Live Note Taker finalizes notes before upload — never drop `completed` to
+  // `uploaded` (that used to re-trigger Whisper and hide saved bullets).
+  const isLiveNotes = existing?.captureMode === 'live_notes';
+  const keepCompleted = isLiveNotes && existing.status === 'completed';
+  const nextStatus = keepCompleted ? 'completed' : isLiveNotes ? existing.status : 'uploaded';
+
   const updated = await options.repo.update(options.userId, options.sessionId, {
     audioPath,
-    status: 'uploaded',
+    status: nextStatus === 'recording' ? 'uploaded' : nextStatus,
   });
   if (!updated) {
     throw new AppError('NOT_FOUND', 'Session not found', 404);
   }
-  return { audioPath };
+  return { audioPath, status: updated.status };
 }
 
 export function registerAudioRoutes(
@@ -119,7 +127,7 @@ export function registerAudioRoutes(
         fileName: file.originalname || 'upload',
       });
 
-      const { audioPath } = await storePreparedMedia({
+      const { audioPath, status: storedStatus } = await storePreparedMedia({
         userId: req.user.id,
         sessionId: id,
         media: prepared,
@@ -130,7 +138,7 @@ export function registerAudioRoutes(
       const payload = AudioUploadResultSchema.parse({
         sessionId: id,
         audioPath,
-        status: 'uploaded',
+        status: storedStatus === 'completed' ? 'completed' : 'uploaded',
       });
 
       res.status(200).json(apiSuccess(payload));
@@ -170,7 +178,7 @@ export function registerAudioRoutes(
         fileName: remote.fileName,
       });
 
-      const { audioPath } = await storePreparedMedia({
+      const { audioPath, status: storedStatus } = await storePreparedMedia({
         userId: req.user.id,
         sessionId: id,
         media: prepared,
@@ -181,7 +189,7 @@ export function registerAudioRoutes(
       const payload = AudioUploadResultSchema.parse({
         sessionId: id,
         audioPath,
-        status: 'uploaded',
+        status: storedStatus === 'completed' ? 'completed' : 'uploaded',
       });
 
       res.status(200).json(apiSuccess(payload));

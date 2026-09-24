@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '@/src/hooks/useAuth';
 import { AuthServiceError } from '@/src/services/auth';
 import {
   getNotificationPermission,
+  openSystemNotificationSettings,
   requestNotificationPermission,
   type NotificationPermission,
 } from '@/src/services/notifications';
@@ -26,7 +27,7 @@ const APPEARANCE_OPTIONS: Array<{ key: AppearancePreference; label: string }> = 
 function notificationStatusLabel(permission: NotificationPermission): string {
   switch (permission) {
     case 'granted':
-      return 'Enabled';
+      return 'On';
     case 'denied':
       return 'Blocked';
     case 'unsupported':
@@ -120,7 +121,7 @@ function SettingsGroup({
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, signOut, isAnonymous } = useAuth();
   const { colors, preference, setPreference, scheme, shadows } = useTheme();
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,11 +133,22 @@ export default function SettingsScreen() {
     void getNotificationPermission().then(setNotifPermission);
   }, []);
 
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void getNotificationPermission().then(setNotifPermission);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   function onSignOut() {
     void (async () => {
       const ok = await confirmDestructive(
         'Sign out?',
-        'You can sign back in anytime with the same account.',
+        isAnonymous
+          ? 'This guest library stays in the cloud under this device session until you save an email. You’ll return to the paywall.'
+          : 'You can sign back in anytime with the same account.',
         'Sign Out',
       );
       if (!ok) return;
@@ -144,6 +156,7 @@ export default function SettingsScreen() {
       setError(null);
       try {
         await signOut();
+        router.replace('/(auth)/login');
       } catch (err) {
         setError(err instanceof AuthServiceError ? err.message : 'Could not sign out.');
       } finally {
@@ -153,14 +166,20 @@ export default function SettingsScreen() {
   }
 
   async function onEnableNotifications() {
-    if (notifPermission === 'granted' || notifPermission === 'unsupported') return;
+    if (notifPermission === 'unsupported') return;
+    if (notifPermission === 'granted') return;
+
     setRequestingNotif(true);
     setError(null);
     try {
+      if (notifPermission === 'denied') {
+        await openSystemNotificationSettings();
+        return;
+      }
       const next = await requestNotificationPermission();
       setNotifPermission(next);
       if (next === 'denied') {
-        setError('Notifications are blocked. Enable them in system settings.');
+        setError('Notifications are blocked. Tap again to open system settings.');
       } else if (next === 'unsupported') {
         setError('This device does not support notifications.');
       }
@@ -192,12 +211,25 @@ export default function SettingsScreen() {
       </Text>
 
       <SettingsGroup title="Account">
-        <SettingsRow
-          icon="account-outline"
-          label="Signed in as"
-          value={user?.email ?? 'Unknown'}
-          last
-        />
+        {isAnonymous ? (
+          <>
+            <SettingsRow icon="account-outline" label="Account" value="Guest" />
+            <SettingsRow
+              icon="lock"
+              label="Save account"
+              value="Keep this library"
+              onPress={() => router.push('/(auth)/login')}
+              last
+            />
+          </>
+        ) : (
+          <SettingsRow
+            icon="account-outline"
+            label="Signed in as"
+            value={user?.email ?? 'Unknown'}
+            last
+          />
+        )}
       </SettingsGroup>
 
       <SettingsGroup title="Preferences">
@@ -226,6 +258,13 @@ export default function SettingsScreen() {
           >
             {APPEARANCE_OPTIONS.map((option) => {
               const selected = preference === option.key;
+              // Selected track uses ink (near-white in dark) — onBrand is also white, so
+              // invert with background. Unselected uses full ink for contrast on dark track.
+              const labelColor = selected
+                ? scheme === 'dark'
+                  ? colors.background
+                  : colors.onBrand
+                : colors.ink;
               return (
                 <Pressable
                   key={option.key}
@@ -239,12 +278,7 @@ export default function SettingsScreen() {
                   accessibilityRole="tab"
                   accessibilityState={{ selected }}
                 >
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      { color: selected ? colors.onBrand : colors.inkMuted },
-                    ]}
-                  >
+                  <Text style={[styles.segmentText, { color: labelColor }]}>
                     {option.label}
                   </Text>
                 </Pressable>
@@ -258,32 +292,89 @@ export default function SettingsScreen() {
           </Text>
         </View>
         <View style={[styles.rowDividerFull, { backgroundColor: colors.border }]} />
+        <View style={styles.notifBlock}>
+          <SettingsRow
+            icon="bell-outline"
+            label={requestingNotif ? 'Requesting…' : 'Notifications'}
+            value={notificationStatusLabel(notifPermission)}
+            onPress={
+              notifPermission !== 'granted' && notifPermission !== 'unsupported'
+                ? () => void onEnableNotifications()
+                : undefined
+            }
+            showChevron={notifPermission !== 'granted' && notifPermission !== 'unsupported'}
+            last
+          />
+          <Text style={[styles.hint, styles.notifHint, { color: colors.inkMuted }]}>
+            Alert when a session finishes processing. On Android, also allows recording with the
+            screen locked.
+          </Text>
+        </View>
+      </SettingsGroup>
+
+      {__DEV__ ? (
+        <SettingsGroup title="Connection (dev)">
+          <SettingsRow icon="sine-wave" label="API" value={mobileEnv.apiBaseUrl} last={false} />
+          <SettingsRow
+            icon="lock"
+            label="Supabase"
+            value={isSupabaseConfigured() ? 'Configured' : 'Not configured'}
+            last
+          />
+        </SettingsGroup>
+      ) : null}
+
+      <SettingsGroup title="Subscription">
         <SettingsRow
-          icon="bell-outline"
-          label={requestingNotif ? 'Requesting…' : 'Notifications'}
-          value={notificationStatusLabel(notifPermission)}
-          onPress={
-            notifPermission !== 'granted' && notifPermission !== 'unsupported'
-              ? () => void onEnableNotifications()
-              : undefined
-          }
-          showChevron={notifPermission !== 'granted' && notifPermission !== 'unsupported'}
+          icon="star"
+          label="Smart Transcriber Pro"
+          value="Plans"
+          onPress={() => router.push('/paywall' as Href)}
           last
         />
       </SettingsGroup>
 
-      <SettingsGroup title="Connection">
-        <SettingsRow icon="sine-wave" label="API" value={mobileEnv.apiBaseUrl} last={false} />
+      <SettingsGroup title="Support">
         <SettingsRow
-          icon="lock"
-          label="Supabase"
-          value={isSupabaseConfigured() ? 'Configured' : 'Not configured'}
+          icon="chat"
+          label="Help & FAQ"
+          onPress={() => router.push('/help')}
+          last={false}
+        />
+        <SettingsRow
+          icon="mail"
+          label="Contact us"
+          onPress={() => router.push('/help-contact')}
+          last={false}
+        />
+        <SettingsRow
+          icon="alert"
+          label="Report a bug"
+          onPress={() => router.push('/help-contact?mode=bug' as Href)}
           last
         />
       </SettingsGroup>
 
       <SettingsGroup title="About">
-        <SettingsRow icon="rocket" label="Version" value={appVersion} last={false} />
+        <SettingsRow
+          icon="rocket"
+          label="About us"
+          onPress={() => router.push('/about')}
+          last={false}
+        />
+        <SettingsRow
+          icon="lock"
+          label="Privacy policy"
+          onPress={() => router.push('/privacy')}
+          last={false}
+        />
+        <SettingsRow
+          icon="file-text"
+          label="Terms of service"
+          onPress={() => router.push('/terms')}
+          last={false}
+        />
+        <SettingsRow icon="chart" label="Version" value={appVersion} last={false} />
         <SettingsRow
           icon="bulb"
           label="Replay onboarding"
@@ -389,6 +480,10 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.smd,
     gap: spacing.sm,
   },
+  notifBlock: {
+    paddingBottom: spacing.smd,
+    gap: spacing.xs,
+  },
   appearanceHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -397,6 +492,9 @@ const styles = StyleSheet.create({
   hint: {
     ...typography.caption,
     lineHeight: 18,
+  },
+  notifHint: {
+    paddingHorizontal: spacing.md,
   },
   segment: {
     flexDirection: 'row',

@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { SessionSummarySchema, type SessionSummary } from './summary.js';
+import { SessionSummarySchema, SummaryKindSchema, type SessionSummary } from './summary.js';
 import { TranscriptSegmentSchema, type TranscriptSegment } from './transcript.js';
 
-/** Curated target languages for the Translate select. */
+/** Curated target languages for the Translate select (global coverage). */
 export const TRANSLATE_LANGUAGE_OPTIONS = [
   { code: 'en', label: 'English' },
   { code: 'tl', label: 'Filipino' },
@@ -19,6 +19,7 @@ export const TRANSLATE_LANGUAGE_OPTIONS = [
   { code: 'ru', label: 'Russian' },
   { code: 'ar', label: 'Arabic' },
   { code: 'hi', label: 'Hindi' },
+  { code: 'bn', label: 'Bengali' },
   { code: 'id', label: 'Indonesian' },
   { code: 'ms', label: 'Malay' },
   { code: 'th', label: 'Thai' },
@@ -26,6 +27,17 @@ export const TRANSLATE_LANGUAGE_OPTIONS = [
   { code: 'nl', label: 'Dutch' },
   { code: 'pl', label: 'Polish' },
   { code: 'tr', label: 'Turkish' },
+  { code: 'uk', label: 'Ukrainian' },
+  { code: 'ro', label: 'Romanian' },
+  { code: 'sv', label: 'Swedish' },
+  { code: 'cs', label: 'Czech' },
+  { code: 'el', label: 'Greek' },
+  { code: 'he', label: 'Hebrew' },
+  { code: 'fa', label: 'Persian' },
+  { code: 'ur', label: 'Urdu' },
+  { code: 'ta', label: 'Tamil' },
+  { code: 'te', label: 'Telugu' },
+  { code: 'sw', label: 'Swahili' },
 ] as const;
 
 export const TranslateLanguageSchema = z.enum(
@@ -47,6 +59,8 @@ export type TranslateScope = z.infer<typeof TranslateScopeSchema>;
 export const TranslateRequestSchema = z.object({
   language: TranslateLanguageSchema,
   scope: TranslateScopeSchema,
+  /** When scope is summary, which structured document to translate. */
+  summaryKind: SummaryKindSchema.optional(),
 });
 
 export type TranslateRequest = z.infer<typeof TranslateRequestSchema>;
@@ -91,7 +105,8 @@ export const LiveTranslateChunkResultSchema = z.object({
 });
 
 export type LiveTranslateChunkResult = z.infer<typeof LiveTranslateChunkResultSchema>;
-/** Push-to-talk voice interpreter: audio in ? transcribed + translated text out. */
+
+/** Push-to-talk voice interpreter: audio in → transcribed + translated text out. */
 export const VoiceTranslateResultSchema = z.object({
   sourceText: z.string().min(1),
   translatedText: z.string().min(1),
@@ -101,4 +116,5 @@ export const VoiceTranslateResultSchema = z.object({
 });
 
 export type VoiceTranslateResult = z.infer<typeof VoiceTranslateResultSchema>;
+
 export type { SessionSummary, TranscriptSegment };

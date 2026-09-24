@@ -6,6 +6,7 @@ export function sleep(ms: number): Promise<void> {
 
 function isRetryableAppError(err: unknown): boolean {
   if (!(err instanceof AppError)) return false;
+  // Only retry transient upstream failures — never 4xx validation / bad audio.
   return err.statusCode === 429 || err.statusCode === 502 || err.statusCode === 503;
 }
 

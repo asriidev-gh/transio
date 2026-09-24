@@ -58,6 +58,17 @@ export default function ProcessingScreen() {
     return next;
   }, []);
 
+  const notesOnly = isNotesOnlyCaptureMode(captureMode);
+
+  const isPipelineDone = useCallback(
+    (next: SessionStatusResponse) =>
+      next.status === 'completed' ||
+      next.status === 'transcribed' ||
+      next.hasSummary ||
+      (notesOnly && Boolean(next.hasNotes)),
+    [notesOnly],
+  );
+
   const beginPolling = useCallback(
     (sessionId: string) => {
       stopPolling();
@@ -66,7 +77,7 @@ export default function ProcessingScreen() {
         void (async () => {
           try {
             const next = await refreshStatus(sessionId);
-            if (next.status === 'completed' || next.hasSummary) {
+            if (isPipelineDone(next)) {
               stopPolling();
               setLoading(false);
               setError(null);
@@ -88,7 +99,7 @@ export default function ProcessingScreen() {
         })();
       }, 2000);
     },
-    [announceComplete, refreshStatus, stopPolling],
+    [announceComplete, isPipelineDone, refreshStatus, stopPolling],
   );
 
   const kickOff = useCallback(
@@ -134,7 +145,12 @@ export default function ProcessingScreen() {
 
       const next = await refreshStatus(id);
 
-      if (next.status === 'completed' || next.hasSummary) {
+      if (
+        next.status === 'completed' ||
+        next.status === 'transcribed' ||
+        next.hasSummary ||
+        next.hasNotes
+      ) {
         setLoading(false);
         return;
       }
@@ -156,7 +172,7 @@ export default function ProcessingScreen() {
         return;
       }
 
-      // Auto-start once for uploaded / transcribed sessions arriving here after Proceed.
+      // Auto-start once for uploaded sessions arriving here after Proceed.
       if (!startedRef.current) {
         startedRef.current = true;
         await kickOff(id);
@@ -198,7 +214,7 @@ export default function ProcessingScreen() {
     status?.status === 'transcribing' ||
     status?.status === 'summarizing';
 
-  const done = Boolean(status && (status.status === 'completed' || status.hasSummary));
+  const done = Boolean(status && isPipelineDone(status));
   const failed = Boolean(status && status.status === 'failed') || Boolean(error);
 
   if (!status && loading) {
@@ -242,12 +258,16 @@ export default function ProcessingScreen() {
       <Text style={[styles.title, { color: colors.ink }]}>{sessionTitle}</Text>
       <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
         {done
-          ? 'Your transcript is ready — review, translate, or share.'
+          ? notesOnly
+            ? 'Your notes are ready — review, translate, or share.'
+            : 'Your transcript is ready — open the session to review or generate a summary.'
           : failed
             ? 'We couldn’t finish this recording. Your audio is still saved.'
             : inFlight
               ? 'Smart Transcriber is analyzing your audio. Safe to leave — we’ll notify you when it’s done.'
-              : 'We’ll transcribe speech, then prepare a clear summary.'}
+              : notesOnly
+                ? 'We’ll listen privately and write structured notes.'
+                : 'We’ll transcribe speech so you can review and summarize when you want.'}
       </Text>
 
       {inFlight && !done ? (
@@ -276,7 +296,8 @@ export default function ProcessingScreen() {
           hasAudio={status.hasAudio}
           hasTranscript={status.hasTranscript}
           hasSummary={status.hasSummary}
-          notesOnly={isNotesOnlyCaptureMode(captureMode)}
+          hasNotes={Boolean(status.hasNotes)}
+          notesOnly={notesOnly}
         />
       </View>
 
@@ -297,11 +318,13 @@ export default function ProcessingScreen() {
             label="Open session"
             onPress={() => router.replace(`/session/${id}`)}
           />
-          <Button
-            label="View summary"
-            variant="secondary"
-            onPress={() => router.push(`/session/${id}/summary`)}
-          />
+          {status.hasSummary ? (
+            <Button
+              label="View summary"
+              variant="secondary"
+              onPress={() => router.push(`/session/${id}/summary`)}
+            />
+          ) : null}
         </View>
       ) : null}
 
@@ -328,6 +351,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.lg,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   kicker: {
     ...typography.caption,

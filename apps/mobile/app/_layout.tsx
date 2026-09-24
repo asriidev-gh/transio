@@ -10,21 +10,28 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { PaperProvider, MD3DarkTheme, MD3LightTheme } from 'react-native-paper';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from '@/src/theme/ThemeContext';
 import { ConfirmHost } from '@/src/components/ConfirmHost';
-import { LoadingState } from '@/src/components/LoadingState';
+import { BootLoading } from '@/src/components/BootLoading';
+import { mobileEnv } from '@/src/lib/env';
 import { hasSeenOnboarding } from '@/src/services/onboarding';
-import { View, StyleSheet } from 'react-native';
 
 export { ErrorBoundary } from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
 
+/** Fire-and-forget /health so Render free tier can wake during boot video. */
+function warmApi(): void {
+  const base = mobileEnv.apiBaseUrl?.replace(/\/$/, '');
+  if (!base) return;
+  void fetch(`${base}/health`).catch(() => undefined);
+}
+
 function AuthGate({ children }: { children: ReactNode }) {
   const { session, isLoading } = useAuth();
-  const { colors } = useTheme();
   const segments = useSegments();
   const router = useRouter();
   const [fontsLoaded] = useFonts({
@@ -37,6 +44,14 @@ function AuthGate({ children }: { children: ReactNode }) {
   });
   const [onboardingReady, setOnboardingReady] = useState(false);
   const [seenOnboarding, setSeenOnboarding] = useState(false);
+  /** Keep BootLoading visible briefly so the brand loader can settle. */
+  const [minBootDone, setMinBootDone] = useState(false);
+
+  useEffect(() => {
+    warmApi();
+    const t = setTimeout(() => setMinBootDone(true), 1800);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +74,8 @@ function AuthGate({ children }: { children: ReactNode }) {
 
     const inAuthGroup = segments[0] === '(auth)';
     const onOnboarding = segments[0] === 'onboarding';
+    const onPaywall = segments[0] === 'paywall';
+    const isAnonymous = session?.user?.is_anonymous === true;
 
     if (!seenOnboarding && !onOnboarding) {
       router.replace('/onboarding');
@@ -69,12 +86,29 @@ function AuthGate({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!session && !inAuthGroup) {
-      router.replace('/(auth)/login');
+    // Pre-auth funnel: onboarding → paywall → guest (or email) session.
+    if (!session && onPaywall) {
       return;
     }
 
-    if (session && (inAuthGroup || onOnboarding)) {
+    if (!session && inAuthGroup) {
+      return;
+    }
+
+    if (!session) {
+      // Returning users who signed out land on login via explicit navigation;
+      // cold start after onboarding without a session goes back to the paywall.
+      router.replace('/paywall');
+      return;
+    }
+
+    if (onOnboarding) {
+      router.replace('/');
+      return;
+    }
+
+    // Guests may open login to save an email account; signed-in email users leave auth.
+    if (inAuthGroup && !isAnonymous) {
       router.replace('/');
     }
   }, [
@@ -88,17 +122,14 @@ function AuthGate({ children }: { children: ReactNode }) {
   ]);
 
   useEffect(() => {
-    if (!isLoading && fontsLoaded && onboardingReady) {
+    // Native splash is dismissed by BootLoading; keep a safety hide once boot is ready.
+    if (!isLoading && fontsLoaded && onboardingReady && minBootDone) {
       void SplashScreen.hideAsync();
     }
-  }, [isLoading, fontsLoaded, onboardingReady]);
+  }, [isLoading, fontsLoaded, onboardingReady, minBootDone]);
 
-  if (isLoading || !fontsLoaded || !onboardingReady) {
-    return (
-      <View style={[styles.boot, { backgroundColor: colors.background }]}>
-        <LoadingState message="Starting Smart Transcriber…" />
-      </View>
-    );
+  if (isLoading || !fontsLoaded || !onboardingReady || !minBootDone) {
+    return <BootLoading />;
   }
 
   return children;
@@ -130,6 +161,7 @@ function ThemedRoot() {
             }}
           >
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+            <Stack.Screen name="paywall" options={{ title: 'Unlock Pro' }} />
             <Stack.Screen name="(app)" options={{ headerShown: false }} />
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           </Stack>
@@ -142,18 +174,12 @@ function ThemedRoot() {
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <ThemedRoot />
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <ThemedRoot />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
-
-const styles = StyleSheet.create({
-  boot: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

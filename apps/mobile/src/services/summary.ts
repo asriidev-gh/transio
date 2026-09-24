@@ -16,6 +16,10 @@ export async function getSummary(sessionId: string): Promise<SummaryRecord> {
   return apiGet<SummaryRecord>(`/sessions/${sessionId}/summary`, true);
 }
 
+export async function getSessionNotes(sessionId: string): Promise<SummaryRecord> {
+  return apiGet<SummaryRecord>(`/sessions/${sessionId}/notes`, true);
+}
+
 export async function getSessionStatus(sessionId: string): Promise<SessionStatusResponse> {
   return apiGet<SessionStatusResponse>(`/sessions/${sessionId}/status`, true);
 }

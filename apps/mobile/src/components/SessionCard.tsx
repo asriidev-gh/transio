@@ -1,20 +1,26 @@
+import { useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Swipeable, {
+  type SwipeableMethods,
+} from 'react-native-gesture-handler/ReanimatedSwipeable';
 import {
+  CAPTURE_MODE_SHORT_LABELS,
   SESSION_STATUS_LABELS,
   SESSION_TYPE_LABELS,
+  type CaptureMode,
   type Session,
 } from '@sessionai/shared';
 import { Icon } from '@/src/components/ui/Icon';
 import { IconWell } from '@/src/components/ui/IconWell';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
+import { captureModeVisual } from '@/src/utils/capture-mode-visual';
 import { formatDurationHuman, formatRelativeSessionDate } from '@/src/utils/format';
-import { sessionTopicVisual } from '@/src/utils/session-topic';
 
 interface SessionCardProps {
   session: Session;
   onPress: () => void;
-  /** Prefer long-press delete so the row stays calm. */
+  /** Swipe left to reveal; confirmation is handled by the parent. */
   onDelete?: () => void;
 }
 
@@ -41,24 +47,43 @@ function statusTone(
   };
 }
 
+function captureTone(
+  mode: CaptureMode,
+  colors: { accent: string; cyan: string; warning: string; brandSoft: string },
+): { color: string; bg: string } {
+  if (mode === 'live_notes') {
+    return { color: colors.warning, bg: 'rgba(245, 158, 11, 0.14)' };
+  }
+  if (mode === 'notes') {
+    return { color: colors.cyan, bg: 'rgba(56, 189, 248, 0.14)' };
+  }
+  if (mode === 'live') {
+    return { color: colors.accent, bg: 'rgba(91, 108, 255, 0.12)' };
+  }
+  return { color: colors.brandSoft, bg: 'rgba(155, 124, 255, 0.14)' };
+}
+
 export function SessionCard({ session, onPress, onDelete }: SessionCardProps) {
   const { colors, scheme, shadows } = useTheme();
+  const swipeRef = useRef<SwipeableMethods>(null);
   const statusLabel = SESSION_STATUS_LABELS[session.status];
+  const captureMode = session.captureMode ?? 'batch';
+  const captureLabel = CAPTURE_MODE_SHORT_LABELS[captureMode];
   const favorited = Boolean(session.favoritedAt);
   const preview = session.description?.trim();
-  const topic = sessionTopicVisual(session);
+  const tone = statusTone(session.status, colors);
+  const capture = captureTone(captureMode, colors);
+  const visual = captureModeVisual(captureMode);
   const wellTint = session.status === 'failed'
     ? colors.actionRecord
     : scheme === 'dark'
-      ? topic.dark
-      : topic.light;
-  const tone = statusTone(session.status, colors);
+      ? visual.dark
+      : visual.light;
+  const wellColor = session.status === 'failed' ? colors.danger : colors[visual.colorKey];
 
-  return (
+  const card = (
     <Pressable
       onPress={onPress}
-      onLongPress={onDelete}
-      delayLongPress={420}
       style={({ pressed }) => [
         styles.card,
         {
@@ -66,20 +91,21 @@ export function SessionCard({ session, onPress, onDelete }: SessionCardProps) {
           opacity: pressed ? 0.92 : 1,
           transform: [{ scale: pressed ? 0.992 : 1 }],
         },
-        shadows.soft,
+        // Shadow sits on an outer host when swipeable (otherwise RNGH clips it).
+        onDelete ? null : shadows.soft,
       ]}
       accessibilityRole="button"
-      accessibilityLabel={`${session.title}, ${SESSION_TYPE_LABELS[session.sessionType]}, ${statusLabel}${favorited ? ', favorite' : ''}`}
-      accessibilityHint={onDelete ? 'Long press to delete' : undefined}
+      accessibilityLabel={`${session.title}, ${captureLabel}, ${SESSION_TYPE_LABELS[session.sessionType]}, ${statusLabel}${favorited ? ', favorite' : ''}`}
+      accessibilityHint={onDelete ? 'Swipe left to delete' : undefined}
     >
-      <IconWell name={topic.icon} tint={wellTint} color={colors.accentDeep} size={20} wellSize={48} />
+      <IconWell name={visual.icon} tint={wellTint} color={wellColor} size={20} wellSize={48} />
 
       <View style={styles.body}>
         <View style={styles.titleRow}>
           <Text style={[styles.title, { color: colors.ink }]} numberOfLines={1}>
             {session.title}
           </Text>
-          {favorited ? <Icon name="star" size={16} color={colors.warning} variant="line" /> : null}
+          {favorited ? <Icon name="star" size={16} color={colors.accent} variant="line" /> : null}
         </View>
 
         <Text style={[styles.meta, { color: colors.inkMuted }]} numberOfLines={1}>
@@ -90,31 +116,87 @@ export function SessionCard({ session, onPress, onDelete }: SessionCardProps) {
           {SESSION_TYPE_LABELS[session.sessionType]}
         </Text>
 
-        <View style={styles.footer}>
-          {preview ? (
-            <Text style={[styles.snippet, { color: colors.tertiary }]} numberOfLines={1}>
-              {preview}
-            </Text>
-          ) : (
+        <View style={styles.pills}>
+          <View style={[styles.pill, { backgroundColor: capture.bg }]}>
+            <Text style={[styles.pillText, { color: capture.color }]}>{captureLabel}</Text>
+          </View>
+          {!preview ? (
             <View style={[styles.pill, { backgroundColor: tone.bg }]}>
               <View style={[styles.pillDot, { backgroundColor: tone.color }]} />
               <Text style={[styles.pillText, { color: tone.color }]}>{tone.label}</Text>
             </View>
-          )}
+          ) : null}
         </View>
+
+        {preview ? (
+          <Text style={[styles.snippet, { color: colors.tertiary }]} numberOfLines={1}>
+            {preview}
+          </Text>
+        ) : null}
       </View>
 
       <Icon name="chevron-right" size={18} color={colors.tertiary} variant="line" />
     </Pressable>
   );
+
+  if (!onDelete) return card;
+
+  return (
+    <View style={[styles.shadowHost, { backgroundColor: colors.surface }, shadows.soft]}>
+      <Swipeable
+        ref={swipeRef}
+        friction={2}
+        overshootRight={false}
+        rightThreshold={40}
+        containerStyle={styles.swipeContainer}
+        childrenContainerStyle={styles.swipeChildren}
+        renderRightActions={() => (
+          <View style={styles.deleteWrap}>
+            <Pressable
+              onPress={() => {
+                swipeRef.current?.close();
+                onDelete();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${session.title}`}
+              style={({ pressed }) => [
+                styles.deleteBtn,
+                {
+                  backgroundColor: colors.danger,
+                  opacity: pressed ? 0.88 : 1,
+                },
+              ]}
+            >
+              <Icon name="trash-can-outline" size={22} color={colors.onBrand} variant="line" />
+              <Text style={[styles.deleteLabel, { color: colors.onBrand }]}>Delete</Text>
+            </Pressable>
+          </View>
+        )}
+      >
+        {card}
+      </Swipeable>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
+  shadowHost: {
+    borderRadius: radii.card,
+    // Keep elevation/shadow outside Swipeable so Android/iOS match Continue cards.
+  },
+  swipeContainer: {
+    borderRadius: radii.card,
+    overflow: 'hidden',
+  },
+  swipeChildren: {
+    borderRadius: radii.card,
+  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.smd,
     borderRadius: radii.card,
+    borderWidth: 0,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
     minHeight: 96,
@@ -140,12 +222,17 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontWeight: '500',
   },
-  footer: {
+  pills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
     marginTop: 2,
   },
   snippet: {
     ...typography.meta,
     fontSize: 13,
+    marginTop: 2,
   },
   pill: {
     alignSelf: 'flex-start',
@@ -165,5 +252,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.1,
+  },
+  deleteWrap: {
+    width: 88,
+    marginLeft: spacing.sm,
+    justifyContent: 'center',
+  },
+  deleteBtn: {
+    flex: 1,
+    borderRadius: radii.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minHeight: 96,
+  },
+  deleteLabel: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

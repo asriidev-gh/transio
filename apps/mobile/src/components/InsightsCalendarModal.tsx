@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  Dimensions,
   Modal,
   Pressable,
   ScrollView,
@@ -7,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Session } from '@sessionai/shared';
 import { SessionCard } from '@/src/components/SessionCard';
 import { Icon } from '@/src/components/ui/Icon';
@@ -29,6 +31,8 @@ const MONTHS = [
   'December',
 ];
 
+const DRAWER_HEIGHT = Math.round(Dimensions.get('window').height * 0.9);
+
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -49,6 +53,56 @@ function sessionDay(session: Session): Date {
   return startOfDay(new Date(session.recordedAt));
 }
 
+function DrawerChrome({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const { colors, shadows } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View
+      style={[
+        styles.drawer,
+        shadows.float,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          height: DRAWER_HEIGHT,
+          paddingBottom: Math.max(insets.bottom, spacing.md),
+        },
+      ]}
+    >
+      <View style={[styles.handle, { backgroundColor: colors.border }]} />
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: colors.ink }]}>{title}</Text>
+        <Pressable
+          onPress={onClose}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          style={({ pressed }) => [
+            styles.closeBtn,
+            {
+              backgroundColor: colors.background,
+              borderColor: colors.border,
+              opacity: pressed ? 0.75 : 1,
+            },
+          ]}
+        >
+          <Icon name="close" size={18} color={colors.inkMuted} />
+        </Pressable>
+      </View>
+      {children}
+    </View>
+  );
+}
+
 interface InsightsCalendarModalProps {
   visible: boolean;
   sessions: Session[];
@@ -56,17 +110,18 @@ interface InsightsCalendarModalProps {
   onOpenSession: (sessionId: string) => void;
 }
 
-/** Month calendar → pick a day → list recordings from that date. */
+/** Bottom drawer calendar → pick a day → list recordings from that date. */
 export function InsightsCalendarModal({
   visible,
   sessions,
   onClose,
   onOpenSession,
 }: InsightsCalendarModalProps) {
-  const { colors, shadows } = useTheme();
+  const { colors } = useTheme();
   const today = useMemo(() => startOfDay(new Date()), []);
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selected, setSelected] = useState<Date | null>(today);
+  const [calendarOpen, setCalendarOpen] = useState(true);
 
   const countsByDay = useMemo(() => {
     const map = new Map<string, number>();
@@ -76,6 +131,22 @@ export function InsightsCalendarModal({
     }
     return map;
   }, [sessions]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const newest = [...sessions].sort(
+      (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime(),
+    )[0];
+    if (newest) {
+      const day = sessionDay(newest);
+      setCursor(new Date(day.getFullYear(), day.getMonth(), 1));
+      setSelected(day);
+    } else {
+      setCursor(new Date(today.getFullYear(), today.getMonth(), 1));
+      setSelected(today);
+    }
+    setCalendarOpen(true);
+  }, [visible, sessions, today]);
 
   const cells = useMemo(() => {
     const year = cursor.getFullYear();
@@ -90,6 +161,17 @@ export function InsightsCalendarModal({
     while (grid.length % 7 !== 0) grid.push(null);
     return grid;
   }, [cursor]);
+
+  const monthCaptureCount = useMemo(() => {
+    let total = 0;
+    for (const [key, count] of countsByDay) {
+      const [y, m] = key.split('-').map(Number);
+      if (y === cursor.getFullYear() && m === cursor.getMonth() + 1) {
+        total += count;
+      }
+    }
+    return total;
+  }, [countsByDay, cursor]);
 
   const daySessions = useMemo(() => {
     if (!selected) return [];
@@ -111,8 +193,16 @@ export function InsightsCalendarModal({
     setCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
   }
 
+  function onPickDay(date: Date) {
+    setSelected(date);
+    const count = countsByDay.get(dayKey(date)) ?? 0;
+    if (count > 0) {
+      setCalendarOpen(false);
+    }
+  }
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.frame}>
         <Pressable
           style={[styles.backdrop, { backgroundColor: colors.overlay }]}
@@ -120,181 +210,209 @@ export function InsightsCalendarModal({
           accessibilityRole="button"
           accessibilityLabel="Close calendar"
         />
-        <View style={[styles.center, { pointerEvents: 'box-none' }]}>
-          <View
-            style={[
-              styles.sheet,
-              shadows.float,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
-          >
-            <View style={styles.header}>
-              <Text style={[styles.title, { color: colors.ink }]}>Recordings by date</Text>
-              <Pressable
-                onPress={onClose}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-                style={({ pressed }) => [
-                  styles.closeBtn,
-                  {
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
-                    opacity: pressed ? 0.75 : 1,
-                  },
-                ]}
-              >
-                <Icon name="close" size={18} color={colors.inkMuted} />
-              </Pressable>
-            </View>
-
-            <View style={styles.monthRow}>
-              <Pressable
-                onPress={() => shiftMonth(-1)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Previous month"
-                style={({ pressed }) => [
-                  styles.navBtn,
-                  {
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
-                    opacity: pressed ? 0.8 : 1,
-                  },
-                ]}
-              >
-                <View style={styles.flip}>
-                  <Icon name="chevron-right" size={18} color={colors.ink} />
-                </View>
-              </Pressable>
-              <Text style={[styles.monthLabel, { color: colors.ink }]}>
-                {MONTHS[cursor.getMonth()]} {cursor.getFullYear()}
+        <DrawerChrome title="Recordings by date" onClose={onClose}>
+          <View style={styles.calendarToggleRow}>
+            <Pressable
+              onPress={() => setCalendarOpen((open) => !open)}
+              style={({ pressed }) => [
+                styles.calendarToggle,
+                {
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: calendarOpen }}
+              accessibilityLabel={calendarOpen ? 'Hide calendar' : 'Show calendar'}
+            >
+              <Icon name="calendar" size={16} color={colors.accent} variant="line" />
+              <Text style={[styles.calendarToggleLabel, { color: colors.ink }]}>
+                {calendarOpen ? 'Hide calendar' : 'Show calendar'}
               </Text>
-              <Pressable
-                onPress={() => shiftMonth(1)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Next month"
-                style={({ pressed }) => [
-                  styles.navBtn,
-                  {
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
-                    opacity: pressed ? 0.8 : 1,
-                  },
-                ]}
-              >
-                <Icon name="chevron-right" size={18} color={colors.ink} />
-              </Pressable>
-            </View>
+              <View style={calendarOpen ? styles.chevronUp : undefined}>
+                <Icon name="chevron-right" size={16} color={colors.inkMuted} variant="line" />
+              </View>
+            </Pressable>
+            {!calendarOpen && selected ? (
+              <Text style={[styles.collapsedHint, { color: colors.inkMuted }]} numberOfLines={1}>
+                {selectedLabel}
+              </Text>
+            ) : null}
+          </View>
 
-            <View style={styles.weekdays}>
-              {WEEKDAYS.map((label) => (
-                <Text key={label} style={[styles.weekday, { color: colors.inkMuted }]}>
-                  {label}
-                </Text>
-              ))}
-            </View>
+          {calendarOpen ? (
+            <>
+              <View style={styles.monthRow}>
+                <Pressable
+                  onPress={() => shiftMonth(-1)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Previous month"
+                  style={({ pressed }) => [
+                    styles.navBtn,
+                    {
+                      backgroundColor: colors.background,
+                      borderColor: colors.border,
+                      opacity: pressed ? 0.8 : 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.flip}>
+                    <Icon name="chevron-right" size={18} color={colors.ink} />
+                  </View>
+                </Pressable>
+                <View style={styles.monthCenter}>
+                  <Text style={[styles.monthLabel, { color: colors.ink }]}>
+                    {MONTHS[cursor.getMonth()]} {cursor.getFullYear()}
+                  </Text>
+                  <Text style={[styles.monthMeta, { color: colors.inkMuted }]}>
+                    {monthCaptureCount === 0
+                      ? 'No captures'
+                      : monthCaptureCount === 1
+                        ? '1 capture'
+                        : `${monthCaptureCount} captures`}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => shiftMonth(1)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Next month"
+                  style={({ pressed }) => [
+                    styles.navBtn,
+                    {
+                      backgroundColor: colors.background,
+                      borderColor: colors.border,
+                      opacity: pressed ? 0.8 : 1,
+                    },
+                  ]}
+                >
+                  <Icon name="chevron-right" size={18} color={colors.ink} />
+                </Pressable>
+              </View>
 
-            <View style={styles.grid}>
-              {cells.map((date, index) => {
-                if (!date) {
-                  return <View key={`empty-${index}`} style={styles.dayCell} />;
-                }
-                const key = dayKey(date);
-                const count = countsByDay.get(key) ?? 0;
-                const isSelected = selected ? sameDay(date, selected) : false;
-                const isToday = sameDay(date, today);
-                const hasRecordings = count > 0;
+              <View style={styles.weekdays}>
+                {WEEKDAYS.map((label) => (
+                  <Text key={label} style={[styles.weekday, { color: colors.inkMuted }]}>
+                    {label}
+                  </Text>
+                ))}
+              </View>
 
-                return (
-                  <Pressable
-                    key={key}
-                    onPress={() => setSelected(date)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    accessibilityLabel={`${date.getDate()}${hasRecordings ? `, ${count} recordings` : ''}`}
-                    style={({ pressed }) => [
-                      styles.dayCell,
-                      styles.dayBtn,
-                      {
-                        backgroundColor: isSelected
-                          ? colors.accent
-                          : hasRecordings
-                            ? colors.accentSoft
-                            : 'transparent',
-                        borderColor: isToday && !isSelected ? colors.accent : 'transparent',
-                        opacity: pressed ? 0.85 : 1,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.dayNum,
+              <View style={styles.grid}>
+                {cells.map((date, index) => {
+                  if (!date) {
+                    return <View key={`empty-${index}`} style={styles.dayCell} />;
+                  }
+                  const key = dayKey(date);
+                  const count = countsByDay.get(key) ?? 0;
+                  const isSelected = selected ? sameDay(date, selected) : false;
+                  const isToday = sameDay(date, today);
+                  const hasRecordings = count > 0;
+
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => onPickDay(date)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${date.getDate()}${hasRecordings ? `, ${count} recordings` : ''}`}
+                      style={({ pressed }) => [
+                        styles.dayCell,
+                        styles.dayBtn,
                         {
-                          color: isSelected
-                            ? colors.onBrand
+                          backgroundColor: isSelected
+                            ? colors.accent
                             : hasRecordings
-                              ? colors.ink
-                              : colors.inkMuted,
-                          fontWeight: hasRecordings || isSelected ? '700' : '500',
+                              ? colors.accentSoft
+                              : 'transparent',
+                          borderColor: isToday && !isSelected ? colors.accent : 'transparent',
+                          opacity: pressed ? 0.85 : 1,
                         },
                       ]}
                     >
-                      {date.getDate()}
-                    </Text>
-                    {hasRecordings ? (
-                      <View
+                      <Text
                         style={[
-                          styles.dot,
-                          { backgroundColor: isSelected ? colors.onBrand : colors.accent },
+                          styles.dayNum,
+                          {
+                            color: isSelected
+                              ? colors.onBrand
+                              : hasRecordings
+                                ? colors.ink
+                                : colors.inkMuted,
+                            fontWeight: hasRecordings || isSelected ? '700' : '500',
+                          },
                         ]}
-                      />
-                    ) : (
-                      <View style={styles.dotSpacer} />
-                    )}
-                  </Pressable>
-                );
-              })}
-            </View>
+                      >
+                        {date.getDate()}
+                      </Text>
+                      {hasRecordings ? (
+                        <View
+                          style={[
+                            styles.countBadge,
+                            {
+                              backgroundColor: isSelected ? colors.onBrand : colors.accent,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.countBadgeText,
+                              { color: isSelected ? colors.accent : colors.onBrand },
+                            ]}
+                          >
+                            {count > 9 ? '9+' : String(count)}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.countSpacer} />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
 
-            <View style={styles.listHeader}>
-              <Text style={[styles.listTitle, { color: colors.ink }]} numberOfLines={1}>
-                {selectedLabel}
-              </Text>
-              <Text style={[styles.listCount, { color: colors.inkMuted }]}>
-                {daySessions.length === 0
-                  ? 'No recordings'
-                  : daySessions.length === 1
-                    ? '1 recording'
-                    : `${daySessions.length} recordings`}
-              </Text>
-            </View>
-
-            <ScrollView
-              style={styles.list}
-              contentContainerStyle={styles.listContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              {daySessions.length === 0 ? (
-                <Text style={[styles.empty, { color: colors.inkMuted }]}>
-                  Nothing recorded on this day. Pick another date with a dot.
-                </Text>
-              ) : (
-                daySessions.map((session) => (
-                  <SessionCard
-                    key={session.id}
-                    session={session}
-                    onPress={() => {
-                      onClose();
-                      onOpenSession(session.id);
-                    }}
-                  />
-                ))
-              )}
-            </ScrollView>
+          <View style={[styles.listHeader, { borderTopColor: colors.border }]}>
+            <Text style={[styles.listTitle, { color: colors.ink }]} numberOfLines={1}>
+              {selectedLabel}
+            </Text>
+            <Text style={[styles.listCount, { color: colors.inkMuted }]}>
+              {daySessions.length === 0
+                ? 'No recordings'
+                : daySessions.length === 1
+                  ? '1 recording'
+                  : `${daySessions.length} recordings`}
+            </Text>
           </View>
-        </View>
+
+          <ScrollView
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {daySessions.length === 0 ? (
+              <Text style={[styles.empty, { color: colors.inkMuted }]}>
+                {calendarOpen
+                  ? 'Nothing recorded on this day. Pick a date with a count badge.'
+                  : 'Nothing recorded on this day. Show the calendar to pick another date.'}
+              </Text>
+            ) : (
+              daySessions.map((session) => (
+                <SessionCard
+                  key={session.id}
+                  session={session}
+                  onPress={() => {
+                    onClose();
+                    onOpenSession(session.id);
+                  }}
+                />
+              ))
+            )}
+          </ScrollView>
+        </DrawerChrome>
       </View>
     </Modal>
   );
@@ -309,7 +427,7 @@ interface InsightsListModalProps {
   onOpenSession: (sessionId: string) => void;
 }
 
-/** Simple session list sheet used by Captured / Processing insight tiles. */
+/** Bottom drawer session list used by Captured / Favorites / Processing tiles. */
 export function InsightsListModal({
   visible,
   title,
@@ -318,10 +436,10 @@ export function InsightsListModal({
   onClose,
   onOpenSession,
 }: InsightsListModalProps) {
-  const { colors, shadows } = useTheme();
+  const { colors } = useTheme();
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.frame}>
         <Pressable
           style={[styles.backdrop, { backgroundColor: colors.overlay }]}
@@ -329,88 +447,64 @@ export function InsightsListModal({
           accessibilityRole="button"
           accessibilityLabel="Close"
         />
-        <View style={[styles.center, { pointerEvents: 'box-none' }]}>
-          <View
-            style={[
-              styles.sheet,
-              styles.listSheet,
-              shadows.float,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
+        <DrawerChrome title={title} onClose={onClose}>
+          <Text style={[styles.listCount, { color: colors.inkMuted, paddingHorizontal: spacing.sm }]}>
+            {sessions.length === 0
+              ? 'None yet'
+              : sessions.length === 1
+                ? '1 session'
+                : `${sessions.length} sessions`}
+          </Text>
+          <ScrollView
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.header}>
-              <Text style={[styles.title, { color: colors.ink }]}>{title}</Text>
-              <Pressable
-                onPress={onClose}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-                style={({ pressed }) => [
-                  styles.closeBtn,
-                  {
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
-                    opacity: pressed ? 0.75 : 1,
-                  },
-                ]}
-              >
-                <Icon name="close" size={18} color={colors.inkMuted} />
-              </Pressable>
-            </View>
-            <Text style={[styles.listCount, { color: colors.inkMuted, paddingHorizontal: spacing.sm }]}>
-              {sessions.length === 0
-                ? 'None yet'
-                : sessions.length === 1
-                  ? '1 session'
-                  : `${sessions.length} sessions`}
-            </Text>
-            <ScrollView
-              style={styles.list}
-              contentContainerStyle={styles.listContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              {sessions.length === 0 ? (
-                <Text style={[styles.empty, { color: colors.inkMuted }]}>{emptyMessage}</Text>
-              ) : (
-                sessions.map((session) => (
-                  <SessionCard
-                    key={session.id}
-                    session={session}
-                    onPress={() => {
-                      onClose();
-                      onOpenSession(session.id);
-                    }}
-                  />
-                ))
-              )}
-            </ScrollView>
-          </View>
-        </View>
+            {sessions.length === 0 ? (
+              <Text style={[styles.empty, { color: colors.inkMuted }]}>{emptyMessage}</Text>
+            ) : (
+              sessions.map((session) => (
+                <SessionCard
+                  key={session.id}
+                  session={session}
+                  onPress={() => {
+                    onClose();
+                    onOpenSession(session.id);
+                  }}
+                />
+              ))
+            )}
+          </ScrollView>
+        </DrawerChrome>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  frame: { flex: 1 },
-  backdrop: { ...StyleSheet.absoluteFill },
-  center: {
+  frame: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
     ...StyleSheet.absoluteFill,
-    justifyContent: 'center',
-    padding: spacing.lg,
   },
-  sheet: {
-    borderWidth: 1,
-    borderRadius: radii.xl,
-    padding: spacing.md,
-    gap: spacing.sm,
-    maxHeight: '88%',
+  drawer: {
     width: '100%',
-    maxWidth: 440,
-    alignSelf: 'center',
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
   },
-  listSheet: {
-    minHeight: 280,
+  handle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    marginBottom: spacing.xs,
   },
   header: {
     flexDirection: 'row',
@@ -437,9 +531,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     marginTop: spacing.xs,
   },
+  monthCenter: {
+    alignItems: 'center',
+    gap: 2,
+  },
   monthLabel: {
     ...typography.body,
     fontWeight: '700',
+  },
+  monthMeta: {
+    ...typography.caption,
+  },
+  calendarToggleRow: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  calendarToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    alignSelf: 'flex-start',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: 36,
+  },
+  calendarToggleLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  collapsedHint: {
+    ...typography.meta,
+    paddingHorizontal: spacing.xs,
+  },
+  chevronUp: {
+    transform: [{ rotate: '-90deg' }],
   },
   navBtn: {
     width: 36,
@@ -477,26 +604,33 @@ const styles = StyleSheet.create({
   dayBtn: {
     borderRadius: radii.md,
     borderWidth: 1,
-    gap: 2,
+    gap: 1,
+    paddingVertical: 2,
   },
   dayNum: {
     fontSize: 14,
   },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+  countBadge: {
+    minWidth: 16,
+    height: 14,
+    paddingHorizontal: 3,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  dotSpacer: {
-    width: 4,
-    height: 4,
+  countBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    lineHeight: 11,
+  },
+  countSpacer: {
+    height: 14,
   },
   listHeader: {
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.sm,
     gap: 2,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(128,128,128,0.25)',
   },
   listTitle: {
     ...typography.body,
@@ -506,7 +640,8 @@ const styles = StyleSheet.create({
     ...typography.meta,
   },
   list: {
-    maxHeight: 260,
+    flex: 1,
+    minHeight: 120,
   },
   listContent: {
     gap: spacing.sm,

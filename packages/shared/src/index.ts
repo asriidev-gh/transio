@@ -18,6 +18,7 @@ export {
   SESSION_TYPE_LABELS,
   SESSION_STATUS_LABELS,
   CAPTURE_MODE_LABELS,
+  CAPTURE_MODE_SHORT_LABELS,
   isNotesOnlyCaptureMode,
   type SessionType,
   type SessionStatus,
@@ -67,17 +68,27 @@ export {
 export {
   SessionSummarySchema,
   SummaryRecordSchema,
+  SummaryKindSchema,
   SummarizeAcceptedSchema,
   LiveNotesChunkRequestSchema,
   LiveNotesChunkResultSchema,
   FinalizeNotesRequestSchema,
   type SessionSummary,
   type SummaryRecord,
+  type SummaryKind,
   type SummarizeAccepted,
   type LiveNotesChunkRequest,
   type LiveNotesChunkResult,
   type FinalizeNotesRequest,
 } from './summary.js';
+
+export {
+  splitIntoSentences,
+  bulletsFromCaptionFinals,
+  rawNotesFromText,
+  rawNotesFromFinals,
+  bulletsFromNotes,
+} from './sentences.js';
 
 export {
   MindMapNodeKindSchema,

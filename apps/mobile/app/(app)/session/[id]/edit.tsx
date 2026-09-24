@@ -10,30 +10,47 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import type { SessionType } from '@sessionai/shared';
+import type { SessionFolder, SessionType } from '@sessionai/shared';
 import { ErrorState } from '@/src/components/ErrorState';
+import { FolderPicker } from '@/src/components/FolderPicker';
 import { LoadingState } from '@/src/components/LoadingState';
 import { SessionTypePicker } from '@/src/components/SessionTypePicker';
+import { Button } from '@/src/components/ui/Button';
+import { Icon } from '@/src/components/ui/Icon';
 import { ApiClientError } from '@/src/services/api';
 import {
   listCustomSessionTypes,
   rememberCustomSessionType,
 } from '@/src/services/custom-session-types';
+import { isDefaultFolder } from '@/src/services/default-folder';
+import { listFolders } from '@/src/services/folders';
 import { getSession, updateSession } from '@/src/services/sessions';
-import { colors, spacing, typography } from '@/src/theme';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
 
 export default function EditSessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { colors, shadows } = useTheme();
   const [title, setTitle] = useState('');
   const [sessionType, setSessionType] = useState<SessionType>('group_discussion');
   const [customTypeLabel, setCustomTypeLabel] = useState('');
   const [customTypes, setCustomTypes] = useState<string[]>([]);
   const [description, setDescription] = useState('');
+  const [folders, setFolders] = useState<SessionFolder[]>([]);
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const currentFolder = folders.find((folder) => folder.id === folderId) ?? null;
+  const folderLabel = currentFolder
+    ? isDefaultFolder(currentFolder)
+      ? 'Default'
+      : currentFolder.name
+    : 'Default';
 
   const load = useCallback(async () => {
     if (!id || typeof id !== 'string') {
@@ -44,11 +61,17 @@ export default function EditSessionScreen() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [session, customs] = await Promise.all([getSession(id), listCustomSessionTypes()]);
+      const [session, customs, folderRows] = await Promise.all([
+        getSession(id),
+        listCustomSessionTypes(),
+        listFolders().catch(() => [] as SessionFolder[]),
+      ]);
       setTitle(session.title);
       setSessionType(session.sessionType);
       setCustomTypes(customs);
       setDescription(session.description ?? '');
+      setFolders(folderRows);
+      setFolderId(session.folderId);
       if (session.sessionType === 'other') {
         setCustomTypeLabel(customs[0] ?? '');
       }
@@ -86,6 +109,7 @@ export default function EditSessionScreen() {
         title: trimmed,
         sessionType,
         description: description.trim() ? description.trim() : null,
+        folderId,
       });
       router.back();
     } catch (err) {
@@ -101,7 +125,7 @@ export default function EditSessionScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <LoadingState message="Loading session…" />
       </View>
     );
@@ -109,7 +133,7 @@ export default function EditSessionScreen() {
 
   if (loadError) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <ErrorState title="Could not edit session" description={loadError} onRetry={() => void load()} />
       </View>
     );
@@ -117,16 +141,28 @@ export default function EditSessionScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={[styles.flex, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.subtitle}>Update the session title, type, or description.</Text>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
+          Update the session title, type, folder, or description.
+        </Text>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Title</Text>
+          <Text style={[styles.label, { color: colors.inkMuted }]}>Title</Text>
           <TextInput
-            style={styles.input}
+            style={[
+              styles.input,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.surface,
+                color: colors.ink,
+              },
+            ]}
             value={title}
             onChangeText={setTitle}
             placeholder="Session title"
@@ -137,7 +173,7 @@ export default function EditSessionScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Session Type</Text>
+          <Text style={[styles.label, { color: colors.inkMuted }]}>Session Type</Text>
           <SessionTypePicker
             value={sessionType}
             onChange={setSessionType}
@@ -149,9 +185,45 @@ export default function EditSessionScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Description (optional)</Text>
+          <Text style={[styles.label, { color: colors.inkMuted }]}>Folder</Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.folderChip,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.surface,
+                opacity: pressed ? 0.92 : 1,
+              },
+              shadows.soft,
+            ]}
+            onPress={() => setFolderPickerOpen(true)}
+            disabled={saving}
+            accessibilityRole="button"
+            accessibilityLabel={`Folder: ${folderLabel}`}
+          >
+            <Icon name="folder" size={20} color={colors.accent} />
+            <Text style={[styles.folderChipText, { color: colors.ink }]} numberOfLines={1}>
+              {folderLabel}
+            </Text>
+            <Icon name="chevron-right" size={16} color={colors.inkMuted} />
+          </Pressable>
+          <Text style={[styles.folderHint, { color: colors.inkMuted }]}>
+            Choose where this session is stored.
+          </Text>
+        </View>
+
+        <View style={styles.field}>
+          <Text style={[styles.label, { color: colors.inkMuted }]}>Description (optional)</Text>
           <TextInput
-            style={[styles.input, styles.textarea]}
+            style={[
+              styles.input,
+              styles.textarea,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.surface,
+                color: colors.ink,
+              },
+            ]}
             value={description}
             onChangeText={setDescription}
             placeholder="What is this session about?"
@@ -165,83 +237,91 @@ export default function EditSessionScreen() {
         </View>
 
         {error ? (
-          <Text style={styles.error} accessibilityRole="alert">
+          <Text style={[styles.error, { color: colors.danger }]} accessibilityRole="alert">
             {error}
           </Text>
         ) : null}
 
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            saving && styles.buttonDisabled,
-            pressed && !saving && styles.buttonPressed,
-          ]}
+        <Button
+          label={saving ? 'Saving…' : 'Save Changes'}
           onPress={() => void onSave()}
+          loading={saving}
           disabled={saving}
-          accessibilityRole="button"
-          accessibilityLabel="Save changes"
-        >
-          <Text style={styles.buttonText}>{saving ? 'Saving…' : 'Save Changes'}</Text>
-        </Pressable>
+        />
       </ScrollView>
+
+      <FolderPicker
+        visible={folderPickerOpen}
+        folders={folders}
+        selectedId={folderId}
+        onSelect={(nextId) => {
+          setFolderId(nextId);
+          setFolderPickerOpen(false);
+        }}
+        onClose={() => setFolderPickerOpen(false)}
+        title="Store in folder"
+        allowCreate
+        onFoldersChange={setFolders}
+      />
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
   centered: {
     flex: 1,
-    backgroundColor: colors.background,
     padding: spacing.lg,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   container: {
     padding: spacing.lg,
     gap: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   subtitle: {
     ...typography.body,
-    color: colors.inkMuted,
   },
   field: {
     gap: spacing.sm,
   },
   label: {
     ...typography.caption,
-    color: colors.inkMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    fontWeight: '700',
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: Platform.OS === 'ios' ? 14 : 12,
     fontSize: 16,
-    color: colors.ink,
   },
   textarea: {
     minHeight: 100,
   },
+  folderChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 12,
+    minHeight: 48,
+  },
+  folderChipText: {
+    ...typography.body,
+    fontWeight: '600',
+    flex: 1,
+  },
+  folderHint: {
+    ...typography.caption,
+  },
   error: {
-    color: colors.danger,
     ...typography.body,
     fontSize: 14,
-  },
-  button: {
-    backgroundColor: colors.brand,
-    paddingVertical: spacing.md,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  buttonPressed: { opacity: 0.9 },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 16,
   },
 });

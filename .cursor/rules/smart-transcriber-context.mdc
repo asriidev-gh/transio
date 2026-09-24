@@ -1,0 +1,16 @@
+---
+description: Smart Transcriber product/repo context for agents
+alwaysApply: true
+---
+
+# Smart Transcriber context
+
+User-facing product name is **Smart Transcriber** (packages still `@sessionai/*`). Repo path: `voice-to-insight`.
+
+Before large changes, read:
+
+- `CLAUDE.md` — conventions, features, deploy, key files
+- `docs/product-context.md` — fuller product snapshot
+- `docs/pricing.md` — free/Pro entitlements (IAP not wired yet)
+
+Prefer Lucide line icons for toolbars; keep Voice translate / Live Note Taker / AI Summary naming consistent; publish preview OTA for JS-only mobile polish when testers use the preview channel.

@@ -1,30 +1,43 @@
 # Authentication
 
-Phase 2 uses **Supabase Auth** (email/password) on the mobile client. The API verifies JWTs for protected routes.
+Smart Transcriber uses **Supabase Auth**. The API verifies JWTs for protected routes.
 
-## Mobile flow
+## Product funnel
 
 ```text
 App launch
   → restore session from AsyncStorage
-  → if no session → /(auth)/login
-  → if session → /(app)
-Sign in / Create account
-  → Supabase Auth
-  → onAuthStateChange updates AuthProvider
-  → redirect into /(app)
+  → if never onboarded → /onboarding
+  → if no session → /paywall
+Sign in (email) or Continue as guest (anonymous)
+  → session → /(app)
+Save account (guest later)
+  → attach email/password to the same user id
 Sign out (Settings)
   → supabase.auth.signOut()
-  → redirect to login
+  → /(auth)/login
 ```
+
+Preferred order: **onboarding → paywall → use the app → save email later**.
+
+## Guest (anonymous) sessions
+
+Continuing from the paywall without email calls `signInAnonymously()`. Guests get a real JWT and the same API access as signed-in users.
+
+**Required Supabase setting:** Authentication → Providers → **Anonymous sign-ins** → Enable.
+
+Later, Settings → **Save account** (or login) calls `updateUser({ email, password })` so cloud data stays on the same `user_id`.
+
+Signing into a *different* existing account replaces the guest session (guest data is not merged).
 
 ## Screens
 
 | Screen | Behavior |
 | --- | --- |
-| Login | Email + password, validation, loading, error states |
-| Register | Email + password, handles email-confirmation-required |
-| Settings | Shows signed-in email + Sign Out |
+| Onboarding | First-launch slides → paywall |
+| Paywall | Pro / free trial → guest session → app |
+| Login | Email sign-in, or **Save account** when the current session is anonymous |
+| Settings | Guest → Save account; email → signed-in address + Sign out |
 
 ## API
 
@@ -50,12 +63,15 @@ Unauthorized:
 }
 ```
 
+Anonymous users typically have `email: null`.
+
 ## Supabase project setup
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. **Authentication → Providers → Email** enabled.
-3. For local MVP testing, you may disable **Confirm email** under Authentication → Providers → Email (or confirm via inbox).
-4. Copy values:
+3. **Authentication → Providers → Anonymous** enabled (required for paywall → app without login).
+4. For local MVP testing, you may disable **Confirm email** under Authentication → Providers → Email (or confirm via inbox).
+5. Copy values:
 
 | Env var | App | Source |
 | --- | --- | --- |
@@ -65,11 +81,11 @@ Unauthorized:
 | `SUPABASE_ANON_KEY` | API | `anon` `public` key |
 | `SUPABASE_SERVICE_ROLE_KEY` | API only | `service_role` (never in mobile) |
 
-5. Restart API and Expo after editing `.env` files.
+6. Restart API and Expo after editing `.env` files.
 
 ## Security notes
 
 - Mobile uses the **anon** key only.
 - API `requireAuth` validates the JWT with `supabase.auth.getUser(token)`.
 - Do not trust a client-supplied user id; always derive identity from the JWT.
-- RLS for sessions/transcripts arrives in Phase 3.
+- Treat anonymous users like any other `auth.users` row for RLS / `user_id` ownership.

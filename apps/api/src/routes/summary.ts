@@ -99,10 +99,12 @@ export function registerSummaryRoutes(
       }
 
       const transcript = await createTranscriptRepository(req).getBySessionId(id);
-      if (!transcript?.text?.trim()) {
+      const notes = await createSummaryRepository(req).getBySessionId(id, 'notes');
+      const hasSource = Boolean(transcript?.text?.trim() || notes);
+      if (!hasSource) {
         throw new AppError(
           'VALIDATION_ERROR',
-          'Generate a transcript before starting summarization',
+          'Capture notes or a transcript before starting summarization',
           400,
         );
       }
@@ -126,7 +128,7 @@ export function registerSummaryRoutes(
       ) {
         throw new AppError(
           'VALIDATION_ERROR',
-          'Generate a transcript before starting summarization',
+          'Finish capture or transcription before starting summarization',
           400,
         );
       }
@@ -167,12 +169,39 @@ export function registerSummaryRoutes(
         throw new AppError('NOT_FOUND', 'Session not found', 404);
       }
 
-      const summary = await createSummaryRepository(req).getBySessionId(id);
+      const summary = await createSummaryRepository(req).getBySessionId(id, 'ai_summary');
       if (!summary) {
         throw new AppError('NOT_FOUND', 'Summary not found', 404);
       }
 
       res.status(200).json(apiSuccess(SummaryRecordSchema.parse(summary)));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get('/:id/notes', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+      }
+
+      const { id } = SessionIdParamSchema.parse(req.params);
+      const session = await options.createRepository(req).getById(req.user.id, id);
+      if (!session) {
+        throw new AppError('NOT_FOUND', 'Session not found', 404);
+      }
+
+      let notes = await createSummaryRepository(req).getBySessionId(id, 'notes');
+      // Older finalize writes used the default kind before `notes` existed.
+      if (!notes && (session.captureMode === 'notes' || session.captureMode === 'live_notes')) {
+        notes = await createSummaryRepository(req).getBySessionId(id, 'ai_summary');
+      }
+      if (!notes) {
+        throw new AppError('NOT_FOUND', 'Notes not found', 404);
+      }
+
+      res.status(200).json(apiSuccess(SummaryRecordSchema.parse(notes)));
     } catch (err) {
       next(err);
     }

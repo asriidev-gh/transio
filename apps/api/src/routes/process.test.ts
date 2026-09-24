@@ -26,7 +26,7 @@ function testAuthenticate(req: Request, _res: Response, next: NextFunction): voi
 }
 
 describe('process API', () => {
-  it('runs end-to-end process from uploaded audio to completed', async () => {
+  it('runs end-to-end process from uploaded audio to transcribed (summary opt-in)', async () => {
     const sessions = new InMemorySessionRepository();
     const transcripts = new InMemoryTranscriptRepository();
     const summaries = new InMemorySummaryRepository();
@@ -89,15 +89,14 @@ describe('process API', () => {
       hasTranscript: boolean;
       hasSummary: boolean;
     };
-    assert.equal(statusData.status, 'completed');
+    assert.equal(statusData.status, 'transcribed');
     assert.equal(statusData.hasTranscript, true);
-    assert.equal(statusData.hasSummary, true);
+    assert.equal(statusData.hasSummary, false);
 
     const summary = await request(app).get(`/sessions/${id}/summary`, {
       Authorization: 'Bearer token-a',
     });
-    assert.equal(summary.status, 200);
-    assert.ok((summary.body.data as { overview: string }).overview.length > 0);
+    assert.equal(summary.status, 404);
   });
 
   it('rejects process when audio is missing', async () => {
@@ -126,11 +125,10 @@ describe('process API', () => {
     assert.equal(res.body.error?.code, 'VALIDATION_ERROR');
   });
 
-  it('resumes at summarize when transcript already exists', async () => {
+  it('returns transcribed when transcript already exists (summary opt-in)', async () => {
     const sessions = new InMemorySessionRepository();
     const transcripts = new InMemoryTranscriptRepository();
     const summaries = new InMemorySummaryRepository();
-    const pendingJobs: Promise<void>[] = [];
     let transcribed = false;
 
     const app = createApp({
@@ -146,28 +144,8 @@ describe('process API', () => {
         },
       }),
       createSummaryProvider: () => new FakeSummaryProvider(),
-      runProcessJob: (sessionId, req) => {
-        if (!req.user) return;
-        pendingJobs.push(
-          runProcessingPipeline(sessionId, {
-            userId: req.user.id,
-            sessions,
-            transcripts,
-            summaries,
-            transcriptionProvider: {
-              name: 'should-not-run',
-              async transcribe() {
-                transcribed = true;
-                return { text: 'nope', language: 'en' };
-              },
-            },
-            summaryProvider: new FakeSummaryProvider(),
-            downloadAudio: async () => ({
-              data: Buffer.from('x'),
-              mimeType: 'audio/mp4',
-            }),
-          }),
-        );
+      runProcessJob: () => {
+        throw new Error('process job should not run when transcript exists');
       },
     });
 
@@ -187,15 +165,15 @@ describe('process API', () => {
     const start = await request(app).post(`/sessions/${id}/process`, undefined, {
       Authorization: 'Bearer token-a',
     });
-    assert.equal(start.status, 202);
-    assert.equal((start.body.data as { status: string }).status, 'summarizing');
-
-    await Promise.all(pendingJobs);
+    assert.equal(start.status, 200);
+    assert.equal((start.body.data as { status: string }).status, 'transcribed');
+    assert.equal((start.body.data as { stage: string }).stage, 'done');
     assert.equal(transcribed, false);
 
     const status = await request(app).get(`/sessions/${id}/status`, {
       Authorization: 'Bearer token-a',
     });
-    assert.equal((status.body.data as { status: string }).status, 'completed');
+    assert.equal((status.body.data as { status: string }).status, 'transcribed');
+    assert.equal((status.body.data as { hasSummary: boolean }).hasSummary, false);
   });
 });

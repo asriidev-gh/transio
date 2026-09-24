@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Session } from '@sessionai/shared';
 import { EmptyState } from '@/src/components/EmptyState';
@@ -16,6 +16,7 @@ import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar'
 import { SessionListSkeleton } from '@/src/components/Skeleton';
 import { Icon } from '@/src/components/ui/Icon';
 import { ApiClientError } from '@/src/services/api';
+import { ensureFeatureAccess } from '@/src/utils/feature-gate';
 import { listSessions } from '@/src/services/sessions';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
@@ -101,8 +102,36 @@ export default function TranslateHubScreen() {
           Translate
         </Text>
         <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
-          Live dual-pane while you record, or translate a finished transcript.
+          Speak and hear a translation, dual-pane while you record, or translate a finished transcript.
         </Text>
+
+        <Pressable
+          onPress={async () => {
+            if (!(await ensureFeatureAccess('voiceTranslate', router))) return;
+            router.push('/voice-translate' as Href);
+          }}
+          style={({ pressed }) => [
+            styles.liveCta,
+            {
+              backgroundColor: colors.actionRecord,
+              borderColor: colors.brand,
+              opacity: pressed ? 0.92 : 1,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Start voice translate"
+        >
+          <View style={[styles.liveIcon, { backgroundColor: colors.brand }]}>
+            <Icon name="microphone" size={22} color="#FFFFFF" />
+          </View>
+          <View style={styles.liveCopy}>
+            <Text style={[styles.liveTitle, { color: colors.ink }]}>Voice translate</Text>
+            <Text style={[styles.liveHint, { color: colors.inkMuted }]}>
+              Hold to talk — we translate and your phone speaks it
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={18} color={colors.inkMuted} />
+        </Pressable>
 
         <Pressable
           onPress={() => router.push('/new-session?mode=record&captions=live')}
@@ -121,9 +150,9 @@ export default function TranslateHubScreen() {
             <Icon name="translate" size={22} color="#FFFFFF" />
           </View>
           <View style={styles.liveCopy}>
-            <Text style={[styles.liveTitle, { color: colors.ink }]}>Live translate</Text>
+            <Text style={[styles.liveTitle, { color: colors.ink }]}>Live dual-pane</Text>
             <Text style={[styles.liveHint, { color: colors.inkMuted }]}>
-              Hear one language, read another in real time
+              Hear one language, read another while you record
             </Text>
           </View>
           <Icon name="chevron-right" size={18} color={colors.inkMuted} />

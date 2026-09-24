@@ -51,6 +51,25 @@ export function formatSessionDate(iso: string): string {
   });
 }
 
+/** Date + local clock time for session detail headers. */
+export function formatSessionDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return 'Unknown date';
+  }
+
+  const day = date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const time = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return `${day} · ${time}`;
+}
+
 /** Compact relative label: Today, Yesterday, weekday, or short date. */
 export function formatRelativeSessionDate(iso: string): string {
   const date = new Date(iso);

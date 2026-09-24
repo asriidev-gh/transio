@@ -202,6 +202,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     padding: spacing.lg,
     justifyContent: 'center',
+    alignItems: 'center',
     gap: spacing.md,
   },
   title: {

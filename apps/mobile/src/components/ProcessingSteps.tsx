@@ -7,6 +7,7 @@ interface Flags {
   hasAudio: boolean;
   hasTranscript: boolean;
   hasSummary: boolean;
+  hasNotes: boolean;
 }
 
 const STEPS: Array<{
@@ -15,6 +16,8 @@ const STEPS: Array<{
   notesLabel?: string;
   hint: string;
   notesHint?: string;
+  /** Hide on non-notes pipeline (summary is opt-in elsewhere). */
+  notesOnly?: boolean;
   matches: (status: SessionStatus, flags: Flags) => 'done' | 'active' | 'pending' | 'failed';
 }> = [
   {
@@ -30,11 +33,19 @@ const STEPS: Array<{
     hint: 'Listening for words and speakers',
     notesHint: 'Listening to write notes',
     matches: (status, flags) => {
-      if (flags.hasTranscript || status === 'transcribed' || status === 'summarizing' || status === 'completed') {
+      if (
+        flags.hasTranscript ||
+        flags.hasNotes ||
+        status === 'transcribed' ||
+        status === 'summarizing' ||
+        status === 'completed'
+      ) {
         return 'done';
       }
       if (status === 'transcribing') return 'active';
-      if (status === 'failed' && flags.hasAudio && !flags.hasTranscript) return 'failed';
+      if (status === 'failed' && flags.hasAudio && !flags.hasTranscript && !flags.hasNotes) {
+        return 'failed';
+      }
       return 'pending';
     },
   },
@@ -45,7 +56,13 @@ const STEPS: Array<{
     hint: 'Building a readable transcript',
     notesHint: 'Speech is processed privately — not saved as a transcript',
     matches: (status, flags) => {
-      if (flags.hasTranscript || status === 'transcribed' || status === 'summarizing' || status === 'completed') {
+      if (
+        flags.hasTranscript ||
+        flags.hasNotes ||
+        status === 'transcribed' ||
+        status === 'summarizing' ||
+        status === 'completed'
+      ) {
         return 'done';
       }
       return 'pending';
@@ -57,19 +74,30 @@ const STEPS: Array<{
     notesLabel: 'Writing notes',
     hint: 'Summary and action items',
     notesHint: 'Structured notes and action items',
+    notesOnly: true,
     matches: (status, flags) => {
-      if (flags.hasSummary || status === 'completed') return 'done';
+      if (flags.hasNotes || flags.hasSummary || status === 'completed') return 'done';
       if (status === 'summarizing') return 'active';
-      if (status === 'failed' && flags.hasTranscript && !flags.hasSummary) return 'failed';
+      if (status === 'failed' && !flags.hasNotes && !flags.hasSummary) return 'failed';
       return 'pending';
     },
   },
   {
     key: 'completed',
-    label: 'Finishing up',
-    hint: 'Almost ready to review',
+    label: 'Ready to review',
+    notesLabel: 'Finishing up',
+    hint: 'Transcript is ready — generate a summary anytime from Notes',
+    notesHint: 'Almost ready to review',
     matches: (status, flags) => {
-      if (status === 'completed' || flags.hasSummary) return 'done';
+      if (
+        status === 'completed' ||
+        status === 'transcribed' ||
+        flags.hasTranscript ||
+        flags.hasNotes ||
+        flags.hasSummary
+      ) {
+        return 'done';
+      }
       return 'pending';
     },
   },
@@ -80,6 +108,7 @@ interface ProcessingStepsProps {
   hasAudio: boolean;
   hasTranscript: boolean;
   hasSummary: boolean;
+  hasNotes?: boolean;
   notesOnly?: boolean;
 }
 
@@ -88,14 +117,16 @@ export function ProcessingSteps({
   hasAudio,
   hasTranscript,
   hasSummary,
+  hasNotes = false,
   notesOnly = false,
 }: ProcessingStepsProps) {
   const { colors } = useTheme();
-  const flags = { hasAudio, hasTranscript, hasSummary };
+  const flags = { hasAudio, hasTranscript, hasSummary, hasNotes };
+  const steps = STEPS.filter((step) => (step.notesOnly ? notesOnly : true));
 
   return (
     <View style={styles.wrap} accessibilityLabel="Processing pipeline stages">
-      {STEPS.map((step, index) => {
+      {steps.map((step, index) => {
         const state = step.matches(status, flags);
         const label = notesOnly && step.notesLabel ? step.notesLabel : step.label;
         const hint = notesOnly && step.notesHint ? step.notesHint : step.hint;
@@ -111,7 +142,7 @@ export function ProcessingSteps({
                   state === 'failed' && { borderColor: colors.danger, backgroundColor: colors.danger },
                 ]}
               />
-              {index < STEPS.length - 1 ? (
+              {index < steps.length - 1 ? (
                 <View
                   style={[
                     styles.line,

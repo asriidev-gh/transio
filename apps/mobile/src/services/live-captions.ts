@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { EventEmitter, requireOptionalNativeModule } from 'expo-modules-core';
 import type { TranscriptSegment } from '@sessionai/shared';
 import { mobileEnv } from '../lib/env';
 import { getCurrentSession } from './auth';
@@ -79,6 +80,11 @@ type LiveMessage = {
   reason?: string;
 };
 
+type NativePcmHost = {
+  start: (options?: { sampleRate?: number; channels?: number; bitDepth?: number }) => void;
+  stop: () => void;
+};
+
 type NativePcmModule = {
   start: (options?: { sampleRate?: number; channels?: number; bitDepth?: number }) => void;
   stop: () => void;
@@ -87,6 +93,30 @@ type NativePcmModule = {
     callback: (event: { data: string }) => void,
   ) => { remove: () => void };
 };
+
+/**
+ * Resolve expo-audio-stream-pcm without importing its JS entry (that calls
+ * requireNativeModule and redboxes when the native binary isn't in this build).
+ */
+function loadNativePcmModule(): NativePcmModule | null {
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') return null;
+  try {
+    const native = requireOptionalNativeModule<NativePcmHost>('ExpoAudioStream');
+    if (!native || typeof native.start !== 'function' || typeof native.stop !== 'function') {
+      return null;
+    }
+    return {
+      start: (options) => native.start(options ?? {}),
+      stop: () => native.stop(),
+      addListener: (event, callback) =>
+        EventEmitter.prototype.addListener.call(native, event, callback) as {
+          remove: () => void;
+        },
+    };
+  } catch {
+    return null;
+  }
+}
 
 function wsBaseUrl(httpBase: string): string {
   const trimmed = httpBase.replace(/\/$/, '');
@@ -127,29 +157,6 @@ function base64ToArrayBuffer(b64: string): ArrayBuffer {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
-}
-
-function loadNativePcmModule(): NativePcmModule | null {
-  if (Platform.OS !== 'ios' && Platform.OS !== 'android') return null;
-  try {
-    // Optional native module — missing in Expo Go until a dev/EAS build includes it.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('expo-audio-stream-pcm') as
-      | NativePcmModule
-      | { default: NativePcmModule };
-    if (mod && typeof (mod as NativePcmModule).start === 'function') {
-      return mod as NativePcmModule;
-    }
-    if (
-      mod &&
-      typeof (mod as { default?: NativePcmModule }).default?.start === 'function'
-    ) {
-      return (mod as { default: NativePcmModule }).default;
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 function isWebAudioSupported(): boolean {

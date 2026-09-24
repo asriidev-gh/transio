@@ -63,7 +63,7 @@ export function registerNotesRoutes(
       const parsed = LiveNotesChunkResultSchema.parse(notes);
       // Persist incrementally so notes survive if the client leaves before finalize.
       try {
-        await createSummaryRepository(req).upsertForSession(id, parsed);
+        await createSummaryRepository(req).upsertForSession(id, parsed, 'notes');
       } catch {
         // Non-fatal — client still receives notes and can finalize later.
       }
@@ -92,12 +92,12 @@ export function registerNotesRoutes(
       if (!isNotesOnlyCaptureMode(session.captureMode)) {
         throw new AppError(
           'VALIDATION_ERROR',
-          'Notes finalize is only for Auto Notes or Live Note Taker sessions.',
+          'Notes finalize is only for Record Notes or Live Note Taker sessions.',
           400,
         );
       }
 
-      const record = await createSummaryRepository(req).upsertForSession(id, notes);
+      const record = await createSummaryRepository(req).upsertForSession(id, notes, 'notes');
       const updated = await sessions.update(req.user.id, id, {
         status: 'completed',
       });

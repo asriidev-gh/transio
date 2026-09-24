@@ -48,7 +48,9 @@ export function AudioPlayer({
   const duration = status.duration > 0 ? status.duration : 0;
   const position = status.currentTime > 0 ? status.currentTime : 0;
   const progress = duration > 0 ? Math.min(1, position / duration) : 0;
-  const loading = !error && (!ready || !status.isLoaded);
+  // Some Android/signed-URL loads report duration before isLoaded flips true.
+  const effectivelyLoaded = status.isLoaded || duration > 0;
+  const loading = !error && (!ready || !effectivelyLoaded);
   const speed = SPEEDS[speedIndex];
   const controlsDisabled = Boolean(error) || loading;
 
@@ -86,15 +88,23 @@ export function AudioPlayer({
   }, [player, uri, reloadKey]);
 
   useEffect(() => {
-    if (status.isLoaded || error) return;
-    const timeoutMs = remote ? 45000 : 12000;
+    if (effectivelyLoaded || error) return;
+    const timeoutMs = remote ? 90_000 : 20_000;
     const timeout = setTimeout(() => {
-      if (!status.isLoaded) {
+      if (!status.isLoaded && !(status.duration > 0)) {
         setError('Audio took too long to load. The file may be missing or unreadable.');
       }
     }, timeoutMs);
     return () => clearTimeout(timeout);
-  }, [status.isLoaded, error, reloadKey, uri, remote]);
+  }, [effectivelyLoaded, error, reloadKey, uri, remote, status.isLoaded, status.duration]);
+
+  // Clear a stale timeout error once the player becomes usable.
+  useEffect(() => {
+    if (!effectivelyLoaded) return;
+    setError((prev) =>
+      prev && prev.includes('took too long') ? null : prev,
+    );
+  }, [effectivelyLoaded]);
 
   useEffect(() => {
     const state = (status.playbackState || '').toLowerCase();
@@ -130,7 +140,7 @@ export function AudioPlayer({
 
   const seekToSeconds = useCallback(
     async (seconds: number): Promise<boolean> => {
-      if (!status.isLoaded) {
+      if (!effectivelyLoaded) {
         showSeekHint('Audio is still loading — try again in a moment.');
         return false;
       }
@@ -160,13 +170,13 @@ export function AudioPlayer({
         return false;
       }
     },
-    [duration, player, showSeekHint, status.isLoaded],
+    [duration, effectivelyLoaded, player, showSeekHint],
   );
 
   useEffect(() => {
     if (!seekRequest) return;
     if (lastSeekIdRef.current === seekRequest.id) return;
-    if (!status.isLoaded) return;
+    if (!effectivelyLoaded) return;
 
     lastSeekIdRef.current = seekRequest.id;
     void (async () => {
@@ -180,7 +190,7 @@ export function AudioPlayer({
         }
       }
     })();
-  }, [player, seekRequest, seekToSeconds, status.isLoaded, status.playing]);
+  }, [effectivelyLoaded, player, seekRequest, seekToSeconds, status.playing]);
 
   const statusLabel = useMemo(() => {
     if (error) return error;
@@ -305,7 +315,7 @@ export function AudioPlayer({
           accessibilityLabel={status.playing ? 'Pause' : 'Play'}
           disabled={controlsDisabled}
         >
-          <Icon name={status.playing ? 'pause' : 'play'} size={22} color="#FFFFFF" />
+          <Icon name={status.playing ? 'pause' : 'play'} size={22} color={colors.onBrand} variant="line" />
         </Pressable>
 
         <Text style={[styles.time, { color: colors.inkMuted }]}>{formatDuration(position)}</Text>

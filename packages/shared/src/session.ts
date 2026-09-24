@@ -50,9 +50,17 @@ export type CaptureMode = z.infer<typeof CaptureModeSchema>;
 
 export const CAPTURE_MODE_LABELS: Record<CaptureMode, string> = {
   live: 'Live captions',
-  batch: 'Record, then transcribe',
-  notes: 'Auto Notes',
+  batch: 'Record Audio and Transcribe',
+  notes: 'Transcribe Audio/Video File',
   live_notes: 'Live Note Taker',
+};
+
+/** Compact labels for list pills / chips. */
+export const CAPTURE_MODE_SHORT_LABELS: Record<CaptureMode, string> = {
+  live: 'Live captions',
+  batch: 'Recording',
+  notes: 'File',
+  live_notes: 'Live Notes',
 };
 
 export function isNotesOnlyCaptureMode(mode: CaptureMode): boolean {

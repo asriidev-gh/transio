@@ -156,5 +156,7 @@ const styles = StyleSheet.create({
   },
   actionHalf: {
     flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
   },
 });

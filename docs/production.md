@@ -65,3 +65,14 @@ Monorepo from repo root (leave **Root Directory** empty):
 Keep `NODE_ENV=production` in env vars. TypeScript and `@types/*` live in **dependencies** so production installs can still compile on the host.
 
 Mobile production builds use Expo Application Services or local `eas build` with the production env vars above.
+
+### EAS Update (OTA JS)
+
+Preview/production builds include `expo-updates`. After installing a build that has this native module, publish JS-only fixes with:
+
+```bash
+cd apps/mobile
+npm run update:preview -- --message "UI polish"
+```
+
+Rebuild the binary when native dependencies or `app.json` `version` change (`runtimeVersion` follows app version).

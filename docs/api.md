@@ -118,8 +118,9 @@ Upload response:
 | `POST` | `/sessions/:id/ask` | Q&A over transcript/summary |
 | `POST` | `/sessions/:id/translate` | On-demand summary/transcript translation |
 | `POST` | `/sessions/:id/translate-live` | Translate a short live-caption chunk `{ text, language }` |
+| `POST` | `/translate/voice` | Voice translate: multipart audio → STT → translate `{ sourceText, translatedText, … }` |
 | `POST` | `/sessions/:id/notes-live` | Merge live speech into notes `{ text, previousNotes? }` |
-| `POST` | `/sessions/:id/notes/finalize` | Persist notes + `completed` (Auto Notes / Live Note Taker) |
+| `POST` | `/sessions/:id/notes/finalize` | Persist notes + `completed` (Record Notes / Live Note Taker) |
 | `GET` | `/sessions/:id/feedback` | Thumbs feedback for summary/transcript |
 | `PUT` | `/sessions/:id/feedback` | Set or clear thumbs (`target`, `rating`) |
 

@@ -103,10 +103,17 @@ export class HttpTranscriptionProvider implements TranscriptionProvider {
       }
 
       if (!response.ok) {
+        let detail = '';
+        try {
+          detail = (await response.text()).slice(0, 240);
+        } catch {
+          // ignore
+        }
         logger.warn('Transcription provider returned error', {
           status: response.status,
           provider: this.name,
           attempt,
+          detail: detail || undefined,
         });
         if (response.status === 429) {
           throw new AppError(
@@ -115,10 +122,18 @@ export class HttpTranscriptionProvider implements TranscriptionProvider {
             429,
           );
         }
+        // 4xx from Whisper is usually bad audio / unsupported language — don't retry as 502.
+        if (response.status >= 400 && response.status < 500) {
+          throw new AppError(
+            'TRANSCRIPTION_ERROR',
+            'Could not transcribe that clip. Try speaking clearly for 1–2 seconds, or set They speak to Auto-detect.',
+            400,
+          );
+        }
         throw new AppError(
           'TRANSCRIPTION_ERROR',
           'Transcription provider request failed',
-          response.status >= 500 ? 502 : 502,
+          502,
         );
       }
 

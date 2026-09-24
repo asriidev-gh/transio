@@ -15,7 +15,7 @@ import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { SessionCard } from '@/src/components/SessionCard';
 import { Button } from '@/src/components/ui/Button';
-import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
+import { useFloatingTabBarContentInset } from '@/src/components/FloatingTabBar';
 import { Icon } from '@/src/components/ui/Icon';
 import { SectionHeader } from '@/src/components/ui/SectionHeader';
 import { ApiClientError } from '@/src/services/api';
@@ -57,6 +57,7 @@ export default function FolderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { colors, shadows } = useTheme();
+  const tabBarInset = useFloatingTabBarContentInset();
   const [folder, setFolder] = useState<SessionFolder | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -189,7 +190,7 @@ export default function FolderScreen() {
         }}
       />
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingBottom: tabBarInset }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
@@ -355,7 +356,6 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: FLOATING_TAB_BAR_CONTENT_INSET,
     gap: spacing.lg,
   },
   hero: {

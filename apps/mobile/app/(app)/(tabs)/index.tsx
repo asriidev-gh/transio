@@ -12,10 +12,12 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Session, SessionFolder } from '@sessionai/shared';
 import { AccountMenu } from '@/src/components/AccountMenu';
+import { BrandLogo } from '@/src/components/BrandLogo';
 import { ThemeToggle } from '@/src/components/ThemeToggle';
 import { CompletionBanner } from '@/src/components/CompletionBanner';
 import { ConnectivityBanner } from '@/src/components/ConnectivityBanner';
@@ -28,6 +30,7 @@ import {
   InsightStat,
 } from '@/src/components/HomeDashboard';
 import { SessionCard } from '@/src/components/SessionCard';
+import { APP_NAME, APP_TAGLINE } from '@/src/data/brand';
 import {
   InsightsCalendarModal,
   InsightsListModal,
@@ -53,10 +56,11 @@ import {
   isDefaultFolder,
   sortFoldersWithDefaultFirst,
 } from '@/src/services/default-folder';
+import { readHomeCache, writeHomeCache } from '@/src/services/home-cache';
 import { notifyProcessingComplete } from '@/src/services/notifications';
 import { clearLocalAudioUri } from '@/src/services/local-audio';
 import { deleteSession, listSessions } from '@/src/services/sessions';
-import { radii, spacing, typography, gradients } from '@/src/theme';
+import { fonts, radii, spacing, typography, gradients } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { formatDurationHuman } from '@/src/utils/format';
 import { confirmDestructive } from '@/src/utils/confirm';
@@ -100,7 +104,7 @@ function sortRecent(a: Session, b: Session): number {
 export default function HomeScreen() {
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
-  const { colors, shadows, scheme } = useTheme();
+  const { colors, shadows, scheme, reduceMotion } = useTheme();
   const { user } = useAuth();
   const { reachable, refresh: refreshReachable } = useApiReachable();
 
@@ -119,9 +123,9 @@ export default function HomeScreen() {
   const [composingFolder, setComposingFolder] = useState(false);
   const [folderName, setFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
-  const [insightBrowse, setInsightBrowse] = useState<'calendar' | 'captured' | 'processing' | null>(
-    null,
-  );
+  const [insightBrowse, setInsightBrowse] = useState<
+    'calendar' | 'captured' | 'favorites' | 'processing' | null
+  >(null);
   const inFlightIdsRef = useRef<Set<string>>(new Set());
   const announcedIdsRef = useRef<Set<string>>(new Set());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -130,21 +134,40 @@ export default function HomeScreen() {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
+
+    // Paint cached library immediately so Render cold starts don't hold the skeleton.
+    if (!isRefresh) {
+      const cached = await readHomeCache();
+      if (cached && (cached.sessions.length > 0 || cached.folders.length > 0)) {
+        setSessions(cached.sessions);
+        setFolders(cached.folders);
+        setLoading(false);
+      }
+    }
+
     try {
       const [data, folderRows] = await Promise.all([
         listSessions(),
         listFolders().catch(() => [] as SessionFolder[]),
       ]);
       setSessions(data);
+      // Don't wait on ensureDefaultFolder to clear the skeleton.
+      setLoading(false);
+
+      let nextFolders = dedupeFoldersByName(folderRows);
       try {
         const def = await ensureDefaultFolder(folderRows);
-        const merged = sortFoldersWithDefaultFirst(
-          folderRows.some((f) => f.id === def.id) ? folderRows : [...folderRows, def],
+        nextFolders = sortFoldersWithDefaultFirst(
+          dedupeFoldersByName(
+            folderRows.some((f) => f.id === def.id) ? folderRows : [...folderRows, def],
+          ),
         );
-        setFolders(dedupeFoldersByName(merged));
       } catch {
-        setFolders(dedupeFoldersByName(folderRows));
+        // Keep listed folders if default ensure fails.
       }
+      setFolders(nextFolders);
+      void writeHomeCache(data, nextFolders);
+
       inFlightIdsRef.current = new Set(data.filter(isInFlight).map((s) => s.id));
       const notices = await listCompletionNotices();
       setNotice(notices[0] ?? null);
@@ -154,8 +177,8 @@ export default function HomeScreen() {
           ? err.message
           : 'Could not load sessions. Check that the API is running.',
       );
-    } finally {
       setLoading(false);
+    } finally {
       setRefreshing(false);
     }
   }, []);
@@ -258,6 +281,11 @@ export default function HomeScreen() {
     [sessions],
   );
 
+  const favoriteSessions = useMemo(
+    () => sessions.filter((s) => Boolean(s.favoritedAt)).sort(sortRecent),
+    [sessions],
+  );
+
   const folderCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const session of sessions) {
@@ -283,7 +311,9 @@ export default function HomeScreen() {
     setError(null);
     try {
       const created = await createFolder({ name: trimmed });
-      setFolders((prev) => dedupeFoldersByName([...prev, created]));
+      const nextFolders = dedupeFoldersByName([...folders, created]);
+      setFolders(nextFolders);
+      void writeHomeCache(sessions, nextFolders);
       setFolderName('');
       setComposingFolder(false);
     } catch (err) {
@@ -302,8 +332,9 @@ export default function HomeScreen() {
     try {
       await deleteSession(session.id);
       await clearLocalAudioUri(session.id);
-      setSessions((prev) => prev.filter((row) => row.id !== session.id));
-    } catch (err) {
+      const nextSessions = sessions.filter((row) => row.id !== session.id);
+      setSessions(nextSessions);
+      void writeHomeCache(nextSessions, folders);    } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Could not delete this session.');
     }
   }
@@ -330,9 +361,11 @@ export default function HomeScreen() {
         }),
       );
       await deleteFolder(folder.id);
-      setSessions((prev) => prev.filter((session) => session.folderId !== folder.id));
-      setFolders((prev) => prev.filter((row) => row.id !== folder.id));
-    } catch (err) {
+      const nextSessions = sessions.filter((session) => session.folderId !== folder.id);
+      const nextFolders = folders.filter((row) => row.id !== folder.id);
+      setSessions(nextSessions);
+      setFolders(nextFolders);
+      void writeHomeCache(nextSessions, nextFolders);    } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Could not delete this folder.');
     }
   }
@@ -391,12 +424,32 @@ export default function HomeScreen() {
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
             <View style={styles.greetingBlock}>
-              <Text style={[styles.brandName, { color: colors.inkMuted }]}>Smart Transcriber</Text>
+              <Animated.View
+                entering={
+                  reduceMotion ? undefined : FadeInDown.duration(420).springify().damping(18)
+                }
+                style={styles.brandLockup}
+                accessibilityRole="header"
+                accessibilityLabel={APP_NAME}
+              >
+                <View
+                  style={[
+                    styles.brandMarkWell,
+                    {
+                      backgroundColor: colors.accentSoft,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <BrandLogo variant="mark" size={22} accessibilityLabel="" />
+                </View>
+                <Text style={[styles.brandName, { color: colors.ink }]}>{APP_NAME}</Text>
+              </Animated.View>
               <Text style={[styles.greeting, { color: colors.ink }]} accessibilityRole="header">
                 {greeting}
               </Text>
               <Text style={[styles.pageTitle, { color: colors.inkMuted }]}>
-                Capture, transcribe, and understand — fast.
+                {APP_TAGLINE}
               </Text>
             </View>
             <View style={styles.headerActions}>
@@ -443,7 +496,6 @@ export default function HomeScreen() {
               styles.actionTilePad,
               {
                 backgroundColor: colors.surface,
-                borderColor: colors.border,
                 opacity: pressed ? 0.92 : 1,
               },
               shadows.soft,
@@ -468,7 +520,6 @@ export default function HomeScreen() {
               styles.actionTilePad,
               {
                 backgroundColor: colors.surface,
-                borderColor: colors.border,
                 opacity: pressed ? 0.92 : 1,
               },
               shadows.soft,
@@ -493,7 +544,6 @@ export default function HomeScreen() {
               styles.actionTilePad,
               {
                 backgroundColor: colors.surface,
-                borderColor: colors.border,
                 opacity: pressed ? 0.92 : 1,
               },
               shadows.soft,
@@ -563,7 +613,7 @@ export default function HomeScreen() {
                 icon="star-outline"
                 tint={colors.actionFav}
                 accent={colors.warning}
-                onPress={() => router.push('/(app)/(tabs)/history' as Href)}
+                onPress={() => setInsightBrowse('favorites')}
               />
               <InsightStat
                 label="Processing"
@@ -698,7 +748,6 @@ export default function HomeScreen() {
                         {
                           width: folderCardWidth,
                           backgroundColor: colors.surface,
-                          borderColor: colors.border,
                         },
                         shadows.soft,
                       ]}
@@ -758,6 +807,14 @@ export default function HomeScreen() {
         onOpenSession={(sessionId) => router.push(`/session/${sessionId}`)}
       />
       <InsightsListModal
+        visible={insightBrowse === 'favorites'}
+        title="Favorites"
+        emptyMessage="Star a session to keep it here."
+        sessions={favoriteSessions}
+        onClose={() => setInsightBrowse(null)}
+        onOpenSession={(sessionId) => router.push(`/session/${sessionId}`)}
+      />
+      <InsightsListModal
         visible={insightBrowse === 'processing'}
         title="Processing"
         emptyMessage="Nothing is processing right now."
@@ -799,12 +856,26 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     width: '100%',
   },
+  brandLockup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: 2,
+  },
+  brandMarkWell: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
   brandName: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-    marginBottom: 4,
+    fontFamily: fonts.sansBold,
+    fontSize: 16,
+    letterSpacing: -0.35,
+    flexShrink: 1,
   },
   greetingBlock: {
     flex: 1,
@@ -841,12 +912,10 @@ const styles = StyleSheet.create({
     minWidth: 148,
     minHeight: 128,
     borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     overflow: 'hidden',
   },
-  actionTilePrimary: {
-    borderWidth: 0,
-  },
+  actionTilePrimary: {},
   actionTilePad: {
     padding: spacing.md,
     justifyContent: 'flex-end',
@@ -915,7 +984,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   folderChip: {
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
     borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.sm,

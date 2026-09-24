@@ -65,7 +65,7 @@ export function RecordingButton({ recording, paused, disabled, onPress }: Record
           {recording && !paused ? (
             <View style={[styles.stopSquare, { backgroundColor: colors.onBrand }]} />
           ) : paused ? (
-            <Icon name="play" size={40} />
+            <Icon name="play" size={40} color={colors.onBrand} variant="line" />
           ) : (
             <Icon name="microphone" size={44} color="#FFFFFF" />
           )}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { formatDuration, formatDurationHuman, formatSessionDate } from './format.js';
+import { formatDuration, formatDurationHuman, formatSessionDate, formatSessionDateTime } from './format.js';
 
 describe('formatDuration', () => {
   it('formats zero and simple values', () => {
@@ -27,5 +27,13 @@ describe('formatDurationHuman', () => {
 describe('formatSessionDate', () => {
   it('formats iso dates', () => {
     assert.equal(formatSessionDate('2026-09-20T12:00:00.000Z'), 'Sep 20, 2026');
+  });
+});
+
+describe('formatSessionDateTime', () => {
+  it('includes a clock time', () => {
+    const label = formatSessionDateTime('2026-09-20T15:30:00.000Z');
+    assert.match(label, /^Sep 20, 2026 · /);
+    assert.match(label, /\d{1,2}:\d{2}/);
   });
 });

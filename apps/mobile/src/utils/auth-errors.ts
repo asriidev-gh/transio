@@ -29,6 +29,10 @@ export function mapAuthErrorMessage(rawMessage: string | undefined | null): stri
     return 'Enter a valid email address.';
   }
 
+  if (message.includes('anonymous') && (message.includes('disabled') || message.includes('not enabled'))) {
+    return 'Guest sign-in is disabled. Enable Anonymous sign-ins in Supabase Auth.';
+  }
+
   if (message.includes('network') || message.includes('fetch')) {
     return 'Network unavailable. Check your connection and try again.';
   }

@@ -18,15 +18,25 @@ Record
   → status = transcribing
   → TranscriptionProvider.transcribe(...)
   → save transcripts row
-  → status = transcribed
+  → status = transcribed   ← pipeline stops here for normal recordings
+
+Opt-in AI summary (Notes / Transcript → Generate summary):
+  → POST /sessions/:id/summarize
   → status = summarizing
   → SummaryProvider.summarize(...)  (Claude + Zod)
-  → save summaries row
+  → save summaries row with kind = ai_summary
   → status = completed
+
+Notes-only capture (Record Notes / Live Note Taker):
+  → process transcribes ephemerally (no transcript row)
+  → save summaries row with kind = notes
+  → status = completed
+  → optional later: Generate summary → kind = ai_summary
 ```
 
 On failure, audio/transcript are retained and status becomes `failed` with a retry path
-via `POST /sessions/:id/process` (resumes at summarize if a transcript already exists).
+via `POST /sessions/:id/process` (transcript sessions stay at `transcribed`; summary is
+started separately with `POST /sessions/:id/summarize`).
 
 ## Transcription provider
 
@@ -86,7 +96,7 @@ pipeline stages from backend status (`hasAudio`, `hasTranscript`, `hasSummary`).
 | `PUT` | `/sessions/:id/transcript` | Upsert client transcript (live captions finals) |
 | `POST` | `/sessions/:id/summarize` | Starts async Claude summary only |
 | `GET` | `/sessions/:id/summary` | Structured summary record |
-| `POST` | `/sessions/:id/process` | Full pipeline (transcribe → summarize) |
+| `POST` | `/sessions/:id/process` | Transcribe (notes modes also write notes); summary is opt-in |
 | `GET` | `/sessions/:id/status` | `{ status, hasAudio, hasTranscript, hasSummary }` for polling |
 | `POST` | `/sessions/:id/notes-live` | Merge live speech into structured notes (Live Note Taker) |
 | `POST` | `/sessions/:id/notes/finalize` | Persist notes + mark completed (notes-only modes) |
@@ -113,12 +123,12 @@ Sessions store `captureMode`: `live` | `batch` | `notes` | `live_notes`.
 
 | Mode | While recording | After stop |
 | --- | --- | --- |
-| `live` | Live captions (+ optional translate) | Audio + transcript + summary |
-| `batch` | Audio only | Upload → transcribe → summarize |
-| `notes` (Auto Notes) | Audio only | Upload → ephemeral STT → summary; **no transcript row** |
-| `live_notes` (Live Note Taker) | Growing notes via `notes-live` | Finalize notes + upload audio; **no transcript** |
+| `live` | Live captions (+ optional translate) | Audio + transcript; AI summary opt-in |
+| `batch` | Audio only | Upload → transcribe; AI summary opt-in |
+| `notes` (Record Notes) | Audio only | Upload → ephemeral STT → **raw sentence notes**; AI summary opt-in |
+| `live_notes` (Live Note Taker) | Paper notes (one bullet per sentence) | Finalize raw notes + upload audio; AI summary opt-in |
 
-Apply migration `202609210003_session_capture_mode.sql` in Supabase.
+Apply migrations `202609210003_session_capture_mode.sql` and `202609220001_summary_kinds.sql` in Supabase.
 
 | Env | Purpose |
 | --- | --- |

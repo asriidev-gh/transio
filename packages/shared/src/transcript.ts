@@ -36,6 +36,7 @@ export const SessionStatusResponseSchema = z.object({
   hasAudio: z.boolean(),
   hasTranscript: z.boolean(),
   hasSummary: z.boolean(),
+  hasNotes: z.boolean().optional().default(false),
 });
 
 export type SessionStatusResponse = z.infer<typeof SessionStatusResponseSchema>;

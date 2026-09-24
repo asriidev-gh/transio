@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { SessionNavHeaderLeft } from '@/src/components/SessionNavHeaderLeft';
 import { useTheme } from '@/src/theme/ThemeContext';
 
 export default function SessionIdLayout() {
@@ -10,6 +11,8 @@ export default function SessionIdLayout() {
         headerTintColor: colors.ink,
         contentStyle: { backgroundColor: colors.background },
         headerShadowVisible: false,
+        headerBackVisible: false,
+        headerLeft: () => <SessionNavHeaderLeft />,
       }}
     >
       <Stack.Screen name="index" options={{ title: 'Session' }} />

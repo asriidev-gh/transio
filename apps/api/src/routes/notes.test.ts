@@ -56,7 +56,7 @@ describe('notes routes', () => {
     assert.ok(notes.overview.length > 0);
     assert.ok(notes.keyPoints.length > 0);
     assert.equal(
-      await summaries.getBySessionId(session.id).then((s) => s?.overview),
+      await summaries.getBySessionId(session.id, 'notes').then((s) => s?.overview),
       notes.overview,
     );
   });
@@ -102,6 +102,9 @@ describe('notes routes', () => {
       Authorization: 'Bearer token-a',
     });
     assert.equal((getRes.body.data as { status: string }).status, 'completed');
-    assert.equal(await summaries.getBySessionId(id).then((s) => s?.overview), 'Final overview');
+    assert.equal(
+      await summaries.getBySessionId(id, 'notes').then((s) => s?.overview),
+      'Final overview',
+    );
   });
 });

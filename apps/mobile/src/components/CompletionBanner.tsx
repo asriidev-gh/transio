@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radii, spacing, typography } from '@/src/theme';
+import { radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
 
 interface CompletionBannerProps {
   title: string;
@@ -8,30 +9,47 @@ interface CompletionBannerProps {
 }
 
 export function CompletionBanner({ title, onOpen, onDismiss }: CompletionBannerProps) {
+  const { colors } = useTheme();
+
   return (
-    <View style={styles.wrap} accessibilityRole="summary">
+    <View
+      style={[
+        styles.wrap,
+        {
+          backgroundColor: colors.accentSoft,
+          borderColor: colors.accent,
+        },
+      ]}
+      accessibilityRole="summary"
+    >
       <View style={styles.copy}>
-        <Text style={styles.heading}>Ready to review</Text>
-        <Text style={styles.body} numberOfLines={2}>
+        <Text style={[styles.heading, { color: colors.brand }]}>Ready to review</Text>
+        <Text style={[styles.body, { color: colors.ink }]} numberOfLines={2}>
           “{title}” finished processing.
         </Text>
       </View>
       <View style={styles.actions}>
         <Pressable
           onPress={onOpen}
-          style={styles.primary}
+          style={[styles.primary, { backgroundColor: colors.brand }]}
           accessibilityRole="button"
           accessibilityLabel="Open completed session"
         >
-          <Text style={styles.primaryText}>Open</Text>
+          <Text style={[styles.primaryText, { color: colors.onBrand }]}>Open</Text>
         </Pressable>
         <Pressable
           onPress={onDismiss}
-          style={styles.secondary}
+          style={[
+            styles.secondary,
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+            },
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
         >
-          <Text style={styles.secondaryText}>Dismiss</Text>
+          <Text style={[styles.secondaryText, { color: colors.ink }]}>Dismiss</Text>
         </Pressable>
       </View>
     </View>
@@ -40,9 +58,7 @@ export function CompletionBanner({ title, onOpen, onDismiss }: CompletionBannerP
 
 const styles = StyleSheet.create({
   wrap: {
-    backgroundColor: colors.accentSoft,
     borderWidth: 1,
-    borderColor: colors.accent,
     borderRadius: radii.md,
     padding: spacing.md,
     gap: spacing.md,
@@ -52,14 +68,12 @@ const styles = StyleSheet.create({
   },
   heading: {
     ...typography.caption,
-    color: colors.brand,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   body: {
     ...typography.body,
-    color: colors.ink,
     fontSize: 15,
   },
   actions: {
@@ -67,25 +81,20 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   primary: {
-    backgroundColor: colors.brand,
     borderRadius: radii.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
   primaryText: {
-    color: colors.onBrand,
     fontWeight: '700',
   },
   secondary: {
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     borderRadius: radii.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
   secondaryText: {
-    color: colors.ink,
     fontWeight: '600',
   },
 });

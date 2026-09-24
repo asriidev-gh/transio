@@ -1,28 +1,89 @@
-import { Platform } from 'react-native';
+import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import { showAlert } from '@/src/utils/confirm';
 
 export type NotificationPermission = 'granted' | 'denied' | 'default' | 'unsupported';
+
+const POST_NOTIFICATIONS =
+  PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS ??
+  ('android.permission.POST_NOTIFICATIONS' as (typeof PermissionsAndroid.PERMISSIONS)[keyof typeof PermissionsAndroid.PERMISSIONS]);
 
 function webNotificationSupported(): boolean {
   return Platform.OS === 'web' && typeof Notification !== 'undefined';
 }
 
-export async function getNotificationPermission(): Promise<NotificationPermission> {
-  if (!webNotificationSupported()) {
-    return Platform.OS === 'web' ? 'unsupported' : 'default';
-  }
-  return Notification.permission as NotificationPermission;
+function androidNeedsRuntimeNotificationPermission(): boolean {
+  return Platform.OS === 'android' && typeof Platform.Version === 'number'
+    ? Platform.Version >= 33
+    : Platform.OS === 'android';
 }
 
-/** Request browser notification permission (web). Native uses in-app alerts. */
-export async function requestNotificationPermission(): Promise<NotificationPermission> {
-  if (!webNotificationSupported()) {
-    return Platform.OS === 'web' ? 'unsupported' : 'default';
+/**
+ * Current OS / browser notification permission.
+ * - Android 13+: POST_NOTIFICATIONS (also used for locked-screen recording)
+ * - Older Android: treated as granted (no runtime prompt)
+ * - Web: browser Notification API
+ * - iOS: no push stack yet — in-app alerts when the app is open
+ */
+export async function getNotificationPermission(): Promise<NotificationPermission> {
+  if (Platform.OS === 'web') {
+    if (!webNotificationSupported()) return 'unsupported';
+    const perm = Notification.permission;
+    if (perm === 'granted') return 'granted';
+    if (perm === 'denied') return 'denied';
+    return 'default';
   }
-  if (Notification.permission === 'granted') return 'granted';
-  if (Notification.permission === 'denied') return 'denied';
-  const result = await Notification.requestPermission();
-  return result as NotificationPermission;
+
+  if (Platform.OS === 'android') {
+    if (!androidNeedsRuntimeNotificationPermission()) return 'granted';
+    try {
+      const ok = await PermissionsAndroid.check(POST_NOTIFICATIONS);
+      return ok ? 'granted' : 'default';
+    } catch {
+      return 'unsupported';
+    }
+  }
+
+  // iOS: local/push notifications not wired yet — processing uses in-app alerts.
+  return 'granted';
+}
+
+/** Request permission (or open system settings when blocked). */
+export async function requestNotificationPermission(): Promise<NotificationPermission> {
+  if (Platform.OS === 'web') {
+    if (!webNotificationSupported()) return 'unsupported';
+    if (Notification.permission === 'granted') return 'granted';
+    if (Notification.permission === 'denied') return 'denied';
+    const result = await Notification.requestPermission();
+    return result as NotificationPermission;
+  }
+
+  if (Platform.OS === 'android') {
+    if (!androidNeedsRuntimeNotificationPermission()) return 'granted';
+    try {
+      const result = await PermissionsAndroid.request(POST_NOTIFICATIONS, {
+        title: 'Allow notifications',
+        message:
+          'Get an alert when a session finishes processing, and keep recording if the screen locks.',
+        buttonPositive: 'Allow',
+        buttonNegative: 'Not now',
+      });
+      if (result === PermissionsAndroid.RESULTS.GRANTED) return 'granted';
+      if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) return 'denied';
+      return 'default';
+    } catch {
+      return 'unsupported';
+    }
+  }
+
+  return 'granted';
+}
+
+export async function openSystemNotificationSettings(): Promise<void> {
+  try {
+    await Linking.openSettings();
+  } catch {
+    // Best-effort.
+  }
 }
 
 export async function notifyProcessingComplete(input: {
@@ -52,7 +113,7 @@ export async function notifyProcessingComplete(input: {
     }
   }
 
-  // Foreground / native fallback — only when permission wasn't used.
+  // Foreground fallback (native + web without permission).
   if (Platform.OS !== 'web') {
     await showAlert('Processing complete', body);
   }

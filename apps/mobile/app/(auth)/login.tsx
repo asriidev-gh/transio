@@ -2,28 +2,42 @@ import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/src/hooks/useAuth';
 import { AuthServiceError } from '@/src/services/auth';
+import { resetOnboarding } from '@/src/services/onboarding';
 import { validateAuthForm } from '@/src/utils/auth-errors';
 import { Button } from '@/src/components/ui/Button';
 import { BrandLogo } from '@/src/components/BrandLogo';
+import { APP_TAGLINE } from '@/src/data/brand';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
+import { confirmAction } from '@/src/utils/confirm';
 
 export default function LoginScreen() {
-  const { signIn, isConfigured } = useAuth();
+  const { signIn, saveGuestAccount, isConfigured, isAnonymous, session } = useAuth();
+  const router = useRouter();
   const { colors } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /** Guest opened login to attach email; can switch to “existing account” sign-in. */
+  const [existingAccount, setExistingAccount] = useState(false);
+
+  const savingGuest = isAnonymous && !existingAccount;
+
+  async function onCreateAccount() {
+    await resetOnboarding();
+    router.replace('/onboarding');
+  }
 
   async function onSubmit() {
     const validationError = validateAuthForm(email, password);
@@ -35,12 +49,28 @@ export default function LoginScreen() {
     setLoading(true);
     setError(null);
     try {
+      if (savingGuest) {
+        await saveGuestAccount(email, password);
+        router.replace('/');
+        return;
+      }
+
+      if (isAnonymous) {
+        const ok = await confirmAction(
+          'Switch accounts?',
+          'Signing in replaces this guest session. Recordings on this guest stay with the guest user id.',
+          'Sign in',
+        );
+        if (!ok) return;
+      }
+
       await signIn(email, password);
+      router.replace('/');
     } catch (err) {
       setError(
         err instanceof AuthServiceError
           ? err.message
-          : 'Unable to sign in. Check your connection and try again.',
+          : 'Unable to continue. Check your connection and try again.',
       );
     } finally {
       setLoading(false);
@@ -54,14 +84,17 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.container}>
-          <BrandLogo size={112} />
-          <Text style={[styles.brand, { color: colors.ink }]} accessibilityRole="header">
-            Smart Transcriber
-          </Text>
-          <Text style={[styles.headline, { color: colors.ink }]}>Transcribe every seminar</Text>
-          <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
-            Record discussions, leave while we process, then ask and act.
-          </Text>
+          <View style={styles.brandBlock}>
+            <BrandLogo size={248} />
+            <Text style={[styles.headline, { color: colors.ink }]} accessibilityRole="header">
+              {savingGuest ? 'Save your account' : APP_TAGLINE}
+            </Text>
+            <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
+              {savingGuest
+                ? 'Add email and password so you can restore this library on another device.'
+                : 'Record discussions, leave while we process, then ask and act.'}
+            </Text>
+          </View>
 
           {!isConfigured ? (
             <Text style={[styles.configWarning, { color: colors.danger, backgroundColor: colors.actionRecord }]} accessibilityRole="alert">
@@ -94,8 +127,8 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
-              autoComplete="password"
-              textContentType="password"
+              autoComplete={savingGuest ? 'new-password' : 'password'}
+              textContentType={savingGuest ? 'newPassword' : 'password'}
               placeholder="••••••••"
               placeholderTextColor={colors.tertiary}
               editable={!loading}
@@ -111,16 +144,58 @@ export default function LoginScreen() {
           ) : null}
 
           <Button
-            label={loading ? 'Signing in…' : 'Continue with email'}
+            label={
+              loading
+                ? savingGuest
+                  ? 'Saving…'
+                  : 'Signing in…'
+                : savingGuest
+                  ? 'Save account'
+                  : 'Continue with email'
+            }
             onPress={() => void onSubmit()}
             disabled={loading || !isConfigured}
             loading={loading}
-            accessibilityLabel="Continue with email"
+            accessibilityLabel={savingGuest ? 'Save account' : 'Continue with email'}
           />
 
-          <Link href="/(auth)/register" style={[styles.link, { color: colors.ink }]} accessibilityRole="link">
-            Create account
-          </Link>
+          {isAnonymous ? (
+            <Pressable
+              onPress={() => {
+                setExistingAccount((v) => !v);
+                setError(null);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                existingAccount ? 'Save this guest instead' : 'Use an existing account'
+              }
+              style={styles.linkHit}
+            >
+              <Text style={[styles.link, { color: colors.ink }]}>
+                {existingAccount ? 'Save this guest instead' : 'Use an existing account'}
+              </Text>
+            </Pressable>
+          ) : !session ? (
+            <Pressable
+              onPress={() => void onCreateAccount()}
+              accessibilityRole="button"
+              accessibilityLabel="Create account"
+              style={styles.linkHit}
+            >
+              <Text style={[styles.link, { color: colors.ink }]}>Create account</Text>
+            </Pressable>
+          ) : null}
+
+          {isAnonymous ? (
+            <Pressable
+              onPress={() => router.back()}
+              accessibilityRole="button"
+              accessibilityLabel="Not now"
+              style={styles.linkHit}
+            >
+              <Text style={[styles.linkMuted, { color: colors.inkMuted }]}>Not now</Text>
+            </Pressable>
+          ) : null}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -139,17 +214,23 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     alignSelf: 'center',
   },
-  brand: {
-    ...typography.brand,
+  brandBlock: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
   },
   headline: {
     ...typography.pageTitle,
-    marginTop: spacing.sm,
+    textAlign: 'center',
+    fontSize: 22,
+    lineHeight: 28,
+    marginTop: spacing.xs,
   },
   subtitle: {
     ...typography.body,
-    marginBottom: spacing.sm,
+    textAlign: 'center',
     maxWidth: 320,
+    marginBottom: spacing.xs,
   },
   configWarning: {
     ...typography.caption,
@@ -176,10 +257,19 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontSize: 14,
   },
+  linkHit: {
+    marginTop: spacing.sm,
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
   link: {
     fontWeight: '600',
     fontSize: 15,
     textAlign: 'center',
-    marginTop: spacing.sm,
+  },
+  linkMuted: {
+    fontWeight: '500',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

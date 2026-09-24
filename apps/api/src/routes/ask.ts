@@ -96,7 +96,9 @@ export function registerAskRoutes(
 
       let summaryContext: string | undefined;
       try {
-        const summary = await createSummaryRepository(req).getBySessionId(id);
+        const summary =
+          (await createSummaryRepository(req).getBySessionId(id, 'ai_summary')) ??
+          (await createSummaryRepository(req).getBySessionId(id, 'notes'));
         if (summary) {
           summaryContext = buildSummaryContext(summary);
         }

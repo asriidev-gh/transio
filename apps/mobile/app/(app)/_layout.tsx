@@ -21,6 +21,12 @@ export default function AppLayout() {
           <Stack.Screen name="folder/[id]" options={{ title: 'Folder' }} />
           <Stack.Screen name="recording" options={{ title: 'Recording', headerBackVisible: true }} />
           <Stack.Screen name="session/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="help" options={{ headerShown: false }} />
+          <Stack.Screen name="help-contact" options={{ title: 'Send a message' }} />
+          <Stack.Screen name="about" options={{ title: 'About us' }} />
+          <Stack.Screen name="privacy" options={{ title: 'Privacy policy' }} />
+          <Stack.Screen name="terms" options={{ title: 'Terms of service' }} />
+          <Stack.Screen name="voice-translate" options={{ title: 'Voice translate' }} />
         </Stack>
       </View>
       <FloatingTabBar />

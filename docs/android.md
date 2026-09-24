@@ -5,7 +5,7 @@ You must run SessionAI on **your computer** (not the cloud agent VM). Your phone
 ## Option A — Expo Go (fastest)
 
 Native live captions (`expo-audio-stream-pcm`) need a **development build or EAS build** —
-they do **not** run inside Expo Go. In Expo Go, choose **Record, then transcribe**.
+they do **not** run inside Expo Go. In Expo Go, choose **Record Audio and Transcribe**.
 
 ### 1. On your phone
 
@@ -56,7 +56,7 @@ Allow microphone permission when Android asks.
 
 ### 3. Smoke check on the phone
 
-1. Sign in / register.
+1. Sign in (or Create account → onboarding → paywall).
 2. Home should load sessions (or empty state).
 3. If you see “Can't reach the SessionAI API”, the phone cannot hit your LAN IP — check Wi‑Fi, firewall (port **3847**), and that `EXPO_PUBLIC_API_BASE_URL` matches.
 
@@ -86,6 +86,23 @@ Set production-style env for the build (EAS secrets or `eas.json` env):
 - `EXPO_PUBLIC_API_BASE_URL` → a URL your phone can reach (LAN IP while at home, or a deployed HTTPS API)
 
 Local APIs still need the phone on the same network (or use a tunnel such as ngrok for the API).
+
+### Push JS / UI updates (EAS Update) — no full rebuild
+
+After **one** APK that includes `expo-updates` (the next preview build), most JS/UI changes can ship OTA:
+
+```bash
+cd apps/mobile
+# Preview channel (matches eas.json build.preview.channel)
+npm run update:preview -- --message "Describe the fix"
+
+# Or production channel
+npm run update:production -- --message "Describe the fix"
+```
+
+Close and reopen the app (or wait for the next cold start) to download the update.
+
+Still rebuild when you change native code, add native modules, bump Expo SDK, or change `version` / runtime (we use `runtimeVersion.policy: appVersion`).
 
 ### Local debug APK (needs Android Studio)
 

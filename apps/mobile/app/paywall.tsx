@@ -1,0 +1,369 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SessionNavHeaderLeft } from '@/src/components/SessionNavHeaderLeft';
+import { BrandLogo } from '@/src/components/BrandLogo';
+import { Icon } from '@/src/components/ui/Icon';
+import { APP_NAME, APP_TAGLINE } from '@/src/data/brand';
+import {
+  FREE_TRIAL_COPY,
+  SUBSCRIPTION_PLANS,
+  type SubscriptionPlanId,
+} from '@/src/data/pricing';
+import { useAuth } from '@/src/hooks/useAuth';
+import {
+  featurePaywallMessage,
+  loadEntitlements,
+  unlockPremium,
+  type GatedFeature,
+} from '@/src/services/entitlements';
+import { gradients, radii, spacing, typography } from '@/src/theme';
+import { useTheme } from '@/src/theme/ThemeContext';
+import { showAlert } from '@/src/utils/confirm';
+
+function parseFeature(raw: string | string[] | undefined): GatedFeature | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value === 'session' || value === 'summary' || value === 'voiceTranslate') return value;
+  return null;
+}
+
+const PERKS = [
+  'Record, import & Live Note Taker',
+  'AI Summaries on demand',
+  'Voice translate (hold to talk)',
+  'Translate finished notes',
+];
+
+export default function PaywallScreen() {
+  const { colors, shadows } = useTheme();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { session, continueAsGuest, isConfigured } = useAuth();
+  const params = useLocalSearchParams<{ feature?: string }>();
+  const feature = parseFeature(params.feature);
+
+  const [planId, setPlanId] = useState<SubscriptionPlanId>('monthly');
+  const [busy, setBusy] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadEntitlements().then((s) => {
+      setIsPremium(s.isPremium);
+      if (s.planId) setPlanId(s.planId);
+    });
+  }, []);
+
+  const subtitle = useMemo(() => {
+    if (feature) return featurePaywallMessage(feature);
+    return FREE_TRIAL_COPY.body;
+  }, [feature]);
+
+  async function enterApp() {
+    if (!session) {
+      if (!isConfigured) {
+        setError(
+          'Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY, then restart.',
+        );
+        return;
+      }
+      await continueAsGuest();
+      router.replace('/');
+      return;
+    }
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }
+
+  async function leavePaywall() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await enterApp();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not start a guest session. Enable Anonymous sign-ins in Supabase Auth.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSubscribe() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // Store billing (RevenueCat / Play / App Store) comes next.
+      // For now, unlock Pro locally so you can test the wall end-to-end.
+      await unlockPremium(planId);
+      setIsPremium(true);
+      await showAlert(
+        'Pro unlocked',
+        'App Store / Play Billing will replace this preview unlock. You’re Pro on this device now.',
+      );
+      await enterApp();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not start a guest session. Enable Anonymous sign-ins in Supabase Auth.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <Stack.Screen
+        options={{
+          title: 'Unlock Pro',
+          headerBackVisible: false,
+          headerLeft: () => (
+            <SessionNavHeaderLeft onBack={() => void leavePaywall()} />
+          ),
+        }}
+      />
+
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.lg },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <LinearGradient
+          colors={[gradients.primary[0] + '22', gradients.primary[1] + '10', 'transparent']}
+          style={styles.heroGlow}
+          pointerEvents="none"
+        />
+
+        <View style={styles.heroLogo}>
+          <BrandLogo size={160} />
+        </View>
+        <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
+          {isPremium ? 'You’re on Pro' : `Unlock ${APP_NAME} Pro`}
+        </Text>
+        <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
+          {isPremium ? `${APP_TAGLINE} — you’re on Pro.` : subtitle}
+        </Text>
+
+        <View style={styles.perkList}>
+          {PERKS.map((perk) => (
+            <View key={perk} style={styles.perkRow}>
+              <Icon name="check" size={16} color={colors.brand} variant="line" />
+              <Text style={[styles.perkText, { color: colors.ink }]}>{perk}</Text>
+            </View>
+          ))}
+        </View>
+
+        <Text style={[styles.trialNote, { color: colors.inkMuted }]}>
+          Cancel anytime in your store settings. Sign in later to keep your library across devices.
+        </Text>
+
+        <View style={styles.planList}>
+          {SUBSCRIPTION_PLANS.map((plan) => {
+            const selected = planId === plan.id;
+            return (
+              <Pressable
+                key={plan.id}
+                onPress={() => setPlanId(plan.id)}
+                disabled={isPremium || busy}
+                style={[
+                  styles.planCard,
+                  {
+                    borderColor: selected ? colors.brand : colors.border,
+                    backgroundColor: selected ? colors.accentSoft : colors.surface,
+                    opacity: isPremium ? 0.7 : 1,
+                  },
+                  shadows.soft,
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${plan.label} ${plan.priceLabel}`}
+              >
+                <View style={styles.planTop}>
+                  <Text style={[styles.planLabel, { color: colors.ink }]}>{plan.label}</Text>
+                  {plan.badge ? (
+                    <View style={[styles.badge, { backgroundColor: colors.brand }]}>
+                      <Text style={styles.badgeText}>{plan.badge}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={[styles.planPrice, { color: colors.ink }]}>{plan.priceLabel}</Text>
+                <Text style={[styles.planDetail, { color: colors.inkMuted }]}>{plan.detail}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {error ? (
+          <Text style={[styles.error, { color: colors.danger }]} accessibilityRole="alert">
+            {error}
+          </Text>
+        ) : null}
+
+        {!isPremium ? (
+          <Pressable
+            onPress={() => void onSubscribe()}
+            disabled={busy}
+            style={({ pressed }) => [
+              styles.cta,
+              { opacity: busy ? 0.6 : pressed ? 0.92 : 1 },
+              shadows.soft,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Pro"
+          >
+            <LinearGradient
+              colors={[...gradients.primary]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={styles.ctaGradient}
+            >
+              <Text style={styles.ctaText}>
+                {busy ? 'Starting…' : `Continue · ${SUBSCRIPTION_PLANS.find((p) => p.id === planId)?.priceLabel}`}
+              </Text>
+            </LinearGradient>
+          </Pressable>
+        ) : null}
+
+        {!isPremium ? (
+          <Pressable
+            onPress={() => void leavePaywall()}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with free trial"
+            style={styles.freeLink}
+          >
+            <Text style={[styles.freeLinkText, { color: colors.ink }]}>
+              {busy ? 'Starting…' : 'Continue with free trial'}
+            </Text>
+          </Pressable>
+        ) : null}
+
+        <Text style={[styles.legal, { color: colors.inkMuted }]}>
+          Prices shown in USD. Subscriptions will renew through the App Store or Google Play once
+          billing is connected. Cancel anytime in your store settings.
+        </Text>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  content: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    gap: spacing.md,
+  },
+  heroGlow: {
+    ...StyleSheet.absoluteFill,
+    height: 220,
+  },
+  heroLogo: {
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  title: {
+    ...typography.pageTitle,
+    textAlign: 'center',
+  },
+  subtitle: {
+    ...typography.body,
+    textAlign: 'center',
+    marginTop: -spacing.sm,
+  },
+  perkList: { gap: spacing.sm, marginTop: spacing.sm },
+  perkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  perkText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  trialNote: {
+    ...typography.caption,
+    textAlign: 'center',
+  },
+  planList: { gap: spacing.sm },
+  planCard: {
+    borderWidth: 1.5,
+    borderRadius: radii.card,
+    padding: spacing.md,
+    gap: 4,
+  },
+  planTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  planLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  badge: {
+    borderRadius: radii.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  planPrice: {
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  planDetail: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  cta: {
+    borderRadius: radii.pill,
+    overflow: 'hidden',
+    marginTop: spacing.sm,
+  },
+  ctaGradient: {
+    minHeight: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  ctaText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  freeLink: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+  },
+  freeLinkText: {
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  error: {
+    ...typography.body,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  legal: {
+    ...typography.caption,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: spacing.xs,
+  },
+});

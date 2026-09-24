@@ -7,7 +7,7 @@ import { InMemoryTranscriptRepository } from '../transcripts/repository.js';
 import { runProcessingPipeline } from './job.js';
 
 describe('runProcessingPipeline', () => {
-  it('transcribes then summarizes to completed', async () => {
+  it('transcribes without auto-summarizing', async () => {
     const userId = '11111111-1111-1111-1111-111111111111';
     const sessions = new InMemorySessionRepository();
     const transcripts = new InMemoryTranscriptRepository();
@@ -35,15 +35,7 @@ describe('runProcessingPipeline', () => {
       summaryProvider: {
         name: 'unit-summary',
         async summarize() {
-          return {
-            overview: 'Pipeline overview',
-            keyPoints: ['A'],
-            topics: [{ title: 'T', summary: 'S' }],
-            questionsDiscussed: [],
-            actionItems: [{ task: 'Do it' }],
-            importantInsights: ['Insight'],
-            quotes: [],
-          };
+          throw new Error('should not summarize');
         },
         async mergeLiveNotes() {
           throw new Error('not used');
@@ -53,8 +45,8 @@ describe('runProcessingPipeline', () => {
     });
 
     assert.equal((await transcripts.getBySessionId(session.id))?.text, 'Pipeline transcript text');
-    assert.equal((await summaries.getBySessionId(session.id))?.overview, 'Pipeline overview');
-    assert.equal((await sessions.getById(userId, session.id))?.status, 'completed');
+    assert.equal(await summaries.getBySessionId(session.id, 'ai_summary'), null);
+    assert.equal((await sessions.getById(userId, session.id))?.status, 'transcribed');
   });
 
   it('skips transcription when transcript already exists', async () => {
@@ -68,7 +60,7 @@ describe('runProcessingPipeline', () => {
     });
     await sessions.update(userId, session.id, {
       audioPath: `${userId}/${session.id}/audio.m4a`,
-      status: 'summarizing',
+      status: 'uploaded',
     });
     await transcripts.upsertForSession(session.id, 'Existing transcript', 'en');
 
@@ -87,16 +79,8 @@ describe('runProcessingPipeline', () => {
       },
       summaryProvider: {
         name: 'unit-summary',
-        async summarize(input) {
-          assert.equal(input.transcriptText, 'Existing transcript');
-          return {
-            overview: 'From existing',
-            keyPoints: [],
-            topics: [],
-            questionsDiscussed: [],
-            actionItems: [],
-            importantInsights: [],
-          };
+        async summarize() {
+          throw new Error('should not summarize');
         },
         async mergeLiveNotes() {
           throw new Error('not used');
@@ -108,8 +92,8 @@ describe('runProcessingPipeline', () => {
     });
 
     assert.equal(transcribed, false);
-    assert.equal((await summaries.getBySessionId(session.id))?.overview, 'From existing');
-    assert.equal((await sessions.getById(userId, session.id))?.status, 'completed');
+    assert.equal(await summaries.getBySessionId(session.id, 'ai_summary'), null);
+    assert.equal((await sessions.getById(userId, session.id))?.status, 'transcribed');
   });
 
   it('marks failed when transcription fails', async () => {
@@ -151,10 +135,11 @@ describe('runProcessingPipeline', () => {
 
     assert.equal((await sessions.getById(userId, session.id))?.status, 'failed');
     assert.equal(await transcripts.getBySessionId(session.id), null);
-    assert.equal(await summaries.getBySessionId(session.id), null);
+    assert.equal(await summaries.getBySessionId(session.id, 'ai_summary'), null);
+    assert.equal(await summaries.getBySessionId(session.id, 'notes'), null);
   });
 
-  it('notes-only mode summarizes without persisting a transcript', async () => {
+  it('notes-only mode stores raw sentence notes without persisting a transcript', async () => {
     const userId = '11111111-1111-1111-1111-111111111111';
     const sessions = new InMemorySessionRepository();
     const transcripts = new InMemoryTranscriptRepository();
@@ -183,15 +168,7 @@ describe('runProcessingPipeline', () => {
       summaryProvider: {
         name: 'unit-summary',
         async summarize() {
-          return {
-            overview: 'Notes overview',
-            keyPoints: ['N1'],
-            topics: [],
-            questionsDiscussed: [],
-            actionItems: [],
-            importantInsights: [],
-            quotes: [],
-          };
+          throw new Error('should not summarize for notes-only raw capture');
         },
         async mergeLiveNotes() {
           throw new Error('not used');
@@ -201,7 +178,9 @@ describe('runProcessingPipeline', () => {
     });
 
     assert.equal(await transcripts.getBySessionId(session.id), null);
-    assert.equal((await summaries.getBySessionId(session.id))?.overview, 'Notes overview');
+    const notes = await summaries.getBySessionId(session.id, 'notes');
+    assert.equal(notes?.overview, 'Ephemeral speech for notes');
+    assert.deepEqual(notes?.keyPoints, ['Ephemeral speech for notes']);
     assert.equal((await sessions.getById(userId, session.id))?.status, 'completed');
   });
 });

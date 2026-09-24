@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
+  CAPTURE_MODE_SHORT_LABELS,
   SESSION_STATUS_LABELS,
   SESSION_TYPE_LABELS,
   type Session,
@@ -7,8 +8,8 @@ import {
 import { Icon, type AppIconName } from '@/src/components/ui/Icon';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
+import { captureModeVisual } from '@/src/utils/capture-mode-visual';
 import { formatDurationHuman, formatRelativeSessionDate } from '@/src/utils/format';
-import { sessionTopicVisual } from '@/src/utils/session-topic';
 
 interface InsightStatProps {
   label: string;
@@ -121,14 +122,17 @@ interface InsightSessionCardProps {
 /** Larger session card for the home continue carousel. */
 export function InsightSessionCard({ session, onPress, width = 200 }: InsightSessionCardProps) {
   const { colors, scheme, shadows } = useTheme();
-  const topic = sessionTopicVisual(session);
+  const captureMode = session.captureMode ?? 'batch';
+  const visual = captureModeVisual(captureMode);
   const markColor = session.status === 'failed'
     ? colors.actionRecord
     : scheme === 'dark'
-      ? topic.dark
-      : topic.light;
+      ? visual.dark
+      : visual.light;
+  const markIconColor = session.status === 'failed' ? colors.danger : colors[visual.colorKey];
   const preview = session.description?.trim();
   const statusLabel = SESSION_STATUS_LABELS[session.status];
+  const captureLabel = CAPTURE_MODE_SHORT_LABELS[captureMode];
 
   return (
     <Pressable
@@ -143,10 +147,10 @@ export function InsightSessionCard({ session, onPress, width = 200 }: InsightSes
         shadows.soft,
       ]}
       accessibilityRole="button"
-      accessibilityLabel={`${session.title}, ${SESSION_TYPE_LABELS[session.sessionType]}`}
+      accessibilityLabel={`${session.title}, ${captureLabel}, ${SESSION_TYPE_LABELS[session.sessionType]}`}
     >
       <View style={[styles.sessionMark, { backgroundColor: markColor }]}>
-        <Icon name={topic.icon} size={32} />
+        <Icon name={visual.icon} size={28} color={markIconColor} variant="line" />
       </View>
       <Text style={[styles.sessionTitle, { color: colors.ink }]} numberOfLines={2}>
         {session.title}
@@ -155,7 +159,7 @@ export function InsightSessionCard({ session, onPress, width = 200 }: InsightSes
         {formatRelativeSessionDate(session.recordedAt)} · {formatDurationHuman(session.durationSeconds)}
       </Text>
       <Text style={[styles.sessionType, { color: colors.tertiary }]} numberOfLines={1}>
-        {SESSION_TYPE_LABELS[session.sessionType]}
+        {captureLabel} · {SESSION_TYPE_LABELS[session.sessionType]}
       </Text>
       <Text
         style={[

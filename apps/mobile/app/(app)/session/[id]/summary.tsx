@@ -50,7 +50,7 @@ export default function SummaryScreen() {
         void (async () => {
           try {
             const next = await refreshStatus(sessionId);
-            if (next.status === 'completed' || next.hasSummary) {
+            if (next.hasSummary) {
               stopPolling();
               await loadSummary(sessionId);
               setLoading(false);
@@ -83,7 +83,7 @@ export default function SummaryScreen() {
     setError(null);
     try {
       const next = await refreshStatus(id);
-      if (next.hasSummary || next.status === 'completed') {
+      if (next.hasSummary) {
         await loadSummary(id);
         setLoading(false);
         return;
@@ -94,8 +94,8 @@ export default function SummaryScreen() {
         return;
       }
 
-      if (!next.hasTranscript) {
-        setError('Generate a transcript before creating an AI summary.');
+      if (!next.hasTranscript && !next.hasNotes) {
+        setError('Capture notes or a transcript before creating an AI summary.');
         setLoading(false);
         return;
       }
@@ -202,6 +202,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.lg,
     justifyContent: 'center',
+    alignItems: 'center',
     gap: spacing.md,
   },
   title: {

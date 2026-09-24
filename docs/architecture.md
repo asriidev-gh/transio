@@ -78,7 +78,7 @@ shadows and pill radii shape buttons, tab bar, and search. Login/onboarding use 
 apps/mobile/
   app/                 Expo Router screens
     onboarding.tsx     First-launch slider (pre-auth)
-    (auth)/            Login / register
+    (auth)/            Login (Create account → onboarding → paywall)
     (app)/             Protected app shell
   src/
     components/        Reusable UI

@@ -40,12 +40,14 @@ import {
   Settings2,
   Share,
   Square,
+  SquarePen,
   Star,
   StickyNote,
   Sun,
   TrendingUp,
   Trophy,
   TriangleAlert,
+  Trash,
   Video,
   X,
 } from 'lucide-react-native';
@@ -70,6 +72,7 @@ export type AppIconName =
   | 'play'
   | 'stop'
   | 'close'
+  | 'trash-can-outline'
   | 'plus'
   | 'chevron-right'
   | 'file-music-outline'
@@ -89,6 +92,7 @@ export type AppIconName =
   | 'computer'
   | 'bulb'
   | 'pencil'
+  | 'edit'
   | 'camera'
   | 'bag'
   | 'file-text'
@@ -112,8 +116,7 @@ export type IconVariant = 'auto' | 'line' | '3d';
 const ICONS_3D: Partial<Record<AppIconName, ImageSourcePropType>> = {
   microphone: require('../../../assets/icons/3d/mic.png'),
   'home-outline': require('../../../assets/icons/3d/home.png'),
-  'star-outline': require('../../../assets/icons/3d/star.png'),
-  star: require('../../../assets/icons/3d/star.png'),
+  // Favorites chrome always uses Lucide — 3d star reads as a chunky badge in toolbars.
   'download-outline': require('../../../assets/icons/3d/folder.png'),
   'account-outline': require('../../../assets/icons/3d/boy.png'),
   magnify: require('../../../assets/icons/3d/zoom.png'),
@@ -164,6 +167,7 @@ const LUCIDE: Record<AppIconName, LucideIcon> = {
   play: Play,
   stop: Square,
   close: X,
+  'trash-can-outline': Trash,
   plus: Plus,
   'chevron-right': ChevronRight,
   'file-music-outline': FileAudio,
@@ -183,6 +187,7 @@ const LUCIDE: Record<AppIconName, LucideIcon> = {
   computer: Monitor,
   bulb: Lightbulb,
   pencil: Pencil,
+  edit: SquarePen,
   camera: Camera,
   bag: Briefcase,
   'file-text': FileText,
@@ -217,6 +222,8 @@ const CHROME: Set<AppIconName> = new Set([
   'plus',
   'stop',
   'check',
+  'play',
+  'pause',
   'magnify',
   'bell-outline',
   'white-balance-sunny',
@@ -228,6 +235,12 @@ const CHROME: Set<AppIconName> = new Set([
   'forward-15',
   'video',
   'sticky-note',
+  'pencil',
+  'edit',
+  'folder',
+  'star',
+  'star-outline',
+  'trash-can-outline',
 ]);
 
 interface IconProps {
@@ -260,11 +273,13 @@ export function Icon({ name, size = sizes.icon, color, variant = 'auto' }: IconP
   const filled = FILLED[name] === true;
   const tint = color ?? colors.ink;
 
+  // Filled chrome glyphs (e.g. favorited star): solid fill, light outline —
+  // avoids the chunky “badge” look from stroke+fill at high strokeWidth.
   return (
     <Glyph
       size={size}
       color={tint}
-      strokeWidth={1.85}
+      strokeWidth={filled ? 1.25 : 1.85}
       fill={filled ? tint : 'none'}
       absoluteStrokeWidth
     />

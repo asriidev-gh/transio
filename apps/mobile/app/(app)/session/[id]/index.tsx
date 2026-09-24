@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -20,7 +20,7 @@ import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { SessionWorkspace } from '@/src/components/SessionWorkspace';
 import { FolderPicker } from '@/src/components/FolderPicker';
-import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
+import { useFloatingTabBarContentInset } from '@/src/components/FloatingTabBar';
 import { UploadProgress } from '@/src/components/UploadProgress';
 import { Button } from '@/src/components/ui/Button';
 import { Icon } from '@/src/components/ui/Icon';
@@ -39,7 +39,7 @@ import { deleteSession, getSession, updateSession } from '@/src/services/session
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { confirmAction, confirmDestructive } from '@/src/utils/confirm';
-import { formatDurationHuman, formatSessionDate } from '@/src/utils/format';
+import { formatDurationHuman, formatSessionDateTime } from '@/src/utils/format';
 import { shareSessionContent } from '@/src/utils/share-session';
 import type { SummaryRecord, Transcript } from '@sessionai/shared';
 
@@ -49,6 +49,7 @@ export default function SessionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { colors, shadows } = useTheme();
+  const tabBarInset = useFloatingTabBarContentInset();
   const [session, setSession] = useState<Session | null>(null);
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [playbackUri, setPlaybackUri] = useState<string | null>(null);
@@ -71,10 +72,13 @@ export default function SessionDetailsScreen() {
   const [movingFolder, setMovingFolder] = useState(false);
   const [shareSummary, setShareSummary] = useState<SummaryRecord | null>(null);
   const [shareTranscript, setShareTranscript] = useState<Transcript | null>(null);
+  const [workspaceHasSummary, setWorkspaceHasSummary] = useState(false);
+  const [workspaceHasNotes, setWorkspaceHasNotes] = useState(false);
   const seekIdRef = useRef(0);
+  const liveNotesUploadRef = useRef(false);
 
   const runUploadAndProcess = useCallback(
-    async (sessionId: string, uri: string) => {
+    async (sessionId: string, uri: string, options?: { skipProcessing?: boolean }): Promise<boolean> => {
       setProceeding(true);
       setUploadStatus('uploading');
       setUploadProgress(0);
@@ -90,7 +94,7 @@ export default function SessionDetailsScreen() {
           setUploadMessage(
             'Local recording is no longer available in this browser. Please record again.',
           );
-          return;
+          return false;
         }
 
         await uploadSessionAudio(sessionId, uri, (progress) => {
@@ -106,11 +110,16 @@ export default function SessionDetailsScreen() {
         try {
           const signed = await getSignedAudioUrl(sessionId);
           setPlaybackUri(signed.url);
+          setShowPlayer(true);
         } catch {
           setPlaybackUri(uri);
+          setShowPlayer(true);
         }
 
-        router.push(`/session/${sessionId}/processing`);
+        if (!options?.skipProcessing) {
+          router.push(`/session/${sessionId}/processing`);
+        }
+        return true;
       } catch (err) {
         setUploadStatus('error');
         setUploadMessage(
@@ -118,6 +127,7 @@ export default function SessionDetailsScreen() {
             ? err.message
             : 'Upload failed. Your local recording is still saved.',
         );
+        return false;
       } finally {
         setProceeding(false);
       }
@@ -257,8 +267,14 @@ export default function SessionDetailsScreen() {
   }, [session, shareSummary, shareTranscript]);
 
   const onWorkspaceContent = useCallback(
-    (content: { summary: SummaryRecord | null; transcript: Transcript | null }) => {
-      setShareSummary(content.summary);
+    (content: {
+      summary: SummaryRecord | null;
+      transcript: Transcript | null;
+      notes?: SummaryRecord | null;
+    }) => {
+      setWorkspaceHasSummary(Boolean(content.summary));
+      setWorkspaceHasNotes(Boolean(content.notes));
+      setShareSummary(content.summary ?? content.notes ?? null);
       setShareTranscript(content.transcript);
     },
     [],
@@ -332,6 +348,20 @@ export default function SessionDetailsScreen() {
     }, [load]),
   );
 
+  // Live Note Taker: notes are saved on stop — quietly upload audio (no process screen).
+  useEffect(() => {
+    if (!session || !id || typeof id !== 'string') return;
+    if (session.captureMode !== 'live_notes') return;
+    if (!localUri || session.audioPath) return;
+    if (proceeding || uploadStatus === 'uploading') return;
+    if (liveNotesUploadRef.current) return;
+    liveNotesUploadRef.current = true;
+    void (async () => {
+      const ok = await runUploadAndProcess(id, localUri, { skipProcessing: true });
+      if (!ok) liveNotesUploadRef.current = false;
+    })();
+  }, [session, id, localUri, proceeding, uploadStatus, runUploadAndProcess]);
+
   async function onRefresh() {
     setRefreshing(true);
     try {
@@ -363,22 +393,27 @@ export default function SessionDetailsScreen() {
 
   const completed = session.status === 'completed';
   const failed = session.status === 'failed';
-  const canRecord = !localUri && !session.audioPath;
-  const canImport = !session.audioPath;
+  const canRecord = !completed && !localUri && !session.audioPath;
+  const canImport = !completed && !session.audioPath;
   const hasLocalDraft = Boolean(localUri) && !session.audioPath;
+  const isLiveNotes = session.captureMode === 'live_notes';
+  /** Live notes already finalized on stop — no Upload & process review card. */
+  const showProcessReview = hasLocalDraft && !isLiveNotes;
   const hasPlayback = Boolean(playbackUri);
   const notesOnly = isNotesOnlyCaptureMode(session.captureMode);
   const showWorkspace =
     session.status === 'completed' ||
     session.status === 'transcribed' ||
     session.status === 'summarizing' ||
-    session.status === 'transcribing';
+    session.status === 'transcribing' ||
+    (isLiveNotes && (workspaceHasNotes || completed));
   const hasTranscript =
     !notesOnly &&
     (session.status === 'transcribed' ||
       session.status === 'summarizing' ||
       session.status === 'completed');
-  const hasSummary = session.status === 'completed';
+  const hasSummary = workspaceHasSummary;
+  const hasNotes = workspaceHasNotes || (notesOnly && completed);
   const currentFolder = folders.find((folder) => folder.id === session.folderId) ?? null;
   const statusColor = completed ? colors.success : failed ? colors.danger : colors.accent;
   const statusLabel = SESSION_STATUS_LABELS[session.status];
@@ -387,7 +422,10 @@ export default function SessionDetailsScreen() {
     <>
       <Stack.Screen options={{ title: session.title }} />
       <ScrollView
-        contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={[
+          styles.container,
+          { backgroundColor: colors.background, paddingBottom: tabBarInset },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -407,7 +445,7 @@ export default function SessionDetailsScreen() {
           <Text style={[styles.metaLine, { color: colors.inkMuted }]}>
             {SESSION_TYPE_LABELS[session.sessionType]}
             {' · '}
-            {formatSessionDate(session.recordedAt)}
+            {formatSessionDateTime(session.recordedAt)}
             {' · '}
             {formatDurationHuman(session.durationSeconds)}
           </Text>
@@ -436,7 +474,8 @@ export default function SessionDetailsScreen() {
             <Icon
               name={session.favoritedAt ? 'star' : 'star-outline'}
               size={22}
-              color={session.favoritedAt ? colors.warning : colors.ink}
+              color={session.favoritedAt ? colors.accent : colors.ink}
+              variant="line"
             />
           </Pressable>
           <Pressable
@@ -450,7 +489,7 @@ export default function SessionDetailsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Share session"
           >
-            <Icon name="share-variant-outline" size={22} />
+            <Icon name="share-variant-outline" size={22} color={colors.ink} variant="line" />
           </Pressable>
           <Pressable
             style={[
@@ -463,7 +502,7 @@ export default function SessionDetailsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Move to folder"
           >
-            <Icon name="folder" size={20} />
+            <Icon name="folder" size={20} color={colors.ink} variant="line" />
             <Text style={[styles.folderChipText, { color: colors.ink }]} numberOfLines={1}>
               {movingFolder ? 'Moving…' : currentFolder ? currentFolder.name : 'Default'}
             </Text>
@@ -478,15 +517,12 @@ export default function SessionDetailsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Edit session"
           >
-            <Icon name="pencil" size={20} />
+            <Icon name="edit" size={20} color={colors.ink} variant="line" />
           </Pressable>
           <Pressable
             style={[
               styles.toolBtn,
-              {
-                backgroundColor: colors.actionRecord,
-                borderColor: colors.danger,
-              },
+              { backgroundColor: colors.surface, borderColor: colors.border },
               shadows.soft,
             ]}
             onPress={onDelete}
@@ -494,12 +530,12 @@ export default function SessionDetailsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Delete session"
           >
-            <Icon name="close" size={20} color={colors.danger} />
+            <Icon name="trash-can-outline" size={20} color={colors.danger} variant="line" />
           </Pressable>
         </View>
 
         <View style={styles.body}>
-          {hasLocalDraft ? (
+          {showProcessReview ? (
             <View
               style={[
                 styles.reviewCard,
@@ -537,46 +573,57 @@ export default function SessionDetailsScreen() {
                 />
               ) : null}
 
-              <Button
-                label={proceeding ? 'Uploading…' : 'Upload & process'}
-                onPress={() => {
-                  if (!localUri || !id) return;
-                  void runUploadAndProcess(String(id), localUri);
-                }}
-                loading={proceeding}
-                disabled={proceeding}
-              />
-              <Button
-                label="Re-record"
-                variant="secondary"
-                onPress={onReRecord}
-                disabled={proceeding}
-              />
-              {canImport ? (
-                <Pressable
-                  onPress={() => void onImportAudio()}
-                  disabled={importing || proceeding}
-                  accessibilityRole="button"
-                  accessibilityLabel="Import a different file"
-                  style={styles.linkBtn}
-                >
-                  <Text style={[styles.linkText, { color: colors.accent }]}>
-                    {importing ? 'Importing…' : 'Or import a different file'}
-                  </Text>
-                </Pressable>
+              {uploadStatus !== 'uploading' ? (
+                <>
+                  <Button
+                    label="Upload & process"
+                    onPress={() => {
+                      if (!localUri || !id) return;
+                      void runUploadAndProcess(String(id), localUri);
+                    }}
+                    disabled={proceeding}
+                  />
+                  <Button
+                    label="Re-record"
+                    variant="secondary"
+                    onPress={onReRecord}
+                    disabled={proceeding}
+                  />
+                  {canImport ? (
+                    <Pressable
+                      onPress={() => void onImportAudio()}
+                      disabled={importing || proceeding}
+                      accessibilityRole="button"
+                      accessibilityLabel="Import a different file"
+                      style={styles.linkBtn}
+                    >
+                      <Text style={[styles.linkText, { color: colors.accent }]}>
+                        {importing ? 'Importing…' : 'Or import a different file'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </>
               ) : null}
             </View>
           ) : null}
 
-          {!hasLocalDraft && session.audioPath && uploadStatus === 'error' ? (
+          {isLiveNotes && hasLocalDraft && (uploadStatus === 'uploading' || uploadStatus === 'error') ? (
             <UploadProgress
               progress={uploadProgress}
               status={uploadStatus}
-              message={uploadMessage}
+              message={uploadMessage ?? (uploadStatus === 'uploading' ? 'Saving audio…' : undefined)}
+              onRetry={
+                localUri && id && uploadStatus === 'error'
+                  ? () => {
+                      liveNotesUploadRef.current = false;
+                      void runUploadAndProcess(String(id), localUri, { skipProcessing: true });
+                    }
+                  : undefined
+              }
             />
           ) : null}
 
-          {!hasLocalDraft && hasPlayback && showPlayer && playbackUri ? (
+          {!showProcessReview && hasPlayback && showPlayer && playbackUri ? (
             <AudioPlayer
               uri={playbackUri}
               title={session.title}
@@ -586,11 +633,11 @@ export default function SessionDetailsScreen() {
             />
           ) : null}
 
-          {!hasLocalDraft && hasPlayback && !showPlayer ? (
+          {!showProcessReview && hasPlayback && !showPlayer ? (
             <Button label="Play recording" onPress={() => setShowPlayer(true)} variant="secondary" />
           ) : null}
 
-          {!hasLocalDraft && !hasPlayback && !canRecord ? (
+          {!showProcessReview && !hasPlayback && !canRecord && !completed && !isLiveNotes ? (
             <Text style={[styles.hint, { color: colors.inkMuted }]}>No recording available yet.</Text>
           ) : null}
 
@@ -630,7 +677,7 @@ export default function SessionDetailsScreen() {
             />
           ) : null}
 
-          {session.audioPath ? (
+          {session.audioPath && !isLiveNotes && !completed ? (
             <View style={styles.pipelineBlock}>
               <Pressable
                 onPress={() => router.push(`/session/${session.id}/processing`)}
@@ -647,13 +694,13 @@ export default function SessionDetailsScreen() {
                 <View style={styles.pipelineBody}>
                   <Text style={[styles.pipelineTitle, { color: colors.ink }]}>Processing</Text>
                   <Text style={[styles.pipelineHint, { color: colors.inkMuted }]}>
-                    {completed
-                      ? 'Finished — view pipeline'
-                      : session.status === 'transcribing' || session.status === 'summarizing'
-                        ? 'In progress'
-                        : failed
-                          ? 'Failed — tap to retry'
-                          : 'Transcribe and summarize'}
+                    {session.status === 'transcribing' || session.status === 'summarizing'
+                      ? 'In progress'
+                      : failed
+                        ? 'Failed — tap to retry'
+                        : session.status === 'transcribed'
+                          ? 'Transcript ready'
+                          : 'Transcribe audio'}
                   </Text>
                 </View>
                 <Icon name="chevron-right" size={16} color={colors.inkMuted} />
@@ -676,8 +723,9 @@ export default function SessionDetailsScreen() {
               sessionTitle={session.title}
               hasTranscript={hasTranscript}
               hasSummary={hasSummary}
+              hasNotes={hasNotes}
               notesOnly={notesOnly}
-              initialTab={hasSummary || notesOnly ? 'summary' : 'transcript'}
+              initialTab="notes"
               currentTimeSec={playbackTimeSec}
               onContentLoaded={onWorkspaceContent}
               onSeekMs={(startMs) => {
@@ -708,11 +756,11 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.lg,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   container: {
     padding: spacing.lg,
     gap: spacing.lg,
-    paddingBottom: FLOATING_TAB_BAR_CONTENT_INSET,
   },
   hero: {
     gap: spacing.sm,

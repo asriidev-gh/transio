@@ -1,5 +1,6 @@
 import {
   apiSuccess,
+  isNotesOnlyCaptureMode,
   ProcessAcceptedSchema,
   SessionIdParamSchema,
 } from '@sessionai/shared';
@@ -150,14 +151,18 @@ export function registerProcessRoutes(
         return;
       }
 
-      if (session.status === 'completed') {
-        const summary = await createSummaryRepository(req).getBySessionId(id);
-        if (summary) {
+      if (session.status === 'completed' || session.status === 'transcribed') {
+        const [notes, summary, transcript] = await Promise.all([
+          createSummaryRepository(req).getBySessionId(id, 'notes').catch(() => null),
+          createSummaryRepository(req).getBySessionId(id, 'ai_summary').catch(() => null),
+          createTranscriptRepository(req).getBySessionId(id).catch(() => null),
+        ]);
+        if (notes || summary || transcript || session.status === 'completed') {
           res.status(200).json(
             apiSuccess(
               ProcessAcceptedSchema.parse({
                 sessionId: id,
-                status: 'completed',
+                status: session.status === 'transcribed' ? 'transcribed' : 'completed',
                 stage: 'done',
               }),
             ),
@@ -169,7 +174,29 @@ export function registerProcessRoutes(
       ensureProcessingProviders(createTranscriptionProviderFn, createSummaryProviderFn);
 
       const transcript = await createTranscriptRepository(req).getBySessionId(id);
-      const nextStatus = transcript?.text?.trim() ? 'summarizing' : 'transcribing';
+      const notesOnly = isNotesOnlyCaptureMode(session.captureMode);
+
+      // Non-notes sessions with a transcript are done — AI summary is opt-in.
+      if (!notesOnly && transcript?.text?.trim()) {
+        if (session.status !== 'transcribed') {
+          await options.createRepository(req).update(req.user.id, id, {
+            status: 'transcribed',
+          });
+        }
+        res.status(200).json(
+          apiSuccess(
+            ProcessAcceptedSchema.parse({
+              sessionId: id,
+              status: 'transcribed',
+              stage: 'done',
+            }),
+          ),
+        );
+        return;
+      }
+
+      const nextStatus =
+        notesOnly && transcript?.text?.trim() ? 'summarizing' : 'transcribing';
 
       const updated = await options.createRepository(req).update(req.user.id, id, {
         status: nextStatus,
@@ -217,9 +244,13 @@ export function tryStartProcessingAfterUpload(
       const session = await options.createRepository(req).getById(userId, sessionId);
       if (!session) return;
 
-      // Live Note Taker: skip re-process when notes were already finalized.
-      // If finalize never ran (empty take), fall through to notes-only pipeline.
-      if (session.captureMode === 'live_notes' && session.status === 'completed') {
+      // Live Note Taker already saved bullets on stop — never re-run STT on upload.
+      if (session.captureMode === 'live_notes') {
+        if (session.status !== 'completed') {
+          await options.createRepository(req).update(userId, sessionId, {
+            status: 'completed',
+          });
+        }
         return;
       }
 

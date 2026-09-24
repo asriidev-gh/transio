@@ -9,6 +9,35 @@ import { useTheme } from '@/src/theme/ThemeContext';
 /** Extra bottom padding so content clears the floating dock + Record FAB. */
 export const FLOATING_TAB_BAR_CONTENT_INSET = 120;
 
+/** True on primary tab screens where the dock should stay visible. */
+export function isFloatingTabBarRoute(pathname: string): boolean {
+  if (
+    pathname.includes('/session') ||
+    pathname.includes('/folder') ||
+    pathname.includes('/new-session') ||
+    pathname.includes('/recording') ||
+    pathname.includes('/help') ||
+    pathname.includes('/about') ||
+    pathname.includes('/privacy') ||
+    pathname.includes('/terms') ||
+    pathname.includes('/voice-translate') ||
+    pathname.includes('/paywall')
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/** Bottom padding for scroll content — docks on tabs, compact on detail flows. */
+export function useFloatingTabBarContentInset(): number {
+  const pathname = usePathname();
+  const insets = useSafeAreaInsets();
+  if (!isFloatingTabBarRoute(pathname)) {
+    return Math.max(insets.bottom, spacing.md) + spacing.lg;
+  }
+  return FLOATING_TAB_BAR_CONTENT_INSET;
+}
+
 type SideTabKey = 'index' | 'history' | 'translate' | 'settings';
 type TabIcon = Extract<
   AppIconName,
@@ -48,7 +77,12 @@ function activeTabFromPath(pathname: string): SideTabKey | null {
     pathname.includes('/session') ||
     pathname.includes('/folder') ||
     pathname.includes('/new-session') ||
-    pathname.includes('/recording')
+    pathname.includes('/recording') ||
+    pathname.includes('/help') ||
+    pathname.includes('/about') ||
+    pathname.includes('/privacy') ||
+    pathname.includes('/terms') ||
+    pathname.includes('/voice-translate')
   ) {
     return null;
   }
@@ -93,6 +127,10 @@ export function FloatingTabBar() {
   const focused = activeTabFromPath(pathname);
   const rim = scheme === 'light' ? colors.background : colors.backgroundAlt;
 
+  if (!isFloatingTabBarRoute(pathname)) {
+    return null;
+  }
+
   function goTab(tab: (typeof LEFT_TABS)[number]) {
     if (focused === tab.key) {
       router.replace(tab.href);
@@ -108,7 +146,16 @@ export function FloatingTabBar() {
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: bottomPad }]}>
       <View style={styles.dock}>
-        <View style={[styles.bar, shadows.float]}>
+        <View
+          style={[
+            styles.bar,
+            shadows.float,
+            {
+              backgroundColor: 'rgba(15, 23, 42, 0.72)',
+              borderColor: 'rgba(255, 255, 255, 0.12)',
+            },
+          ]}
+        >
           {LEFT_TABS.map((tab) => (
             <SideTab
               key={tab.key}
@@ -209,11 +256,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     alignSelf: 'stretch',
-    backgroundColor: '#0F172A',
     borderRadius: radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
     minHeight: 62,
+    overflow: 'hidden',
+    zIndex: 1,
+    ...Platform.select({
+      web: { backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' } as object,
+      default: {},
+    }),
   },
   tab: {
     flex: 1,
@@ -246,6 +299,8 @@ const styles = StyleSheet.create({
     height: FAB + 28,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 20,
+    elevation: 16,
   },
   fabHalo: {
     position: 'absolute',
