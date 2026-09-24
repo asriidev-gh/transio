@@ -21,6 +21,7 @@ import type { AskProviderFactory } from './routes/ask.js';
 import type { FeedbackRepoFactory } from './routes/feedback.js';
 import type { ProcessJobRunner } from './routes/process.js';
 import type { TranslateProviderFactory } from './routes/translate.js';
+import { createVoiceTranslateRouter } from './routes/voice-translate.js';
 import type {
   JobRunner,
   TranscriptRepoFactory,
@@ -113,6 +114,14 @@ export function createApp(deps: AppDeps = {}) {
       createFeedbackRepository: deps.createFeedbackRepository,
       runSummaryJob: deps.runSummaryJob,
       runProcessJob: deps.runProcessJob,
+      authenticate: deps.authenticate,
+    }),
+  );
+  app.use(
+    '/translate',
+    createVoiceTranslateRouter({
+      createTranscriptionProvider: deps.createTranscriptionProvider,
+      createTranslateProvider: deps.createTranslateProvider,
       authenticate: deps.authenticate,
     }),
   );
