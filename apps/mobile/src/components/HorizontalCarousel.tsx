@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  type ViewStyle,
 } from 'react-native';
 import { Icon } from '@/src/components/ui/Icon';
 import { radii, spacing } from '@/src/theme';
@@ -107,7 +108,8 @@ export function HorizontalCarousel({
             // RN Web: enable drag/swipe scrolling without a native scrollbar.
             style={
               Platform.OS === 'web'
-                ? ({ overflowX: 'auto', overflowY: 'hidden' } as const)
+                ? // overflowX is valid on web but missing from some versions of the native style types.
+                  ({ overflowX: 'auto', overflowY: 'hidden' } as unknown as ViewStyle)
                 : undefined
             }
           >
