@@ -38,6 +38,7 @@ describe('missingProductionConfig', () => {
     const whisper = missingProductionConfig(envWith({ ...base, TRANSCRIPTION_PROVIDER: 'whisper' }));
     assert.ok(whisper.includes('TRANSCRIPTION_API_KEY'));
     assert.ok(whisper.includes('SUPABASE_SERVICE_ROLE_KEY'));
+    assert.ok(whisper.includes('DEVICE_HASH_SECRET'));
 
     const dg = missingProductionConfig(envWith({ ...base, TRANSCRIPTION_PROVIDER: 'deepgram' }));
     assert.ok(dg.some((m) => m.startsWith('DEEPGRAM_API_KEY')));
@@ -51,6 +52,7 @@ describe('missingProductionConfig', () => {
       SUPABASE_ANON_KEY: 'a',
       SUPABASE_SERVICE_ROLE_KEY: 's',
       ANTHROPIC_API_KEY: 'k',
+      DEVICE_HASH_SECRET: 'pepper',
       TRANSCRIPTION_PROVIDER: 'deepgram',
       DEEPGRAM_API_KEY: 'd',
     });

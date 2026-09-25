@@ -40,6 +40,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     req.user = {
       id: data.user.id,
       email: data.user.email ?? null,
+      isAnonymous: data.user.is_anonymous === true,
     };
     req.accessToken = token;
 

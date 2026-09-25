@@ -2,6 +2,8 @@ import type { TranslateLanguage, VoiceTranslateResult } from '@sessionai/shared'
 import { mobileEnv } from '@/src/lib/env';
 import { getCurrentSession } from '@/src/services/auth';
 import { ApiClientError } from '@/src/services/api';
+import { getDeviceId } from '@/src/services/device-id';
+import { publishIfQuotaBlocked } from '@/src/services/quota-events';
 
 function guessMimeType(uri: string): string {
   const lower = uri.toLowerCase();
@@ -201,6 +203,8 @@ export async function translateVoiceClip(input: {
   localUri: string;
   targetLanguage: TranslateLanguage;
   sourceLanguage?: string;
+  /** All turns of one conversation share an id, so the server charges it once. */
+  conversationId?: string | null;
 }): Promise<VoiceTranslateResult> {
   const token = (await getCurrentSession())?.access_token;
   if (!token) {
@@ -240,6 +244,9 @@ export async function translateVoiceClip(input: {
     xhr.open('POST', url);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.setRequestHeader('Accept', 'application/json');
+    const deviceId = getDeviceId();
+    if (deviceId) xhr.setRequestHeader('x-device-id', deviceId);
+    if (input.conversationId) xhr.setRequestHeader('x-conversation-id', input.conversationId);
     xhr.timeout = 90_000;
 
     xhr.onload = () => {
@@ -272,6 +279,7 @@ export async function translateVoiceClip(input: {
         message =
           'Voice translate API is missing on the server. Redeploy the API (POST /translate/voice), then try again.';
       }
+      publishIfQuotaBlocked(code, message);
       reject(new ApiClientError(code, message, xhr.status));
     };
 

@@ -1,5 +1,7 @@
 import { mobileEnv } from '../lib/env';
 import { getCurrentSession } from './auth';
+import { getDeviceId } from './device-id';
+import { publishIfQuotaBlocked } from './quota-events';
 
 export class ApiClientError extends Error {
   constructor(
@@ -70,6 +72,10 @@ async function executeOnce<T>(path: string, options: RequestOptions): Promise<T>
     Accept: 'application/json',
   };
 
+  // Free usage is counted per device on the server.
+  const deviceId = getDeviceId();
+  if (deviceId) headers['x-device-id'] = deviceId;
+
   if (options.body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
@@ -130,6 +136,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         isRetryableStatus(err.status) &&
         attempt < retries;
       if (!retryable) {
+        // Published once, after any retries, so the user sees a single message.
+        if (err instanceof ApiClientError) publishIfQuotaBlocked(err.code, err.message);
         throw err;
       }
       await sleep(400 * 2 ** attempt);

@@ -14,6 +14,7 @@ import {
 } from '../lib/supabase.js';
 import { enqueueJob } from '../lib/job-queue.js';
 import { userRateLimit } from '../middleware/rate-limit.js';
+import { chargeQuota } from '../services/quota/index.js';
 import { createSummaryProvider } from '../providers/summary/index.js';
 import { createTranscriptionProvider } from '../providers/transcription/index.js';
 import { runProcessingPipeline } from '../services/processing/job.js';
@@ -148,8 +149,14 @@ export function createSessionsRouter(options: {
         throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
       }
       const input = CreateSessionSchema.parse(req.body);
-      const session = await createRepository(req).create(req.user.id, input);
-      res.status(201).json(apiSuccess(session));
+      const charge = await chargeQuota(req, 'session');
+      try {
+        const session = await createRepository(req).create(req.user.id, input);
+        res.status(201).json(apiSuccess(session));
+      } catch (err) {
+        await charge.refund();
+        throw err;
+      }
     } catch (err) {
       next(err);
     }

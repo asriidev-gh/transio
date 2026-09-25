@@ -300,6 +300,7 @@ export default function VoiceTranslateScreen() {
         localUri: uri,
         targetLanguage: targetLang,
         sourceLanguage: sourceLang === 'auto' ? undefined : sourceLang,
+        conversationId,
       });
 
       if (gen !== processGen.current) return;

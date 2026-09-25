@@ -104,6 +104,7 @@ Paywall perk copy should stay aligned with real features (record/import/Live Not
 - Batch STT: `TRANSCRIPTION_PROVIDER=whisper` (default) or `deepgram` (speaker diarization, longer files)
 - Background jobs run in-process via `lib/job-queue.ts`; a sweeper fails sessions stuck transcribing/summarizing (see docs/production.md)
 - Per-user rate limits, upload gate and outbound timeouts protect a small Render instance
+- Server-side usage quotas (`services/quota`, migration `202609250002_usage_quotas.sql`): free usage per device via `x-device-id`, Pro per account per UTC day, global spend kill switch. `QUOTA_MODE=log` until billing is live, then `on`
 - Providers under `apps/api/src/providers/` (transcription, summary, translate, ask, speakers)
 
 Secrets only in `apps/api/.env`. Mobile uses `EXPO_PUBLIC_*` only.
@@ -113,7 +114,7 @@ Secrets only in `apps/api/.env`. Mobile uses `EXPO_PUBLIC_*` only.
 - API: typically Render (see `docs/production.md`)
 - Mobile: EAS project `sessionai` (account `asriidev`)
   - Channel **preview** for internal APKs + OTA
-  - Runtime version `0.1.0`
+  - Runtime version follows the app `version` in `app.json` (currently `0.2.0`). Bump it whenever a native dependency is added, so an update never reaches a build that lacks the native code
   - JS-only changes → `npm run update:preview`
   - Native changes (icon, splash, `expo-audio-stream-pcm`, permissions) → new EAS build
 

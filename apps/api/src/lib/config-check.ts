@@ -12,6 +12,7 @@ export function missingProductionConfig(env: Env): string[] {
   if (!env.SUPABASE_ANON_KEY) missing.push('SUPABASE_ANON_KEY');
   if (!env.SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY');
   if (!env.ANTHROPIC_API_KEY) missing.push('ANTHROPIC_API_KEY');
+  if (!env.DEVICE_HASH_SECRET) missing.push('DEVICE_HASH_SECRET');
 
   if (env.TRANSCRIPTION_PROVIDER === 'deepgram') {
     if (!env.DEEPGRAM_API_KEY) missing.push('DEEPGRAM_API_KEY (needed by TRANSCRIPTION_PROVIDER=deepgram)');

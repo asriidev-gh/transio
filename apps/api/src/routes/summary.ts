@@ -8,6 +8,7 @@ import type { Request, Router } from 'express';
 import { AppError } from '../middleware/error-handler.js';
 import { createSupabaseUserClient, getJobSupabaseClient } from '../lib/supabase.js';
 import { enqueueJob } from '../lib/job-queue.js';
+import { chargeQuota } from '../services/quota/index.js';
 import { SupabaseSessionRepository } from '../services/sessions/repository.js';
 import { createSummaryProvider } from '../providers/summary/index.js';
 import type { SummaryProvider } from '../providers/summary/types.js';
@@ -129,14 +130,21 @@ export function registerSummaryRoutes(
 
       createProvider();
 
-      const updated = await options.createRepository(req).update(req.user.id, id, {
-        status: 'summarizing',
-      });
-      if (!updated) {
-        throw new AppError('NOT_FOUND', 'Session not found', 404);
-      }
+      // Charged only once the request is valid and a new summary is really starting.
+      const charge = await chargeQuota(req, 'summary');
+      try {
+        const updated = await options.createRepository(req).update(req.user.id, id, {
+          status: 'summarizing',
+        });
+        if (!updated) {
+          throw new AppError('NOT_FOUND', 'Session not found', 404);
+        }
 
-      runJob(id, req);
+        runJob(id, req);
+      } catch (err) {
+        await charge.refund();
+        throw err;
+      }
 
       res.status(202).json(
         apiSuccess(

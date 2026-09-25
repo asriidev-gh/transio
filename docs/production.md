@@ -20,6 +20,10 @@ SessionAI MVP can run in production with the same monorepo layout. Keep secrets 
 | `TRANSCRIPTION_PROVIDER` | `whisper` (default) or `deepgram` (speaker diarization, meetings; uses `DEEPGRAM_API_KEY`) |
 | `MAX_UPLOAD_MB` | Optional raw upload/link cap before conversion (default 100, max 1000). Held in RAM, so size to the host |
 | `FFMPEG_PATH` | Optional; overrides the bundled `ffmpeg-static` binary |
+| `QUOTA_MODE` | `off`, `log` (default) or `on`. `log` counts usage and logs what would be blocked. Switch to `on` once billing is live |
+| `FREE_LIMIT` / `PRO_DAILY_LIMIT` | Free uses per feature per device (default 2) and Pro uses per feature per UTC day (default 5) |
+| `GLOBAL_DAILY_LIMITS` | Spend kill switch, for example `session=300,summary=300,voiceTranslate=3000` |
+| `DEVICE_HASH_SECRET` | Random secret for hashing device ids. Required in production. Never change it, or every device counts as new |
 | `JOB_CONCURRENCY` | Transcribe/summary jobs running at once (default 2) |
 | `MAX_CONCURRENT_UPLOADS` | Uploads/link imports buffered in RAM at once (default 2); extra requests get 503 + Retry-After |
 | `JOB_STALE_MINUTES` | Sessions stuck transcribing/summarizing longer than this are marked failed (default 30) |
@@ -86,6 +90,8 @@ Rebuild the binary when native dependencies or `app.json` `version` change (`run
 
 ## API hardening notes
 
+- **Quotas:** free usage is counted per device, Pro usage per account per UTC day, by the API in Supabase (migration `202609250002_usage_quotas.sql`). The app sends its device id in the `x-device-id` header. In `log` mode nothing is blocked. The spend kill switch applies in `log` and `on` mode and answers 503. Over-limit requests in `on` mode answer 402 with `QUOTA_EXCEEDED_FREE` or `QUOTA_EXCEEDED_DAILY`.
+- **Guest accounts:** `POST /device/claim` records which guest account owns a device. In `on` mode a second guest on the same device gets 409 `DEVICE_ALREADY_CLAIMED` and must sign in with email. Subscriptions are read from the `subscriptions` table, which the billing webhook will fill.
 - **Stuck jobs:** background jobs run in the web process. On boot and every 5 minutes the API marks sessions stuck in `transcribing`/`summarizing` as `failed`. Apply migration `202609250001_sessions_stuck_index.sql` for a partial index that keeps the sweep cheap.
 - **Shutdown:** on SIGTERM (Render deploys) the API stops taking jobs and waits up to 25 seconds for running ones.
 - **Rate limits:** per user, per 10 minutes: 20 heavy requests (upload, import, process, transcribe, summarize), 120 chat requests (ask, translate, Voice translate, notes finalize) and 600 live updates. A broad per-IP limit also applies. Limits are in memory, so they are per instance.

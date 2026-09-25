@@ -10,6 +10,11 @@ import { z } from 'zod';
 import { logger } from '../lib/logger.js';
 import { requireAuth } from '../middleware/auth.js';
 import { userRateLimit } from '../middleware/rate-limit.js';
+import {
+  chargeQuota,
+  voiceConversationId,
+  type QuotaCharge,
+} from '../services/quota/index.js';
 import { AppError } from '../middleware/error-handler.js';
 import { createTranscriptionProvider } from '../providers/transcription/index.js';
 import type { TranscriptionProvider } from '../providers/transcription/types.js';
@@ -120,6 +125,7 @@ export function createVoiceTranslateRouter(options: {
 
   router.post('/voice', audioUpload.single('file'), async (req, res, next) => {
     const started = Date.now();
+    let charge: QuotaCharge | undefined;
     try {
       if (!req.user) {
         throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
@@ -147,6 +153,11 @@ export function createVoiceTranslateRouter(options: {
 
       const targetLanguage = fields.targetLanguage as TranslateLanguage;
       const languageLabel = TRANSLATE_LANGUAGE_LABELS[targetLanguage];
+
+      // A whole conversation is charged once, however many turns it has.
+      charge = await chargeQuota(req, 'voiceTranslate', {
+        conversationId: voiceConversationId(req.headers['x-conversation-id']),
+      });
 
       logger.info('voice-translate start', {
         bytes: file.buffer.byteLength,
@@ -197,6 +208,7 @@ export function createVoiceTranslateRouter(options: {
         ),
       );
     } catch (err) {
+      await charge?.refund();
       logger.warn('voice-translate failed', {
         ms: Date.now() - started,
         message: err instanceof Error ? err.message : 'unknown',

@@ -5,6 +5,7 @@ import type { RequestHandler } from 'express';
 import { getEnv } from './lib/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
+import { createDeviceRouter } from './routes/device.js';
 import { ipRateLimit } from './middleware/rate-limit.js';
 import { healthRouter } from './routes/health.js';
 import { limitsRouter } from './routes/limits.js';
@@ -125,6 +126,7 @@ export function createApp(deps: AppDeps = {}) {
       authenticate: deps.authenticate,
     }),
   );
+  app.use('/device', createDeviceRouter({ authenticate: deps.authenticate }));
   app.use(
     '/translate',
     createVoiceTranslateRouter({

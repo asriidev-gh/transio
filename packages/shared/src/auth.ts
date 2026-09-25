@@ -12,6 +12,8 @@ export type AuthCredentials = z.infer<typeof AuthCredentialsSchema>;
 export const AuthUserSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email().nullable(),
+  /** True for guest (anonymous) accounts. */
+  isAnonymous: z.boolean().optional(),
 });
 
 export type AuthUser = z.infer<typeof AuthUserSchema>;

@@ -18,6 +18,7 @@ import { ConfirmHost } from '@/src/components/ConfirmHost';
 import { BootLoading } from '@/src/components/BootLoading';
 import { mobileEnv } from '@/src/lib/env';
 import { hasSeenOnboarding } from '@/src/services/onboarding';
+import { QuotaBlockedHandler } from '@/src/components/QuotaBlockedHandler';
 import { ShareIntentHandler } from '@/src/components/ShareIntentHandler';
 
 export { ErrorBoundary } from 'expo-router';
@@ -153,6 +154,7 @@ function ThemedRoot() {
         <StatusBar style={scheme === 'light' ? 'dark' : 'light'} />
         <AuthGate>
           <ShareIntentHandler />
+          <QuotaBlockedHandler />
           <Stack
             screenOptions={{
               headerStyle: { backgroundColor: colors.background },

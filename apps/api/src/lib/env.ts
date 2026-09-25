@@ -25,6 +25,19 @@ const envSchema = z.object({
   JOB_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
   /** Uploads / link imports held in memory at once. Extra requests get a 503 + Retry-After. */
   MAX_CONCURRENT_UPLOADS: z.coerce.number().int().min(1).max(8).default(2),
+  /**
+   * Server-side usage limits. off: none. log: count and log what would be blocked (safe default
+   * until billing is live). on: block requests over the limit.
+   */
+  QUOTA_MODE: z.enum(['off', 'log', 'on']).default('log'),
+  /** Free uses per feature, tracked per device. */
+  FREE_LIMIT: z.coerce.number().int().min(0).max(1000).default(2),
+  /** Pro uses per feature per UTC day, tracked per account. */
+  PRO_DAILY_LIMIT: z.coerce.number().int().min(1).max(1000).default(5),
+  /** Spend kill switch: max uses per feature per UTC day across all users. */
+  GLOBAL_DAILY_LIMITS: z.string().default('session=300,summary=300,voiceTranslate=3000'),
+  /** Secret for hashing device ids before they are stored. */
+  DEVICE_HASH_SECRET: z.string().optional().default(''),
   /** Live caption streams one user may hold open at once. */
   MAX_LIVE_STREAMS_PER_USER: z.coerce.number().int().min(1).max(5).default(2),
   /** Hard cap on one live caption stream, in minutes. */

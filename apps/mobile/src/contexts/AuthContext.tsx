@@ -11,6 +11,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured } from '@/src/lib/env';
 import { getSupabaseClient } from '@/src/lib/supabase';
 import * as authService from '@/src/services/auth';
+import { claimGuestDevice } from '@/src/services/device-claim';
 
 interface AuthContextValue {
   session: Session | null;
@@ -94,6 +95,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const continueAsGuest = useCallback(async () => {
     if (session) return;
     const next = await authService.signInAnonymously();
+    try {
+      await claimGuestDevice();
+    } catch (err) {
+      // A guest account already exists on this device: drop the new one and ask for sign-in.
+      await authService.signOut();
+      throw err;
+    }
     setSession(next);
   }, [session]);
 
