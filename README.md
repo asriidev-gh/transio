@@ -169,7 +169,7 @@ Zod (`SessionSummary`) before persistence. See [docs/ai.md](./docs/ai.md).
 | `supabaseConfigured: false` | Set `SUPABASE_URL` + `SUPABASE_ANON_KEY` in `apps/api/.env` |
 | Mobile “Supabase not configured” | Set `EXPO_PUBLIC_SUPABASE_*` in `apps/mobile/.env` and restart Expo |
 | Sign-in disabled / config warning on login | Same as above — auth requires a real Supabase project |
-| Stuck after register | Confirm email in inbox, or disable Confirm email in Supabase Auth settings |
+| Stuck after creating an account | Confirm email in inbox, or disable Confirm email in Supabase Auth settings |
 | `GET /me` returns 401 | Send `Authorization: Bearer <access_token>` from a signed-in session |
 | Transcription returns 503 | Set `TRANSCRIPTION_API_KEY` in `apps/api/.env` (Whisper-compatible) |
 | Summarization returns 503 | Set `ANTHROPIC_API_KEY` in `apps/api/.env` |

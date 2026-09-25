@@ -95,7 +95,7 @@ export default function SummaryScreen() {
       }
 
       if (!next.hasTranscript && !next.hasNotes) {
-        setError('Capture notes or a transcript before creating an AI summary.');
+        setError('Capture notes or a transcript before creating an AI Summary.');
         setLoading(false);
         return;
       }
@@ -145,7 +145,7 @@ export default function SummaryScreen() {
         <LoadingState
           message={
             status?.status === 'summarizing' || starting
-              ? 'Generating AI summary…'
+              ? 'Generating AI Summary…'
               : 'Loading summary…'
           }
         />
@@ -185,7 +185,7 @@ export default function SummaryScreen() {
     <View style={[styles.centered, { backgroundColor: colors.background }]}>
       <ErrorState
         title="No summary yet"
-        description="Generate a structured AI summary from the transcript."
+        description="Generate a structured AI Summary from the transcript."
         actionLabel="Summarize"
         onRetry={() => void onStartOrRetry()}
       />

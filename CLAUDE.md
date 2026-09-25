@@ -55,6 +55,12 @@ Notes-only sessions hide Transcript / Ask tabs; workspace shows Notes (+ Transla
 - Thumbs feedback on summary & transcript
 - Meta line shows **date + clock time** via `formatSessionDateTime`
 
+### Import
+
+- File picker or direct file URL (YouTube/Vimeo page links are rejected on purpose)
+- Android share sheet: share audio/video (or a link) from Files, Drive, Zoom or Meet into the app (`expo-share-intent`, needs a native build)
+- Limits come from `GET /limits` (raw upload `MAX_UPLOAD_MB`, default 100; length about 50 min with Whisper, about 3.5 h with Deepgram); the app warns before uploading
+
 ### Voice translate
 
 - Hold-to-talk conversation (`/voice-translate`); device TTS speaks translation (`expo-speech`)
@@ -65,7 +71,7 @@ Notes-only sessions hide Transcript / Ask tabs; workspace shows Notes (+ Transla
 
 - Supabase Auth (email + anonymous guest)
 - Onboarding → paywall → guest or signed-in home
-- Login exists; register path routed through onboarding/paywall
+- Login screen handles sign-in and Create account (no separate register screen); onboarding → paywall → guest or signed-in home
 - Legal: About, Privacy, Terms, Help / Contact (`apps/mobile/src/data/legal.ts`, `help-faq.ts`)
 
 ### Entitlements (local until Store billing)
@@ -95,6 +101,9 @@ Paywall perk copy should stay aligned with real features (record/import/Live Not
 - Sessions CRUD, audio upload, process pipeline, status polling
 - Transcript / summary / ask / translate / notes-live / notes-finalize / feedback / folders
 - `WS /live/transcribe?token=` — Deepgram proxy (`DEEPGRAM_API_KEY` server-only)
+- Batch STT: `TRANSCRIPTION_PROVIDER=whisper` (default) or `deepgram` (speaker diarization, longer files)
+- Background jobs run in-process via `lib/job-queue.ts`; a sweeper fails sessions stuck transcribing/summarizing (see docs/production.md)
+- Per-user rate limits, upload gate and outbound timeouts protect a small Render instance
 - Providers under `apps/api/src/providers/` (transcription, summary, translate, ask, speakers)
 
 Secrets only in `apps/api/.env`. Mobile uses `EXPO_PUBLIC_*` only.
@@ -108,8 +117,7 @@ Secrets only in `apps/api/.env`. Mobile uses `EXPO_PUBLIC_*` only.
   - JS-only changes → `npm run update:preview`
   - Native changes (icon, splash, `expo-audio-stream-pcm`, permissions) → new EAS build
 
-Recent preview Android build (new icon):  
-https://expo.dev/accounts/asriidev/projects/sessionai/builds/ac75efe3-07c3-468c-98bb-b0d23ccfc165
+EAS builds (latest first): https://expo.dev/accounts/asriidev/projects/sessionai/builds
 
 ## Working agreements
 

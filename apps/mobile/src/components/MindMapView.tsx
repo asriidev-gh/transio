@@ -134,7 +134,7 @@ export function MindMapView({ summary, sessionTitle }: MindMapViewProps) {
   return (
     <View style={styles.wrap} accessibilityLabel="Session mind map">
       <Text style={[styles.hint, { color: colors.inkMuted }]}>
-        Tap a node to read details. Built from this session’s AI summary.
+        Tap a node to read details. Built from this session’s AI Summary.
       </Text>
 
       {empty ? (

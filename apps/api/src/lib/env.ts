@@ -37,10 +37,6 @@ const envSchema = z.object({
    * In production, set explicitly (e.g. https://app.example.com).
    */
   CORS_ORIGINS: z.string().optional().default(''),
-  LOG_SENSITIVE: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((v) => v === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;

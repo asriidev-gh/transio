@@ -63,3 +63,6 @@ temp/
 apps/mobile/.claude/
 apps/mobile/AGENTS.md
 apps/mobile/CLAUDE.md
+
+# Supabase CLI cache
+supabase/.temp/

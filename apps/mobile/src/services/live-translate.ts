@@ -10,7 +10,7 @@ import type { LiveCaptionLanguage } from './live-captions';
 
 const TARGET_PREF_KEY = 'live-translate-target';
 
-/** Compact set for live recording chips (full list still used in TranslateBar). */
+/** Compact set for live recording chips. */
 export const LIVE_TRANSLATE_TARGET_OPTIONS: Array<{
   code: TranslateLanguage | null;
   label: string;

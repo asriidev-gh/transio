@@ -19,7 +19,7 @@ export function SummarySections({ summary }: SummarySectionsProps) {
   const { colors } = useTheme();
 
   return (
-    <View style={styles.wrap} accessibilityLabel="AI summary sections">
+    <View style={styles.wrap} accessibilityLabel="AI Summary sections">
       <Section title="Overview" colors={colors}>
         <Text style={[styles.body, { color: colors.ink }]} selectable>
           {summary.overview?.trim() || 'No overview available.'}

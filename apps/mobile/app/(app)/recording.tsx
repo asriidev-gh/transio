@@ -613,7 +613,7 @@ export default function RecordingScreen() {
               : 'Saving…'
             : isRecording
               ? liveNotesEnabled && captions.status === 'live'
-                ? 'Listening · live notes'
+                ? 'Listening · Live Note Taker'
                 : liveEnabled && captions.status === 'live'
                   ? 'Listening · live captions'
                   : captionsMode === 'notes'

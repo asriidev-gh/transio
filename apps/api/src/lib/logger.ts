@@ -5,8 +5,7 @@ interface LogFields {
 }
 
 /**
- * Structured logger. Sensitive fields (transcripts, secrets, audio) must never be passed here
- * unless LOG_SENSITIVE=true and debugging is explicitly required.
+ * Structured logger. Sensitive fields (transcripts, secrets, audio) must never be passed here.
  */
 function write(level: LogLevel, message: string, fields?: LogFields): void {
   const entry = {

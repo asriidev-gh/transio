@@ -9,7 +9,7 @@
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --max-warnings=0",
-    "test": "bash -c 'node --import tsx --test $(find src -name \"*.test.ts\" | sort)'"
+    "test": "node ../../scripts/run-tests.mjs"
   },
   "dependencies": {
     "@sessionai/shared": "*",

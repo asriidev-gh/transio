@@ -39,7 +39,7 @@ export function SummaryGeneratingBanner() {
   return (
     <View
       accessibilityRole="progressbar"
-      accessibilityLabel="Writing your AI summary"
+      accessibilityLabel="Writing your AI Summary"
       style={[
         styles.card,
         {
@@ -48,7 +48,7 @@ export function SummaryGeneratingBanner() {
         },
       ]}
     >
-      <Text style={[styles.title, { color: colors.ink }]}>Writing your AI summary</Text>
+      <Text style={[styles.title, { color: colors.ink }]}>Writing your AI Summary</Text>
       <Text style={[styles.detail, { color: colors.inkMuted }]}>
         You can keep reading your notes. This usually takes a moment.
       </Text>

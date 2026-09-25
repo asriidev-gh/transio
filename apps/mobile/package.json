@@ -10,7 +10,7 @@
     "web": "expo start --web --port 19047",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint app src --max-warnings=0",
-    "test": "bash -c 'node --import tsx --test $(find src -name \"*.test.ts\" | sort)'",
+    "test": "node ../../scripts/run-tests.mjs",
     "update:preview": "eas update --channel preview --environment preview",
     "update:production": "eas update --channel production --environment production",
     "eas-build-post-install": "cd ../.. && npm run build --workspace=@sessionai/shared"

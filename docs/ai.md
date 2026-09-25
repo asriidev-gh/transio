@@ -168,5 +168,5 @@ Migration: `supabase/migrations/202609200004_create_summaries.sql`
 
 ## Safety
 
-- Never log full transcripts, audio bytes, or secrets in production (`LOG_SENSITIVE=false`).
+- Never log full transcripts, audio bytes, or secrets in production (the logger never receives them).
 - Never expose AI keys through `EXPO_PUBLIC_*` variables.

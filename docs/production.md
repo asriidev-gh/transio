@@ -25,7 +25,6 @@ SessionAI MVP can run in production with the same monorepo layout. Keep secrets 
 | `JOB_STALE_MINUTES` | Sessions stuck transcribing/summarizing longer than this are marked failed (default 30) |
 | `MAX_LIVE_STREAMS_PER_USER` | Concurrent live caption streams per user (default 2) |
 | `LIVE_MAX_MINUTES` | Hard cap on one live caption stream (default 180) |
-| `LOG_SENSITIVE` | Keep `false` in production |
 | `CORS_ORIGINS` | Comma-separated browser origins (required for Expo web in production) |
 | `DEEPGRAM_API_KEY` | Live captions WS proxy (optional) |
 
