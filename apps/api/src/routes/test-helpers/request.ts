@@ -138,5 +138,13 @@ export function request(app: Express) {
     delete(path: string, headers: Record<string, string> = {}): Promise<ResponseBody> {
       return send(app, 'DELETE', path, { headers });
     },
+    /** DELETE with a JSON body, for endpoints that need a typed confirmation. */
+    deleteWithBody(
+      path: string,
+      body?: unknown,
+      headers: Record<string, string> = {},
+    ): Promise<ResponseBody> {
+      return send(app, 'DELETE', path, { body, headers });
+    },
   };
 }

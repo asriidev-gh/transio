@@ -36,6 +36,10 @@ const envSchema = z.object({
   PRO_DAILY_LIMIT: z.coerce.number().int().min(1).max(1000).default(5),
   /** Spend kill switch: max uses per feature per UTC day across all users. */
   GLOBAL_DAILY_LIMITS: z.string().default('session=300,summary=300,voiceTranslate=3000'),
+  /** Shared secret RevenueCat sends in the Authorization header of billing webhooks. */
+  REVENUECAT_WEBHOOK_SECRET: z.string().optional().default(''),
+  /** RevenueCat entitlement that unlocks Pro. */
+  REVENUECAT_ENTITLEMENT_ID: z.string().default('smarttranscriber_pro'),
   /** Secret for hashing device ids before they are stored. */
   DEVICE_HASH_SECRET: z.string().optional().default(''),
   /** Live caption streams one user may hold open at once. */

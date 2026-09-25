@@ -6,10 +6,12 @@ import { getEnv } from './lib/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createDeviceRouter } from './routes/device.js';
+import { createWebhooksRouter } from './routes/webhooks.js';
+import type { SubscriptionApplier } from './services/billing/repository.js';
 import { ipRateLimit } from './middleware/rate-limit.js';
 import { healthRouter } from './routes/health.js';
 import { limitsRouter } from './routes/limits.js';
-import { meRouter } from './routes/me.js';
+import { createMeRouter, type AccountDeleter } from './routes/me.js';
 import type { AudioStorageFactory, MediaPreparer, RemoteMediaFetcher } from './routes/audio.js';
 import {
   createSessionsRouter,
@@ -49,6 +51,8 @@ export interface AppDeps {
   runSummaryJob?: SummaryJobRunner;
   runProcessJob?: ProcessJobRunner;
   authenticate?: RequestHandler;
+  deleteAccount?: AccountDeleter;
+  applySubscriptionUpdate?: SubscriptionApplier;
 }
 
 function buildCorsOrigin() {
@@ -98,7 +102,7 @@ export function createApp(deps: AppDeps = {}) {
 
   app.use(healthRouter);
   app.use(limitsRouter);
-  app.use(meRouter);
+  app.use(createMeRouter({ authenticate: deps.authenticate, deleteAccount: deps.deleteAccount }));
   app.use(
     '/folders',
     createFoldersRouter({
@@ -127,6 +131,7 @@ export function createApp(deps: AppDeps = {}) {
     }),
   );
   app.use('/device', createDeviceRouter({ authenticate: deps.authenticate }));
+  app.use('/webhooks', createWebhooksRouter({ apply: deps.applySubscriptionUpdate }));
   app.use(
     '/translate',
     createVoiceTranslateRouter({
