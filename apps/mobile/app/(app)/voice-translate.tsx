@@ -549,6 +549,7 @@ export default function VoiceTranslateScreen() {
         <View style={styles.toolRow}>
           <Pressable
             onPress={() => void onOpenHistory()}
+            hitSlop={2}
             style={[
               styles.toolBtn,
               {
@@ -564,6 +565,7 @@ export default function VoiceTranslateScreen() {
           <Pressable
             onPress={() => void onSaveConversation()}
             disabled={turns.length === 0}
+            hitSlop={2}
             style={[
               styles.toolBtn,
               {
@@ -580,6 +582,7 @@ export default function VoiceTranslateScreen() {
           <Pressable
             onPress={() => void onClearConversation()}
             disabled={turns.length === 0}
+            hitSlop={2}
             style={[
               styles.toolBtn,
               {
