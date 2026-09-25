@@ -1,11 +1,12 @@
-import { Linking, PermissionsAndroid, Platform } from 'react-native';
+import { Linking, PermissionsAndroid, Platform, type Permission } from 'react-native';
 import { showAlert } from '@/src/utils/confirm';
 
 export type NotificationPermission = 'granted' | 'denied' | 'default' | 'unsupported';
 
-const POST_NOTIFICATIONS =
-  PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS ??
-  ('android.permission.POST_NOTIFICATIONS' as (typeof PermissionsAndroid.PERMISSIONS)[keyof typeof PermissionsAndroid.PERMISSIONS]);
+// PermissionsAndroid does not exist on web, and this runs at import time, so guard the lookup.
+const POST_NOTIFICATIONS: Permission =
+  PermissionsAndroid?.PERMISSIONS?.POST_NOTIFICATIONS ??
+  ('android.permission.POST_NOTIFICATIONS' as Permission);
 
 function webNotificationSupported(): boolean {
   return Platform.OS === 'web' && typeof Notification !== 'undefined';

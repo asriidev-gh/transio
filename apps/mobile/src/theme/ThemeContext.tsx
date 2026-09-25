@@ -46,7 +46,8 @@ function resolveScheme(
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme();
-  const [preference, setPreferenceState] = useState<AppearancePreference>('system');
+  // Matches the default in getAppearancePreference, so the first frames never flash the wrong theme.
+  const [preference, setPreferenceState] = useState<AppearancePreference>('dark');
   const [reduceMotion, setReduceMotion] = useState(false);
 
   useEffect(() => {
@@ -80,6 +81,25 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, [preference, reduceMotion, scheme, setPreference]);
 
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+/**
+ * Renders children with the dark theme whatever the user's appearance setting is.
+ * For surfaces with a fixed dark canvas, such as the boot screen.
+ */
+export function DarkThemeScope({ children }: { children: ReactNode }) {
+  const parent = useTheme();
+  const value = useMemo<ThemeContextValue>(
+    () => ({
+      ...parent,
+      colors: darkColors,
+      scheme: 'dark',
+      shadows: makeShadows('dark'),
+      paperColors: paperThemeFrom(darkColors).colors,
+    }),
+    [parent],
+  );
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
