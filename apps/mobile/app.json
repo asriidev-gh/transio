@@ -9,7 +9,7 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sessionai.app",
+      "bundleIdentifier": "com.consorttech.smarttranscriber",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Smart Transcriber needs microphone access to record seminars, lectures, and group discussions."
       }
@@ -20,7 +20,7 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png"
       },
-      "package": "com.sessionai.app",
+      "package": "com.consorttech.smarttranscriber",
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "RECORD_AUDIO",

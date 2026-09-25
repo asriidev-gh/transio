@@ -24,6 +24,8 @@ SessionAI MVP can run in production with the same monorepo layout. Keep secrets 
 | `FREE_LIMIT` / `PRO_DAILY_LIMIT` | Free uses per feature per device (default 2) and Pro uses per feature per UTC day (default 5) |
 | `GLOBAL_DAILY_LIMITS` | Spend kill switch, for example `session=300,summary=300,voiceTranslate=3000` |
 | `DEVICE_HASH_SECRET` | Random secret for hashing device ids. Required in production. Never change it, or every device counts as new |
+| `REVENUECAT_WEBHOOK_SECRET` | Value RevenueCat sends in the webhook Authorization header. Empty disables `POST /webhooks/revenuecat` |
+| `REVENUECAT_ENTITLEMENT_ID` | RevenueCat entitlement that unlocks Pro (default `smarttranscriber_pro`) |
 | `JOB_CONCURRENCY` | Transcribe/summary jobs running at once (default 2) |
 | `MAX_CONCURRENT_UPLOADS` | Uploads/link imports buffered in RAM at once (default 2); extra requests get 503 + Retry-After |
 | `JOB_STALE_MINUTES` | Sessions stuck transcribing/summarizing longer than this are marked failed (default 30) |

@@ -89,6 +89,46 @@ After store products exist, keep `pricing.ts` labels in sync with App Store Conn
 3. Update store product prices (when billing is live).  
 4. Rebuild the app if you embed prices only in the binary (EAS).
 
+## Billing (RevenueCat)
+
+Real purchases use RevenueCat with Google Play Billing. The app account id (the Supabase user id)
+is the RevenueCat app user id, so a purchase belongs to the account that made it.
+
+### One-time setup
+
+1. **Play Console:** create the app (`com.consorttech.smarttranscriber`) and three subscription products, one each
+   for weekly, monthly and yearly. Add a free trial offer to the yearly base plan if you want one.
+2. **RevenueCat:** add a Google Play app to the project and upload the Play service account
+   credentials. Import the three products.
+3. **Entitlement:** create the entitlement `smarttranscriber_pro` and attach all three products to it.
+   The code uses this name by default. To use another name, set `REVENUECAT_ENTITLEMENT_ID` on the API
+   and `EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID` in the EAS environment.
+4. **Offering:** put the three products in the current offering as the standard Weekly, Monthly
+   and Annual packages. The app maps package types to plans, so use those exact types.
+5. **App key:** copy the Android public SDK key (`goog_...`) into the EAS environment as
+   `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` for the preview and production builds.
+6. **Webhook:** in RevenueCat add a webhook to `https://<api-host>/webhooks/revenuecat` and set its
+   Authorization header value to the same value as `REVENUECAT_WEBHOOK_SECRET` on the API.
+7. **Migration:** apply `202609250003_billing_webhook.sql`.
+8. **Quotas:** once a test purchase shows up in the `subscriptions` table, set `QUOTA_MODE=on`.
+
+### Testing without the store
+
+A `test_...` key uses the RevenueCat Test Store, which simulates purchases. It works in preview
+builds for checking the whole flow, including the webhook. Never ship a release build with it.
+
+### How it fits together
+
+| Piece | Where |
+| --- | --- |
+| Buy, restore, entitlement to local state | `apps/mobile/src/services/billing.ts` |
+| Paywall with store prices | `apps/mobile/app/paywall.tsx` |
+| Webhook and event mapping | `apps/api/src/routes/webhooks.ts`, `services/billing/revenuecat.ts` |
+| Server Pro check for quotas | `subscriptions` table, read by `services/quota` |
+
+The store is the source of truth. After every purchase, restore or customer update the app sets or
+clears local Pro to match, so an expired subscription also removes any old preview unlock.
+
 ## Local reset (dev)
 
 Entitlements live in AsyncStorage key `smart-transcriber-entitlements-v3`. Clearing app data / reinstall resets free counters, Pro daily counters, and local Pro unlock.

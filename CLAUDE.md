@@ -74,14 +74,15 @@ Notes-only sessions hide Transcript / Ask tabs; workspace shows Notes (+ Transla
 - Login screen handles sign-in and Create account (no separate register screen); onboarding → paywall → guest or signed-in home
 - Legal: About, Privacy, Terms, Help / Contact (`apps/mobile/src/data/legal.ts`, `help-faq.ts`)
 
-### Entitlements (local until Store billing)
+### Entitlements and billing
 
 Source: `apps/mobile/src/services/entitlements.ts`, `docs/pricing.md`
 
 - **Free:** 2 lifetime each — sessions, AI Summaries, Voice translate chats → then paywall
 - **Pro:** 5 / local calendar day each (alert, not paywall); same Voice chat doesn’t re-consume
 - Plans: Weekly $4.99 · Monthly $12.99 · Yearly $79.99
-- Paywall **Continue** currently **unlocks Pro locally** (RevenueCat / IAP not wired)
+- Billing goes through RevenueCat (`apps/mobile/src/services/billing.ts`) on Android when `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` is set: the paywall shows store prices and buys through Google Play. Builds without a key (web, or no key set) keep a local preview unlock
+- The server learns who is Pro from `POST /webhooks/revenuecat`, which fills the `subscriptions` table (see docs/pricing.md)
 
 Paywall perk copy should stay aligned with real features (record/import/Live Note Taker, AI Summaries, Voice translate, translate finished notes).
 
@@ -124,7 +125,7 @@ EAS builds (latest first): https://expo.dev/accounts/asriidev/projects/sessionai
 
 - Prefer editing existing files; match local patterns; don’t invent parallel abstractions
 - Don’t commit unless asked; don’t force-push; don’t amend others’ commits
-- Don’t invent Store billing — keep local unlock stub until RevenueCat is intentional work
+- Store billing goes through RevenueCat only. Keep the local preview unlock just for builds without a RevenueCat key
 - After user-facing mobile JS polish, publish **preview OTA** when they’ve been using preview builds
 - Keep product names consistent: **Voice translate**, **Live Note Taker**, **AI Summary**, **Smart Transcriber**
 
