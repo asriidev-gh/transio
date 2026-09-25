@@ -1,4 +1,4 @@
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 import { AppError } from '../../middleware/error-handler.js';
 import { maxUploadBytes } from '../../lib/limits.js';
 
@@ -34,24 +34,49 @@ export function isBlockedMediaHost(hostname: string): boolean {
   return BLOCKED_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
 }
 
+/** Addresses a media import must never connect to: private, loopback, link-local, reserved. */
+const NON_PUBLIC = new BlockList();
+const V4_RANGES: Array<[string, number]> = [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+];
+const V6_RANGES: Array<[string, number]> = [
+  ['::', 128],
+  ['::1', 128],
+  ['64:ff9b::', 96],
+  ['100::', 64],
+  ['2001::', 32],
+  ['2001:db8::', 32],
+  ['2002::', 16],
+  ['fc00::', 7],
+  ['fe80::', 10],
+  ['fec0::', 10],
+  ['ff00::', 8],
+];
+for (const [address, prefix] of V4_RANGES) NON_PUBLIC.addSubnet(address, prefix, 'ipv4');
+for (const [address, prefix] of V6_RANGES) NON_PUBLIC.addSubnet(address, prefix, 'ipv6');
+
+/**
+ * True for anything that is not a public unicast address. Unparseable input counts as unsafe.
+ * IPv4-mapped IPv6 (::ffff:a.b.c.d or the hex form) is checked against the IPv4 ranges.
+ */
 export function isPrivateOrLocalIp(ip: string): boolean {
-  const value = ip.toLowerCase().replace(/^::ffff:/, '');
-  if (!value) return true;
-  if (value === '::1' || value === '0.0.0.0' || value === '::') return true;
-  if (value.startsWith('fe80:') || value.startsWith('fc') || value.startsWith('fd')) return true;
-
-  const v4 = value.includes(':') ? null : value;
-  if (!v4) return false;
-
-  const parts = v4.split('.').map((part) => Number(part));
-  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return true;
-  const [a = 0, b = 0] = parts;
-  if (a === 10 || a === 127 || a === 0 || a === 255) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 192 && b === 168) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 100 && b >= 64 && b <= 127) return true;
-  return false;
+  const value = ip.trim().toLowerCase().replace(/^\[|\]$/g, '');
+  const family = isIP(value);
+  if (family === 0) return true;
+  return NON_PUBLIC.check(value, family === 6 ? 'ipv6' : 'ipv4');
 }
 
 export function assertSafeMediaUrl(raw: string): URL {

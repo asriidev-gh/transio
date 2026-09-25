@@ -9,6 +9,7 @@ import { Router, type RequestHandler } from 'express';
 import { z } from 'zod';
 import { logger } from '../lib/logger.js';
 import { requireAuth } from '../middleware/auth.js';
+import { userRateLimit } from '../middleware/rate-limit.js';
 import { AppError } from '../middleware/error-handler.js';
 import { createTranscriptionProvider } from '../providers/transcription/index.js';
 import type { TranscriptionProvider } from '../providers/transcription/types.js';
@@ -115,6 +116,7 @@ export function createVoiceTranslateRouter(options: {
   const createTranslate = options.createTranslateProvider ?? createTranslateProvider;
 
   router.use(authenticate);
+  router.use(userRateLimit());
 
   router.post('/voice', audioUpload.single('file'), async (req, res, next) => {
     const started = Date.now();

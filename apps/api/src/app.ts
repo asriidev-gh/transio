@@ -1,9 +1,11 @@
 import cors from 'cors';
 import express from 'express';
+import helmet from 'helmet';
 import type { RequestHandler } from 'express';
 import { getEnv } from './lib/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
+import { ipRateLimit } from './middleware/rate-limit.js';
 import { healthRouter } from './routes/health.js';
 import { limitsRouter } from './routes/limits.js';
 import { meRouter } from './routes/me.js';
@@ -76,6 +78,10 @@ function buildCorsOrigin() {
 export function createApp(deps: AppDeps = {}) {
   const app = express();
 
+  // Render terminates TLS at one proxy hop; needed for correct client IPs in rate limits.
+  app.set('trust proxy', 1);
+  app.use(helmet());
+  app.use(ipRateLimit());
   app.use(
     cors({
       origin: buildCorsOrigin(),

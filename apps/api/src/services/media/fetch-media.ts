@@ -1,6 +1,7 @@
 import { maxUploadBytes } from '../../lib/limits.js';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { safeFetch } from './safe-fetch.js';
 import { AppError } from '../../middleware/error-handler.js';
 import {
   assertSafeMediaUrl,
@@ -19,6 +20,8 @@ export type LookupFn = (hostname: string) => Promise<{ address: string; family: 
 export type FetchFn = typeof fetch;
 
 const MAX_REDIRECTS = 3;
+/** Applies to each request including the body download, so slow-drip hosts cannot hold a slot. */
+const REMOTE_DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
 function fileNameFromUrl(url: URL, contentType: string, contentDisposition: string | null): string {
   const disposition = contentDisposition ?? '';
@@ -71,7 +74,7 @@ export async function fetchRemoteMedia(
   rawUrl: string,
   options: { fetchImpl?: FetchFn; lookupFn?: LookupFn } = {},
 ): Promise<FetchedMedia> {
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl ?? safeFetch;
   const lookupFn = options.lookupFn ?? ((hostname: string) => lookup(hostname));
 
   let current = assertSafeMediaUrl(rawUrl);
@@ -85,6 +88,7 @@ export async function fetchRemoteMedia(
         method: 'GET',
         redirect: 'manual',
         headers: { Accept: 'audio/*,video/*,*/*' },
+        signal: AbortSignal.timeout(REMOTE_DOWNLOAD_TIMEOUT_MS),
       });
     } catch (err) {
       if (err instanceof AppError) throw err;

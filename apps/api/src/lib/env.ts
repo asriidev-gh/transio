@@ -21,6 +21,16 @@ const envSchema = z.object({
   TRANSCRIPTION_PROVIDER: z.enum(['whisper', 'deepgram']).default('whisper'),
   /** Live captions WebSocket proxy (Deepgram Listen). Server-only. */
   DEEPGRAM_API_KEY: z.string().optional().default(''),
+  /** Background jobs (transcribe / summarize) that may run at once in this process. */
+  JOB_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
+  /** Uploads / link imports held in memory at once. Extra requests get a 503 + Retry-After. */
+  MAX_CONCURRENT_UPLOADS: z.coerce.number().int().min(1).max(8).default(2),
+  /** Live caption streams one user may hold open at once. */
+  MAX_LIVE_STREAMS_PER_USER: z.coerce.number().int().min(1).max(5).default(2),
+  /** Hard cap on one live caption stream, in minutes. */
+  LIVE_MAX_MINUTES: z.coerce.number().int().min(5).max(600).default(180),
+  /** A session stuck transcribing/summarizing longer than this is marked failed. */
+  JOB_STALE_MINUTES: z.coerce.number().int().min(5).max(720).default(30),
   /**
    * Comma-separated browser origins allowed to call the API (CORS).
    * Empty in development = allow all (local Expo web).

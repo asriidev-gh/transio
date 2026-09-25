@@ -9,7 +9,13 @@ import {
 } from '@sessionai/shared';
 import type { Request, Router } from 'express';
 import { AppError } from '../middleware/error-handler.js';
-import { createSupabaseUserClient, getSupabaseServiceClient } from '../lib/supabase.js';
+import {
+  createSupabaseUserClient,
+  getJobSupabaseClient,
+  getSupabaseServiceClient,
+} from '../lib/supabase.js';
+import { enqueueJob } from '../lib/job-queue.js';
+import { SupabaseSessionRepository } from '../services/sessions/repository.js';
 import { createTranscriptionProvider } from '../providers/transcription/index.js';
 import type { TranscriptionProvider } from '../providers/transcription/types.js';
 import type { SessionRepoFactory } from './sessions.js';
@@ -45,11 +51,7 @@ function defaultSummaryRepoFactory(req: Request): SummaryRepository {
   return new SupabaseSummaryRepository(createSupabaseUserClient(req.accessToken));
 }
 
-function defaultJobRunner(
-  createRepository: SessionRepoFactory,
-  createTranscriptRepository: TranscriptRepoFactory,
-  createProvider: TranscriptionProviderFactory,
-): JobRunner {
+function defaultJobRunner(createProvider: TranscriptionProviderFactory): JobRunner {
   return (sessionId, req) => {
     if (!req.user || !req.accessToken) {
       return;
@@ -58,14 +60,20 @@ function defaultJobRunner(
     const userId = req.user.id;
     const client = getSupabaseServiceClient();
 
-    // Fire-and-forget async job (queue can replace this later).
-    void runTranscriptionJob(sessionId, {
-      userId,
-      sessions: createRepository(req),
-      transcripts: createTranscriptRepository(req),
-      provider: createProvider(),
-      downloadAudio: createSupabaseAudioDownloader(client),
-    });
+    const jobClient = getJobSupabaseClient(req.accessToken);
+    const sessions = new SupabaseSessionRepository(jobClient);
+    const transcripts = new SupabaseTranscriptRepository(jobClient);
+    const provider = createProvider();
+
+    enqueueJob('transcription', () =>
+      runTranscriptionJob(sessionId, {
+        userId,
+        sessions,
+        transcripts,
+        provider,
+        downloadAudio: createSupabaseAudioDownloader(client),
+      }),
+    );
   };
 }
 
@@ -86,7 +94,7 @@ export function registerTranscriptionRoutes(
   const createProvider = options.createProvider ?? createTranscriptionProvider;
   const runJob =
     options.runJob ??
-    defaultJobRunner(options.createRepository, createTranscriptRepository, createProvider);
+    defaultJobRunner(createProvider);
 
   router.post('/:id/transcribe', async (req, res, next) => {
     try {

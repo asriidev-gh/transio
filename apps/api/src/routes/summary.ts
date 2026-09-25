@@ -6,7 +6,9 @@ import {
 } from '@sessionai/shared';
 import type { Request, Router } from 'express';
 import { AppError } from '../middleware/error-handler.js';
-import { createSupabaseUserClient } from '../lib/supabase.js';
+import { createSupabaseUserClient, getJobSupabaseClient } from '../lib/supabase.js';
+import { enqueueJob } from '../lib/job-queue.js';
+import { SupabaseSessionRepository } from '../services/sessions/repository.js';
 import { createSummaryProvider } from '../providers/summary/index.js';
 import type { SummaryProvider } from '../providers/summary/types.js';
 import type { SessionRepoFactory } from './sessions.js';
@@ -39,12 +41,7 @@ function defaultTranscriptRepoFactory(req: Request): TranscriptRepository {
   return new SupabaseTranscriptRepository(createSupabaseUserClient(req.accessToken));
 }
 
-function defaultJobRunner(
-  createRepository: SessionRepoFactory,
-  createTranscriptRepository: TranscriptRepoFactory,
-  createSummaryRepository: SummaryRepoFactory,
-  createProvider: SummaryProviderFactory,
-): SummaryJobRunner {
+function defaultJobRunner(createProvider: SummaryProviderFactory): SummaryJobRunner {
   return (sessionId, req) => {
     if (!req.user || !req.accessToken) {
       return;
@@ -52,13 +49,15 @@ function defaultJobRunner(
 
     const userId = req.user.id;
 
-    void runSummaryJob(sessionId, {
-      userId,
-      sessions: createRepository(req),
-      transcripts: createTranscriptRepository(req),
-      summaries: createSummaryRepository(req),
-      provider: createProvider(),
-    });
+    const jobClient = getJobSupabaseClient(req.accessToken);
+    const sessions = new SupabaseSessionRepository(jobClient);
+    const transcripts = new SupabaseTranscriptRepository(jobClient);
+    const summaries = new SupabaseSummaryRepository(jobClient);
+    const provider = createProvider();
+
+    enqueueJob('summary', () =>
+      runSummaryJob(sessionId, { userId, sessions, transcripts, summaries, provider }),
+    );
   };
 }
 
@@ -79,12 +78,7 @@ export function registerSummaryRoutes(
   const createProvider = options.createProvider ?? createSummaryProvider;
   const runJob =
     options.runJob ??
-    defaultJobRunner(
-      options.createRepository,
-      createTranscriptRepository,
-      createSummaryRepository,
-      createProvider,
-    );
+    defaultJobRunner(createProvider);
 
   router.post('/:id/summarize', async (req, res, next) => {
     try {

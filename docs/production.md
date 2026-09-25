@@ -20,6 +20,11 @@ SessionAI MVP can run in production with the same monorepo layout. Keep secrets 
 | `TRANSCRIPTION_PROVIDER` | `whisper` (default) or `deepgram` (speaker diarization, meetings; uses `DEEPGRAM_API_KEY`) |
 | `MAX_UPLOAD_MB` | Optional raw upload/link cap before conversion (default 100, max 1000). Held in RAM, so size to the host |
 | `FFMPEG_PATH` | Optional; overrides the bundled `ffmpeg-static` binary |
+| `JOB_CONCURRENCY` | Transcribe/summary jobs running at once (default 2) |
+| `MAX_CONCURRENT_UPLOADS` | Uploads/link imports buffered in RAM at once (default 2); extra requests get 503 + Retry-After |
+| `JOB_STALE_MINUTES` | Sessions stuck transcribing/summarizing longer than this are marked failed (default 30) |
+| `MAX_LIVE_STREAMS_PER_USER` | Concurrent live caption streams per user (default 2) |
+| `LIVE_MAX_MINUTES` | Hard cap on one live caption stream (default 180) |
 | `LOG_SENSITIVE` | Keep `false` in production |
 | `CORS_ORIGINS` | Comma-separated browser origins (required for Expo web in production) |
 | `DEEPGRAM_API_KEY` | Live captions WS proxy (optional) |
@@ -79,3 +84,12 @@ npm run update:preview -- --message "UI polish"
 ```
 
 Rebuild the binary when native dependencies or `app.json` `version` change (`runtimeVersion` follows app version).
+
+## API hardening notes
+
+- **Stuck jobs:** background jobs run in the web process. On boot and every 5 minutes the API marks sessions stuck in `transcribing`/`summarizing` as `failed`. Apply migration `202609250001_sessions_stuck_index.sql` for a partial index that keeps the sweep cheap.
+- **Shutdown:** on SIGTERM (Render deploys) the API stops taking jobs and waits up to 25 seconds for running ones.
+- **Rate limits:** per user, per 10 minutes: 20 heavy requests (upload, import, process, transcribe, summarize), 120 chat requests (ask, translate, Voice translate, notes finalize) and 600 live updates. A broad per-IP limit also applies. Limits are in memory, so they are per instance.
+- **Outbound timeouts:** Claude 3 min, Whisper 5 min, Deepgram 10 min, link download 5 min.
+- **Link import:** every DNS answer must be a public address, checked at connect time, so private ranges and DNS rebinding are blocked.
+- **Startup check:** with `NODE_ENV=production` the API logs `Production configuration is incomplete` and lists missing keys. It still boots.

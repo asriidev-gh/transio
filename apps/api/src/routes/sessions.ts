@@ -7,7 +7,13 @@ import {
 import { Router, type Request, type RequestHandler } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { AppError } from '../middleware/error-handler.js';
-import { createSupabaseUserClient, getSupabaseServiceClient } from '../lib/supabase.js';
+import {
+  createSupabaseUserClient,
+  getJobSupabaseClient,
+  getSupabaseServiceClient,
+} from '../lib/supabase.js';
+import { enqueueJob } from '../lib/job-queue.js';
+import { userRateLimit } from '../middleware/rate-limit.js';
 import { createSummaryProvider } from '../providers/summary/index.js';
 import { createTranscriptionProvider } from '../providers/transcription/index.js';
 import { runProcessingPipeline } from '../services/processing/job.js';
@@ -62,9 +68,6 @@ function defaultRepoFactory(req: Request): SessionRepository {
 }
 
 function createDefaultProcessJobRunner(
-  createRepository: SessionRepoFactory,
-  createTranscriptRepository: TranscriptRepoFactory | undefined,
-  createSummaryRepository: SummaryRepoFactory | undefined,
   createTranscriptionProviderFn: TranscriptionProviderFactory | undefined,
   createSummaryProviderFn: SummaryProviderFactory | undefined,
 ): ProcessJobRunner {
@@ -73,23 +76,26 @@ function createDefaultProcessJobRunner(
       return;
     }
 
-    const client = createSupabaseUserClient(req.accessToken);
+    const userId = req.user.id;
+    const jobClient = getJobSupabaseClient(req.accessToken);
     const storageClient = getSupabaseServiceClient();
-    const transcripts =
-      createTranscriptRepository?.(req) ??
-      new SupabaseTranscriptRepository(client);
-    const summaries =
-      createSummaryRepository?.(req) ?? new SupabaseSummaryRepository(client);
+    const sessions = new SupabaseSessionRepository(jobClient);
+    const transcripts = new SupabaseTranscriptRepository(jobClient);
+    const summaries = new SupabaseSummaryRepository(jobClient);
+    const transcriptionProvider = (createTranscriptionProviderFn ?? createTranscriptionProvider)();
+    const summaryProvider = (createSummaryProviderFn ?? createSummaryProvider)();
 
-    void runProcessingPipeline(sessionId, {
-      userId: req.user.id,
-      sessions: createRepository(req),
-      transcripts,
-      summaries,
-      transcriptionProvider: (createTranscriptionProviderFn ?? createTranscriptionProvider)(),
-      summaryProvider: (createSummaryProviderFn ?? createSummaryProvider)(),
-      downloadAudio: createSupabaseAudioDownloader(storageClient),
-    });
+    enqueueJob('process', () =>
+      runProcessingPipeline(sessionId, {
+        userId,
+        sessions,
+        transcripts,
+        summaries,
+        transcriptionProvider,
+        summaryProvider,
+        downloadAudio: createSupabaseAudioDownloader(storageClient),
+      }),
+    );
   };
 }
 
@@ -117,14 +123,12 @@ export function createSessionsRouter(options: {
   const runProcessJob =
     options.runProcessJob ??
     createDefaultProcessJobRunner(
-      createRepository,
-      options.createTranscriptRepository,
-      options.createSummaryRepository,
       options.createTranscriptionProvider,
       options.createSummaryProvider,
     );
 
   router.use(authenticate);
+  router.use(userRateLimit());
 
   router.get('/', async (req, res, next) => {
     try {

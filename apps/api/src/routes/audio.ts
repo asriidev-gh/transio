@@ -9,6 +9,7 @@ import {
 import type { Request } from 'express';
 import { AppError } from '../middleware/error-handler.js';
 import { maxUploadBytes } from '../lib/limits.js';
+import { uploadGate } from '../middleware/upload-gate.js';
 import { getSupabaseServiceClient } from '../lib/supabase.js';
 import {
   isAllowedUploadMedia,
@@ -104,7 +105,7 @@ export function registerAudioRoutes(
   const prepareMedia = options.prepareMedia ?? prepareMediaForTranscription;
   const downloadRemote = options.fetchRemoteMedia ?? fetchRemoteMedia;
 
-  router.post('/:id/audio', audioUpload.single('file'), async (req, res, next) => {
+  router.post('/:id/audio', uploadGate(), audioUpload.single('file'), async (req, res, next) => {
     try {
       if (!req.user) {
         throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
@@ -149,7 +150,7 @@ export function registerAudioRoutes(
     }
   });
 
-  router.post('/:id/import-url', async (req, res, next) => {
+  router.post('/:id/import-url', uploadGate(), async (req, res, next) => {
     try {
       if (!req.user) {
         throw new AppError('UNAUTHORIZED', 'Authentication required', 401);

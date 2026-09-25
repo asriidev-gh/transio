@@ -1,3 +1,4 @@
+import { PROVIDER_TIMEOUT_MS } from '../../lib/timeouts.js';
 import { getEnv } from '../../lib/env.js';
 import { logger } from '../../lib/logger.js';
 import { withProviderRetry } from '../../lib/retry.js';
@@ -72,6 +73,7 @@ export class ClaudeAskProvider implements AskProvider {
       try {
         response = await fetch(ANTHROPIC_MESSAGES_URL, {
           method: 'POST',
+          signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS.anthropic),
           headers: {
             'content-type': 'application/json',
             'x-api-key': this.apiKey,

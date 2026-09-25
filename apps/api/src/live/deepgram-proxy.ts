@@ -213,6 +213,22 @@ function mapDeepgramMessage(raw: unknown): Record<string, unknown> | null {
   return null;
 }
 
+const liveStreamsByUser = new Map<string, number>();
+
+/** Reserve one of the user's live stream slots. False when they are at the limit. */
+function acquireLiveSlot(userId: string, max: number): boolean {
+  const current = liveStreamsByUser.get(userId) ?? 0;
+  if (current >= max) return false;
+  liveStreamsByUser.set(userId, current + 1);
+  return true;
+}
+
+function releaseLiveSlot(userId: string): void {
+  const current = liveStreamsByUser.get(userId) ?? 0;
+  if (current <= 1) liveStreamsByUser.delete(userId);
+  else liveStreamsByUser.set(userId, current - 1);
+}
+
 /**
  * Attach authenticated Deepgram live-transcribe WebSocket proxy.
  * Clients connect to `ws(s)://host/live/transcribe?language=…`, then send
@@ -221,7 +237,8 @@ function mapDeepgramMessage(raw: unknown): Record<string, unknown> | null {
  * Query-string tokens are not accepted.
  */
 export function attachLiveTranscribeServer(server: HttpServer): WebSocketServer {
-  const wss = new WebSocketServer({ noServer: true });
+  // Audio frames are small; cap them so one client cannot push huge messages.
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
 
   server.on('upgrade', (req, socket, head) => {
     if (!isLivePath(req)) {
@@ -270,6 +287,7 @@ async function handleConnection(client: WebSocket, req: IncomingMessage): Promis
     return;
   }
 
+  let userId: string;
   try {
     const supabase = getSupabaseAnonClient();
     const { data, error } = await supabase.auth.getUser(token);
@@ -282,6 +300,7 @@ async function handleConnection(client: WebSocket, req: IncomingMessage): Promis
       client.close(4001, 'Unauthorized');
       return;
     }
+    userId = data.user.id;
   } catch (err) {
     logger.error('Live caption auth failed', {
       message: err instanceof Error ? err.message : 'Unknown error',
@@ -292,6 +311,18 @@ async function handleConnection(client: WebSocket, req: IncomingMessage): Promis
       code: 'SERVICE_UNAVAILABLE',
     });
     client.close(1011, 'Auth unavailable');
+    return;
+  }
+
+  if (client.readyState !== WebSocket.OPEN) return;
+
+  if (!acquireLiveSlot(userId, env.MAX_LIVE_STREAMS_PER_USER)) {
+    sendJson(client, {
+      type: 'error',
+      message: 'Too many live sessions are open on this account. Close one and try again.',
+      code: 'TOO_MANY_STREAMS',
+    });
+    client.close(4009, 'Too many streams');
     return;
   }
 
@@ -309,10 +340,16 @@ async function handleConnection(client: WebSocket, req: IncomingMessage): Promis
     }
   }, 3_000);
 
+  // One stream cannot run forever and keep billing Deepgram.
+  const maxDuration = setTimeout(() => cleanup('max_duration'), env.LIVE_MAX_MINUTES * 60_000);
+  maxDuration.unref();
+
   const cleanup = (reason: string) => {
     if (closed) return;
     closed = true;
     clearInterval(keepAlive);
+    clearTimeout(maxDuration);
+    releaseLiveSlot(userId);
     try {
       if (deepgram.readyState === WebSocket.OPEN) {
         deepgram.send(JSON.stringify({ type: 'CloseStream' }));
@@ -400,4 +437,6 @@ export const __test = {
   LIVE_PATH,
   resolveLiveLanguage,
   parseHeaderToken,
+  acquireLiveSlot,
+  releaseLiveSlot,
 };

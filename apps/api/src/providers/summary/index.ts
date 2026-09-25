@@ -1,3 +1,4 @@
+import { PROVIDER_TIMEOUT_MS } from '../../lib/timeouts.js';
 import { SessionSummarySchema, type SessionSummary } from '@sessionai/shared';
 import { getEnv } from '../../lib/env.js';
 import { logger } from '../../lib/logger.js';
@@ -64,6 +65,7 @@ export class ClaudeSummaryProvider implements SummaryProvider {
       try {
         response = await fetch(ANTHROPIC_MESSAGES_URL, {
           method: 'POST',
+          signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS.anthropic),
           headers: {
             'content-type': 'application/json',
             'x-api-key': this.apiKey,
@@ -177,6 +179,7 @@ ${input.text}`,
       try {
         response = await fetch(ANTHROPIC_MESSAGES_URL, {
           method: 'POST',
+          signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS.anthropic),
           headers: {
             'content-type': 'application/json',
             'x-api-key': this.apiKey,

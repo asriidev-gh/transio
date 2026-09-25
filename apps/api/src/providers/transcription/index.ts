@@ -1,3 +1,4 @@
+import { PROVIDER_TIMEOUT_MS } from '../../lib/timeouts.js';
 import { getEnv } from '../../lib/env.js';
 import { logger } from '../../lib/logger.js';
 import { withProviderRetry } from '../../lib/retry.js';
@@ -90,6 +91,7 @@ export class HttpTranscriptionProvider implements TranscriptionProvider {
       try {
         response = await fetch(endpoint, {
           method: 'POST',
+          signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS.whisper),
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
           },

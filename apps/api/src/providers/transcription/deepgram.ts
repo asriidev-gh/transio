@@ -1,3 +1,4 @@
+import { PROVIDER_TIMEOUT_MS } from '../../lib/timeouts.js';
 import { logger } from '../../lib/logger.js';
 import { withProviderRetry } from '../../lib/retry.js';
 import { AppError } from '../../middleware/error-handler.js';
@@ -82,6 +83,7 @@ export class DeepgramTranscriptionProvider implements TranscriptionProvider {
       try {
         response = await fetch(`${DEEPGRAM_LISTEN_URL}?${params.toString()}`, {
           method: 'POST',
+          signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS.deepgram),
           headers: {
             Authorization: `Token ${this.apiKey}`,
             'Content-Type': input.mimeType || 'application/octet-stream',

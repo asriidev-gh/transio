@@ -1,3 +1,4 @@
+import { PROVIDER_TIMEOUT_MS } from '../../lib/timeouts.js';
 import type {
   TranslatedSummary,
   TranslatedTranscript,
@@ -118,6 +119,7 @@ async function callClaude(input: {
     try {
       response = await fetch(ANTHROPIC_MESSAGES_URL, {
         method: 'POST',
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS.anthropic),
         headers: {
           'content-type': 'application/json',
           'x-api-key': input.apiKey,

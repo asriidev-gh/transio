@@ -71,6 +71,19 @@ export function createSupabaseUserClient(accessToken: string): SupabaseClient {
   });
 }
 
+/**
+ * Client for background jobs. User JWTs expire (about an hour), and a long job can outlive
+ * one, so jobs use the service client. Every repository call still filters by user_id and the
+ * route has already verified the session belongs to the caller.
+ */
+export function getJobSupabaseClient(accessToken: string): SupabaseClient {
+  const env = getEnv();
+  if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+    return getSupabaseServiceClient();
+  }
+  return createSupabaseUserClient(accessToken);
+}
+
 export function getSupabaseConfigStatus(): {
   configured: boolean;
   hasServiceRole: boolean;

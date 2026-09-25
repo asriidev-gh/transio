@@ -53,3 +53,19 @@ describe('deepgram-proxy mapDeepgramMessage', () => {
     assert.equal(__test.resolveLiveLanguage('multi'), 'multi');
   });
 });
+
+describe('live stream slots', () => {
+  it('limits concurrent streams per user and frees slots on release', () => {
+    assert.equal(__test.acquireLiveSlot('u-slots', 2), true);
+    assert.equal(__test.acquireLiveSlot('u-slots', 2), true);
+    assert.equal(__test.acquireLiveSlot('u-slots', 2), false);
+    assert.equal(__test.acquireLiveSlot('someone-else', 2), true);
+
+    __test.releaseLiveSlot('u-slots');
+    assert.equal(__test.acquireLiveSlot('u-slots', 2), true);
+
+    __test.releaseLiveSlot('u-slots');
+    __test.releaseLiveSlot('u-slots');
+    __test.releaseLiveSlot('someone-else');
+  });
+});
