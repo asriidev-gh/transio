@@ -305,6 +305,29 @@ export async function unlockPremium(planId: SubscriptionPlanId): Promise<Entitle
   return next;
 }
 
+/**
+ * Store billing is the source of truth for Pro. Call with the current entitlement state after
+ * every purchase, restore or customer update. Revoking here also clears any local preview unlock.
+ */
+export async function applyBillingStatus(
+  active: boolean,
+  planId: SubscriptionPlanId | null,
+): Promise<void> {
+  const state = await loadEntitlements();
+  if (active) {
+    if (state.isPremium && state.planId === planId) return;
+    await saveEntitlements({
+      ...state,
+      isPremium: true,
+      planId,
+      unlockedAt: state.unlockedAt ?? new Date().toISOString(),
+    });
+    return;
+  }
+  if (!state.isPremium) return;
+  await saveEntitlements({ ...state, isPremium: false, planId: null, unlockedAt: null });
+}
+
 /** Dev / pre-billing restore stub. */
 export async function restorePremium(): Promise<EntitlementState | null> {
   const state = await loadEntitlements();

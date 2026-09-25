@@ -11,6 +11,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured } from '@/src/lib/env';
 import { getSupabaseClient } from '@/src/lib/supabase';
 import * as authService from '@/src/services/auth';
+import { syncBillingUser } from '@/src/services/billing';
 import { claimGuestDevice } from '@/src/services/device-claim';
 
 interface AuthContextValue {
@@ -117,6 +118,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const isAnonymous = authService.isAnonymousUser(session?.user);
+
+  // Tie store purchases to this account so the server can match them to a user.
+  const userId = session?.user?.id ?? null;
+  useEffect(() => {
+    void syncBillingUser(userId);
+  }, [userId]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

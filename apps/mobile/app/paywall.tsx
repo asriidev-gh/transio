@@ -13,6 +13,15 @@ import {
   type SubscriptionPlanId,
 } from '@/src/data/pricing';
 import { useAuth } from '@/src/hooks/useAuth';
+import { getCurrentSession } from '@/src/services/auth';
+import {
+  isBillingAvailable,
+  loadPlanPackages,
+  purchasePlan,
+  restoreBillingPurchases,
+  syncBillingUser,
+  type PlanPackage,
+} from '@/src/services/billing';
 import {
   featurePaywallMessage,
   loadEntitlements,
@@ -28,6 +37,13 @@ function parseFeature(raw: string | string[] | undefined): GatedFeature | null {
   if (value === 'session' || value === 'summary' || value === 'voiceTranslate') return value;
   return null;
 }
+
+/** Plan captions when prices come from the store. No prices here, so they never disagree with it. */
+const STORE_PLAN_DETAIL: Record<SubscriptionPlanId, string> = {
+  weekly: 'Flexible · cancel anytime',
+  monthly: 'Most popular',
+  yearly: 'Best value',
+};
 
 const PERKS = [
   'Record, import & Live Note Taker',
@@ -48,6 +64,10 @@ export default function PaywallScreen() {
   const [busy, setBusy] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [packages, setPackages] = useState<PlanPackage[]>([]);
+  const [storeLoading, setStoreLoading] = useState(false);
+  // Real store billing needs Android, a RevenueCat key and the native module in this build.
+  const billing = useMemo(() => isBillingAvailable(), []);
 
   useEffect(() => {
     void loadEntitlements().then((s) => {
@@ -55,6 +75,50 @@ export default function PaywallScreen() {
       if (s.planId) setPlanId(s.planId);
     });
   }, []);
+
+  useEffect(() => {
+    if (!billing) return;
+    let cancelled = false;
+    setStoreLoading(true);
+    loadPlanPackages()
+      .then((list) => {
+        if (cancelled) return;
+        setPackages(list);
+        setPlanId((current) =>
+          list.some((p) => p.planId === current) ? current : (list[0]?.planId ?? current),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError('Could not load subscription options. Check your connection and try again.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setStoreLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [billing]);
+
+  // With store billing the plans and prices come from the store, so what is shown is what is charged.
+  const plans = useMemo(() => {
+    if (!billing) return SUBSCRIPTION_PLANS;
+    return SUBSCRIPTION_PLANS.flatMap((plan) => {
+      const store = packages.find((p) => p.planId === plan.id);
+      if (!store) return [];
+      return [
+        {
+          ...plan,
+          priceLabel: store.priceString,
+          detail:
+            plan.id === 'yearly' && store.pricePerMonthString
+              ? `${store.pricePerMonthString}/mo · Best value`
+              : STORE_PLAN_DETAIL[plan.id],
+        },
+      ];
+    });
+  }, [billing, packages]);
 
   const subtitle = useMemo(() => {
     if (feature) return featurePaywallMessage(feature);
@@ -94,13 +158,78 @@ export default function PaywallScreen() {
     }
   }
 
+  /** Purchases must be tied to an account, so create the guest account first when there is none. */
+  async function ensureAccountForPurchase() {
+    if (!session) {
+      if (!isConfigured) {
+        throw new Error(
+          'Supabase is not configured. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY, then restart.',
+        );
+      }
+      await continueAsGuest();
+    }
+    const current = await getCurrentSession();
+    if (current?.user?.id) await syncBillingUser(current.user.id);
+  }
+
+  /** Leave once an account exists. Does not create a guest, unlike enterApp. */
+  function leaveAfterPurchase() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }
+
+  async function purchaseFromStore() {
+    const store = packages.find((p) => p.planId === planId);
+    if (!store) {
+      setError('That plan is not available right now. Try again in a moment.');
+      return;
+    }
+
+    await ensureAccountForPurchase();
+    const outcome = await purchasePlan(store.pkg);
+    if (outcome === 'cancelled') return;
+    if (outcome === 'purchased') {
+      setIsPremium(true);
+      await showAlert('Pro unlocked', 'Thanks for subscribing. Pro is active on this account.');
+      leaveAfterPurchase();
+      return;
+    }
+    setError('Your purchase is still processing. Pro unlocks as soon as the store confirms it.');
+  }
+
+  async function onRestore() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await ensureAccountForPurchase();
+      if (await restoreBillingPurchases()) {
+        setIsPremium(true);
+        await showAlert('Pro restored', 'Your subscription is active again on this account.');
+        leaveAfterPurchase();
+      } else {
+        await showAlert(
+          'No purchases found',
+          'We could not find an active subscription for this Google account.',
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not restore purchases. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onSubscribe() {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      // Store billing (RevenueCat / Play / App Store) comes next.
-      // For now, unlock Pro locally so you can test the wall end-to-end.
+      if (billing) {
+        await purchaseFromStore();
+        return;
+      }
+      // No store billing in this build (web, or no RevenueCat key): preview unlock only.
       await unlockPremium(planId);
       setIsPremium(true);
       await showAlert(
@@ -167,8 +296,17 @@ export default function PaywallScreen() {
           Cancel anytime in your store settings. Sign in later to keep your library across devices.
         </Text>
 
+        {billing && storeLoading ? (
+          <Text style={[styles.trialNote, { color: colors.inkMuted }]}>Loading plans…</Text>
+        ) : null}
+        {billing && !storeLoading && plans.length === 0 ? (
+          <Text style={[styles.trialNote, { color: colors.inkMuted }]}>
+            Subscriptions are unavailable right now. Please try again later.
+          </Text>
+        ) : null}
+
         <View style={styles.planList}>
-          {SUBSCRIPTION_PLANS.map((plan) => {
+          {plans.map((plan) => {
             const selected = planId === plan.id;
             return (
               <Pressable
@@ -212,7 +350,7 @@ export default function PaywallScreen() {
         {!isPremium ? (
           <Pressable
             onPress={() => void onSubscribe()}
-            disabled={busy}
+            disabled={busy || (billing && plans.length === 0)}
             style={({ pressed }) => [
               styles.cta,
               { opacity: busy ? 0.6 : pressed ? 0.92 : 1 },
@@ -228,7 +366,7 @@ export default function PaywallScreen() {
               style={styles.ctaGradient}
             >
               <Text style={styles.ctaText}>
-                {busy ? 'Starting…' : `Continue · ${SUBSCRIPTION_PLANS.find((p) => p.id === planId)?.priceLabel}`}
+                {busy ? 'Starting…' : `Continue · ${plans.find((p) => p.id === planId)?.priceLabel ?? ''}`}
               </Text>
             </LinearGradient>
           </Pressable>
@@ -248,9 +386,22 @@ export default function PaywallScreen() {
           </Pressable>
         ) : null}
 
+        {billing && !isPremium ? (
+          <Pressable
+            onPress={() => void onRestore()}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="Restore purchases"
+            style={styles.freeLink}
+          >
+            <Text style={[styles.freeLinkText, { color: colors.inkMuted }]}>Restore purchases</Text>
+          </Pressable>
+        ) : null}
+
         <Text style={[styles.legal, { color: colors.inkMuted }]}>
-          Prices shown in USD. Subscriptions will renew through the App Store or Google Play once
-          billing is connected. Cancel anytime in your store settings.
+          {billing
+            ? 'Subscriptions renew automatically through Google Play until you cancel. Manage or cancel anytime in Google Play under Payments & subscriptions.'
+            : 'Prices shown in USD. Subscriptions will renew through the App Store or Google Play once billing is connected. Cancel anytime in your store settings.'}
         </Text>
       </ScrollView>
     </View>

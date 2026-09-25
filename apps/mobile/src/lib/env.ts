@@ -20,6 +20,10 @@ export const mobileEnv = {
   supabaseUrl: readPublic('EXPO_PUBLIC_SUPABASE_URL'),
   supabaseAnonKey: readPublic('EXPO_PUBLIC_SUPABASE_ANON_KEY'),
   apiBaseUrl: readPublic('EXPO_PUBLIC_API_BASE_URL') || 'http://127.0.0.1:3847',
+  /** RevenueCat public SDK key for Android (starts with goog_, or test_ for the Test Store). */
+  revenueCatAndroidKey: readPublic('EXPO_PUBLIC_REVENUECAT_ANDROID_KEY'),
+  /** RevenueCat entitlement that unlocks Pro. */
+  revenueCatEntitlementId: readPublic('EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID') || 'smarttranscriber_pro',
   /** Inbox for Help → Send us a message (mailto). */
   supportEmail:
     readPublic('EXPO_PUBLIC_SUPPORT_EMAIL') || 'andyr@consorttech.com',
