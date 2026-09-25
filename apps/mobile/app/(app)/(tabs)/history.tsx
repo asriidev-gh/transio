@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
   ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   View,
@@ -47,6 +48,22 @@ function dayLabel(iso: string): string {
   if (diff < 7) return 'This week';
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+interface HistoryRowProps {
+  session: Session;
+  onOpen: (id: string) => void;
+  onDelete: (session: Session) => void;
+}
+
+const HistoryRow = memo(function HistoryRow({ session, onOpen, onDelete }: HistoryRowProps) {
+  return (
+    <SessionCard
+      session={session}
+      onPress={() => onOpen(session.id)}
+      onDelete={() => onDelete(session)}
+    />
+  );
+});
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -110,8 +127,15 @@ export default function HistoryScreen() {
       list.push(s);
       map.set(key, list);
     }
-    return [...map.entries()];
+    return [...map.entries()].map(([title, data]) => ({ title, data }));
   }, [filtered]);
+
+  const onOpenSession = useCallback(
+    (id: string) => {
+      router.push(`/session/${id}`);
+    },
+    [router],
+  );
 
   async function onDeleteSession(session: Session) {
     const ok = await confirmDestructive(
@@ -128,14 +152,100 @@ export default function HistoryScreen() {
     }
   }
 
+  const header = (
+    <View style={styles.header}>
+      <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
+        History
+      </Text>
+      <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
+        Search and revisit every capture.
+      </Text>
+
+      <SearchBar value={query} onChangeText={setQuery} placeholder="Search transcripts" />
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filters}
+      >
+        {FILTERS.map((item) => {
+          const selected = filter === item.key;
+          return (
+            <Pressable
+              key={item.key}
+              onPress={() => setFilter(item.key)}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: selected ? colors.accentSoft : colors.surface,
+                  borderColor: selected ? colors.accent : colors.border,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+            >
+              <Text
+                style={[
+                  styles.chipText,
+                  { color: selected ? colors.accent : colors.inkMuted },
+                ]}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      {!loading && error ? (
+        <ErrorState
+          title="Couldn't load history"
+          description={error}
+          onRetry={() => void load()}
+        />
+      ) : null}
+    </View>
+  );
+
   return (
     <SafeAreaView
       style={[styles.safe, { backgroundColor: colors.background }]}
       edges={['top', 'left', 'right']}
     >
-      <ScrollView
+      <SectionList
+        sections={loading ? [] : groups}
+        keyExtractor={(session) => session.id}
+        renderItem={({ item }) => (
+          <HistoryRow
+            session={item}
+            onOpen={onOpenSession}
+            onDelete={(row) => void onDeleteSession(row)}
+          />
+        )}
+        renderSectionHeader={({ section }) => (
+          <Text style={[styles.groupLabel, { color: colors.inkMuted }]}>{section.title}</Text>
+        )}
+        ItemSeparatorComponent={RowSeparator}
+        stickySectionHeadersEnabled={false}
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          loading ? (
+            <SessionListSkeleton rows={6} />
+          ) : !error ? (
+            <EmptyState
+              icon="microphone"
+              title="No transcripts yet"
+              description="Record a conversation and Smart Transcriber will turn it into searchable text."
+              actionLabel="Start recording"
+              onAction={() => router.push('/new-session?mode=record')}
+            />
+          ) : null
+        }
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -143,87 +253,13 @@ export default function HistoryScreen() {
             tintColor={colors.accent}
           />
         }
-      >
-        <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
-          History
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
-          Search and revisit every capture.
-        </Text>
-
-        <SearchBar value={query} onChangeText={setQuery} placeholder="Search transcripts" />
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filters}
-        >
-          {FILTERS.map((item) => {
-            const selected = filter === item.key;
-            return (
-              <Pressable
-                key={item.key}
-                onPress={() => setFilter(item.key)}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: selected ? colors.accentSoft : colors.surface,
-                    borderColor: selected ? colors.accent : colors.border,
-                  },
-                ]}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    { color: selected ? colors.accent : colors.inkMuted },
-                  ]}
-                >
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-
-        {loading ? <SessionListSkeleton rows={6} /> : null}
-
-        {!loading && error ? (
-          <ErrorState
-            title="Couldn't load history"
-            description={error}
-            onRetry={() => void load()}
-          />
-        ) : null}
-
-        {!loading && !error && filtered.length === 0 ? (
-          <EmptyState
-            icon="microphone"
-            title="No transcripts yet"
-            description="Record a conversation and Smart Transcriber will turn it into searchable text."
-            actionLabel="Start recording"
-            onAction={() => router.push('/new-session?mode=record')}
-          />
-        ) : null}
-
-        {!loading &&
-          groups.map(([label, rows]) => (
-            <View key={label} style={styles.group}>
-              <Text style={[styles.groupLabel, { color: colors.inkMuted }]}>{label}</Text>
-              {rows.map((session) => (
-                <SessionCard
-                  key={session.id}
-                  session={session}
-                  onPress={() => router.push(`/session/${session.id}`)}
-                  onDelete={() => void onDeleteSession(session)}
-                />
-              ))}
-            </View>
-          ))}
-      </ScrollView>
+      />
     </SafeAreaView>
   );
+}
+
+function RowSeparator() {
+  return <View style={styles.rowGap} />;
 }
 
 const styles = StyleSheet.create({
@@ -231,7 +267,6 @@ const styles = StyleSheet.create({
   container: {
     padding: spacing.md,
     paddingBottom: FLOATING_TAB_BAR_CONTENT_INSET,
-    gap: spacing.md,
   },
   title: { ...typography.pageTitle, letterSpacing: -0.5 },
   subtitle: { ...typography.body, marginTop: -spacing.sm },
@@ -243,12 +278,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   chipText: { fontSize: 13, fontWeight: '600' },
-  group: { gap: spacing.smd },
+  header: { gap: spacing.md },
+  rowGap: { height: spacing.smd },
   groupLabel: {
     ...typography.caption,
     textTransform: 'uppercase',
     letterSpacing: 0.7,
     fontWeight: '700',
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: spacing.smd,
   },
 });

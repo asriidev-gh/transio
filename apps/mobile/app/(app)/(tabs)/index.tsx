@@ -42,6 +42,7 @@ import { IconSquircle } from '@/src/components/ui/IconWell';
 import { useApiReachable } from '@/src/hooks/useApiReachable';
 import { useAuth } from '@/src/hooks/useAuth';
 import { ApiClientError } from '@/src/services/api';
+import { sessionsUnchanged } from '@/src/utils/sessions-unchanged';
 import {
   dismissCompletionNotice,
   enqueueCompletionNotice,
@@ -150,7 +151,7 @@ export default function HomeScreen() {
         listSessions(),
         listFolders().catch(() => [] as SessionFolder[]),
       ]);
-      setSessions(data);
+      setSessions((prev) => (sessionsUnchanged(prev, data) ? prev : data));
       // Don't wait on ensureDefaultFolder to clear the skeleton.
       setLoading(false);
 
@@ -226,7 +227,8 @@ export default function HomeScreen() {
         void (async () => {
           try {
             const data = await listSessions();
-            setSessions(data);
+            // Same list as on screen: skip the re-render so polling stays cheap.
+            setSessions((prev) => (sessionsUnchanged(prev, data) ? prev : data));
             await reconcileCompletions(data);
           } catch {
             // keep polling
