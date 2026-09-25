@@ -58,7 +58,7 @@ export const LEGAL_DOCS: Record<LegalDocSlug, LegalDocument> = {
   privacy: {
     slug: 'privacy',
     title: 'Privacy policy',
-    updated: 'September 22, 2026',
+    updated: 'September 25, 2026',
     intro:
       'This policy explains what Smart Transcriber collects, how we use it, and the choices you have. By using the app, you agree to this policy.',
     sections: [
@@ -70,7 +70,8 @@ export const LEGAL_DOCS: Record<LegalDocSlug, LegalDocument> = {
           'Session content you create: audio recordings, transcripts, notes, summaries, translations, and related metadata (titles, folders, timestamps).',
           'Voice translate clips and text you submit when you use hold-to-talk translation (short audio for speech recognition and translation).',
           'On-device Voice translate conversation history stored locally on your phone so you can continue or reopen past chats.',
-          'Device and usage information needed to run the service (app version, platform, approximate diagnostics when you report a bug).',
+          'A one-way hashed identifier of your Android device, used to count free usage and prevent abuse. We do not store the raw device identifier.',
+          'Device and usage information needed to run the service (app version, platform, usage counts, approximate diagnostics when you report a bug).',
           'Support messages you send to us.',
         ],
       },
@@ -103,7 +104,7 @@ export const LEGAL_DOCS: Record<LegalDocSlug, LegalDocument> = {
         paragraphs: [
           'We retain account and session data while your account is active and as needed to provide the service. You may delete sessions from the app.',
           'Voice translate conversation history is stored on your device. You can archive, reopen, or delete those chats from History in the app. Clearing app data or uninstalling removes local history on that device.',
-          'If you want your account removed, contact support and we will process the request within a reasonable time, subject to legal retention needs.',
+          'You can delete your whole account in Settings → Delete account. This removes your login, recordings, transcripts, summaries, folders and usage records. Encrypted backups kept by our database provider may hold the data for a limited time until they are overwritten. If you cannot open the app, email andyr@consorttech.com from your account email and we will delete it within 30 days.',
         ],
       },
       {
@@ -115,7 +116,7 @@ export const LEGAL_DOCS: Record<LegalDocSlug, LegalDocument> = {
       {
         heading: '7. Your choices',
         paragraphs: [
-          'You can update account email through your auth provider flows, delete sessions, manage Voice translate history on your device, control notification and microphone permissions on your device, and contact us about access or deletion requests.',
+          'You can update account email through your auth provider flows, delete sessions, delete your account, manage Voice translate history on your device, control notification and microphone permissions on your device, and contact us about access requests.',
         ],
       },
       {
@@ -141,7 +142,7 @@ export const LEGAL_DOCS: Record<LegalDocSlug, LegalDocument> = {
   terms: {
     slug: 'terms',
     title: 'Terms of service',
-    updated: 'September 22, 2026',
+    updated: 'September 25, 2026',
     intro:
       'These Terms govern your use of Smart Transcriber. By creating an account or using the app, you agree to them.',
     sections: [
@@ -165,6 +166,7 @@ export const LEGAL_DOCS: Record<LegalDocSlug, LegalDocument> = {
           'Use the service for unlawful, harmful, or abusive purposes.',
           'Upload content you do not have rights to record or process.',
           'Attempt to disrupt, reverse engineer, or overload the service except as allowed by law.',
+          'Try to get around usage limits, including by creating extra accounts.',
           'Misrepresent the source of AI-generated summaries or translations as human-authored when disclosure is required.',
         ],
       },

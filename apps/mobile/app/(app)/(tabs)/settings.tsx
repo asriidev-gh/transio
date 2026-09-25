@@ -3,6 +3,8 @@ import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import Constants from 'expo-constants';
 import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '@/src/hooks/useAuth';
+import { clearLocalDataAfterDeletion, deleteMyAccount } from '@/src/services/account';
+import { ApiClientError } from '@/src/services/api';
 import { AuthServiceError } from '@/src/services/auth';
 import {
   getNotificationPermission,
@@ -124,6 +126,7 @@ export default function SettingsScreen() {
   const { user, signOut, isAnonymous } = useAuth();
   const { colors, preference, setPreference, scheme, shadows } = useTheme();
   const [signingOut, setSigningOut] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const [requestingNotif, setRequestingNotif] = useState(false);
@@ -162,6 +165,39 @@ export default function SettingsScreen() {
       } finally {
         setSigningOut(false);
       }
+    })();
+  }
+
+  function onDeleteAccount() {
+    void (async () => {
+      const ok = await confirmDestructive(
+        'Delete account?',
+        'This permanently deletes your account and every recording, transcript, summary and folder stored for it. It cannot be undone. If you subscribed, cancel the subscription in Google Play as well.',
+        'Delete Account',
+      );
+      if (!ok) return;
+      setDeleting(true);
+      setError(null);
+      try {
+        await deleteMyAccount();
+      } catch (err) {
+        setError(
+          err instanceof ApiClientError
+            ? err.message
+            : 'Could not delete your account. Check your connection and try again.',
+        );
+        setDeleting(false);
+        return;
+      }
+
+      // The account is gone on the server. Clean up this device and start over.
+      await clearLocalDataAfterDeletion();
+      try {
+        await signOut();
+      } catch {
+        // The session is already invalid on the server; local state was cleared above.
+      }
+      router.replace('/onboarding');
     })();
   }
 
@@ -391,7 +427,7 @@ export default function SettingsScreen() {
 
       <Pressable
         onPress={onSignOut}
-        disabled={signingOut}
+        disabled={signingOut || deleting}
         style={({ pressed }) => [
           styles.signOut,
           {
@@ -407,6 +443,19 @@ export default function SettingsScreen() {
         <Icon name="logout" size={20} color={colors.danger} variant="line" />
         <Text style={[styles.signOutLabel, { color: colors.danger }]}>
           {signingOut ? 'Signing out…' : 'Sign out'}
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={onDeleteAccount}
+        disabled={signingOut || deleting}
+        style={({ pressed }) => [styles.deleteAccount, { opacity: deleting ? 0.5 : pressed ? 0.7 : 1 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Delete account"
+        accessibilityHint="Permanently deletes your account and all your recordings"
+      >
+        <Text style={[styles.deleteAccountLabel, { color: colors.danger }]}>
+          {deleting ? 'Deleting account…' : 'Delete account'}
         </Text>
       </Pressable>
     </ScrollView>
@@ -531,5 +580,15 @@ const styles = StyleSheet.create({
   signOutLabel: {
     fontSize: 16,
     fontWeight: '700',
+  },
+  deleteAccount: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteAccountLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });
