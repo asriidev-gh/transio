@@ -57,7 +57,9 @@
         "expo-audio",
         {
           "microphonePermission": "Smart Transcriber needs microphone access to record seminars, lectures, and group discussions.",
-          "recordAudioAndroid": true
+          "recordAudioAndroid": true,
+          "enableBackgroundRecording": true,
+          "enableBackgroundPlayback": false
         }
       ],
       "expo-video"

@@ -342,7 +342,8 @@ export default function SettingsScreen() {
             last
           />
           <Text style={[styles.hint, styles.notifHint, { color: colors.inkMuted }]}>
-            Alert when a session finishes processing.
+            Alert when a session finishes processing. On Android, also allows recording with the
+            screen locked.
           </Text>
         </View>
       </SettingsGroup>

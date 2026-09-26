@@ -13,6 +13,7 @@ import {
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import {
   RecordingPresets,
+  requestNotificationPermissionsAsync,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
@@ -175,15 +176,42 @@ export default function RecordingScreen() {
     setStarting(true);
     setRecordError(null);
     try {
-      // Foreground only: background capture would need a microphone foreground
-      // service, which Play requires us to declare and justify separately.
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        allowsRecording: true,
-        interruptionMode: 'doNotMix',
-        shouldRouteThroughEarpiece: false,
-      });
-      await recorder.prepareToRecordAsync();
+      let allowBackground = false;
+      if (Platform.OS === 'android') {
+        try {
+          const notif = await requestNotificationPermissionsAsync();
+          allowBackground = notif.granted;
+        } catch {
+          allowBackground = false;
+        }
+      }
+
+      const applyAudioMode = async (background: boolean) => {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          allowsRecording: true,
+          interruptionMode: 'doNotMix',
+          shouldRouteThroughEarpiece: false,
+          ...(background
+            ? { allowsBackgroundRecording: true }
+            : {}),
+        });
+      };
+
+      await applyAudioMode(allowBackground);
+      try {
+        await recorder.prepareToRecordAsync();
+      } catch (prepareErr) {
+        const msg =
+          prepareErr instanceof Error ? prepareErr.message.toLowerCase() : '';
+        // Android 13+: background recording requires POST_NOTIFICATIONS.
+        if (allowBackground || msg.includes('post_notifications') || msg.includes('background')) {
+          await applyAudioMode(false);
+          await recorder.prepareToRecordAsync();
+        } else {
+          throw prepareErr;
+        }
+      }
 
       recorder.record();
       startedRef.current = true;
@@ -205,7 +233,11 @@ export default function RecordingScreen() {
         err instanceof Error && err.message.trim()
           ? err.message.trim()
           : 'Check microphone access and try again.';
-      setRecordError(`We could not start recording. ${detail}`);
+      const friendly =
+        /post_notifications|notification/i.test(detail)
+          ? 'Allow notifications if you want recording with the screen locked, or try again to record in the foreground.'
+          : detail;
+      setRecordError(`We could not start recording. ${friendly}`);
       activeRef.current = false;
       startedRef.current = false;
     } finally {
@@ -346,7 +378,7 @@ export default function RecordingScreen() {
 
   useEffect(() => {
     const onChange = (next: AppStateStatus) => {
-      // Recording is foreground only; leaving the app ends the capture session.
+      // Keep recording across background transitions; do not auto-stop.
       if (next === 'active' && activeRef.current && recordError) {
         // Surface existing error when returning; no-op otherwise.
       }
