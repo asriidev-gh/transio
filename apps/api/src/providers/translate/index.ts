@@ -167,6 +167,7 @@ async function callClaude(input: {
 
     const payload = (await response.json()) as {
       content?: Array<{ type: string; text?: string }>;
+      stop_reason?: string;
     };
     const text = (payload.content ?? [])
       .filter((b) => b.type === 'text' && typeof b.text === 'string')
@@ -176,6 +177,18 @@ async function callClaude(input: {
 
     if (!text) {
       throw new AppError('TRANSLATE_ERROR', 'Claude returned an empty translation.', 502);
+    }
+    // A truncated reply is cut off mid-JSON, so say why instead of calling it invalid.
+    if (payload.stop_reason === 'max_tokens') {
+      logger.warn('Claude translate reply hit the token ceiling', {
+        model: input.model,
+        maxTokens: input.maxTokens,
+      });
+      throw new AppError(
+        'TRANSLATE_ERROR',
+        'This content is too long to translate in one pass. Try a shorter section.',
+        502,
+      );
     }
     return text;
   });
@@ -221,7 +234,9 @@ export class ClaudeTranslateProvider implements TranslateProvider {
       model: this.model,
       system,
       user: JSON.stringify(input.summary),
-      maxTokens: 3072,
+      // Summaries are generated with max_tokens 4096 and most languages run
+      // longer than the English source, so leave generous headroom.
+      maxTokens: 8192,
     });
 
     try {
