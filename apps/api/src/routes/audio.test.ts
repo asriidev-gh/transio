@@ -59,6 +59,86 @@ describe('audio storage helpers', () => {
 });
 
 describe('session audio API', () => {
+  it('deletes the cloud copy for a device-only session and records why', async () => {
+    const { app, storage } = createAudioTestApp();
+    const created = await request(app).post(
+      '/sessions',
+      { title: 'Keep On Phone', sessionType: 'seminar', audioStorage: 'device' },
+      { Authorization: 'Bearer token-a' },
+    );
+    const id = (created.body.data as { id: string }).id;
+
+    const multipart = buildMultipartBody(
+      'file',
+      'clip.m4a',
+      'audio/mp4',
+      Buffer.from('fake-audio-bytes'),
+    );
+    await request(app).postRaw(`/sessions/${id}/audio`, multipart.body, {
+      Authorization: 'Bearer token-a',
+      'Content-Type': multipart.contentType,
+    });
+    const path = `${USER_A}/${id}/audio.m4a`;
+    assert.equal(storage.files.has(path), true);
+
+    const res = await request(app).delete(`/sessions/${id}/audio`, {
+      Authorization: 'Bearer token-a',
+    });
+
+    assert.equal(res.status, 200);
+    const data = res.body.data as { audioPath: string | null; audioStorage: string };
+    assert.equal(data.audioPath, null);
+    assert.equal(data.audioStorage, 'device');
+    assert.equal(storage.files.has(path), false);
+  });
+
+  it('succeeds when the cloud copy is already gone', async () => {
+    const { app } = createAudioTestApp();
+    const created = await request(app).post(
+      '/sessions',
+      { title: 'Nothing Uploaded', sessionType: 'seminar' },
+      { Authorization: 'Bearer token-a' },
+    );
+    const id = (created.body.data as { id: string }).id;
+
+    const first = await request(app).delete(`/sessions/${id}/audio`, {
+      Authorization: 'Bearer token-a',
+    });
+    const second = await request(app).delete(`/sessions/${id}/audio`, {
+      Authorization: 'Bearer token-a',
+    });
+
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+  });
+
+  it('will not delete audio for another user', async () => {
+    const { app, storage } = createAudioTestApp();
+    const created = await request(app).post(
+      '/sessions',
+      { title: 'Mine', sessionType: 'seminar' },
+      { Authorization: 'Bearer token-a' },
+    );
+    const id = (created.body.data as { id: string }).id;
+    const multipart = buildMultipartBody(
+      'file',
+      'clip.m4a',
+      'audio/mp4',
+      Buffer.from('fake-audio-bytes'),
+    );
+    await request(app).postRaw(`/sessions/${id}/audio`, multipart.body, {
+      Authorization: 'Bearer token-a',
+      'Content-Type': multipart.contentType,
+    });
+
+    const res = await request(app).delete(`/sessions/${id}/audio`, {
+      Authorization: 'Bearer token-b',
+    });
+
+    assert.equal(res.status, 404);
+    assert.equal(storage.files.has(`${USER_A}/${id}/audio.m4a`), true);
+  });
+
   it('uploads audio and marks session uploaded', async () => {
     const { app, storage } = createAudioTestApp();
     const created = await request(app).post(

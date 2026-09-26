@@ -55,6 +55,7 @@ import {
   setRecordCaptionsModePref,
   type RecordCaptionsMode,
 } from '@/src/services/record-mode';
+import { getAudioStoragePreference } from '@/src/services/audio-storage-preference';
 import { createSession } from '@/src/services/sessions';
 import { consumeFeature } from '@/src/services/entitlements';
 import { ensureFeatureAccess } from '@/src/utils/feature-gate';
@@ -215,6 +216,7 @@ export default function NewSessionScreen() {
       description: description.trim() ? description.trim() : null,
       folderId: destinationId,
       captureMode,
+      audioStorage: await getAudioStoragePreference(),
     });
   }
 

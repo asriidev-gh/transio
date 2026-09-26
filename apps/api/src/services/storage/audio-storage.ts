@@ -9,6 +9,7 @@ import { AppError } from '../../middleware/error-handler.js';
 export interface AudioStorage {
   upload(path: string, data: Buffer, contentType: string): Promise<void>;
   createSignedUrl(path: string, expiresInSeconds: number): Promise<string>;
+  remove(path: string): Promise<void>;
 }
 
 export class SupabaseAudioStorage implements AudioStorage {
@@ -40,6 +41,14 @@ export class SupabaseAudioStorage implements AudioStorage {
 
     return data.signedUrl;
   }
+
+  async remove(path: string): Promise<void> {
+    const { error } = await this.client.storage.from(SESSION_AUDIO_BUCKET).remove([path]);
+
+    if (error) {
+      throw new AppError('STORAGE_ERROR', `Could not delete audio file (${error.message})`, 500);
+    }
+  }
 }
 
 /** In-memory storage for unit tests. */
@@ -55,6 +64,10 @@ export class InMemoryAudioStorage implements AudioStorage {
       throw new AppError('STORAGE_ERROR', 'Could not create signed audio URL', 500);
     }
     return `https://signed.example/${encodeURIComponent(path)}?exp=${expiresInSeconds}`;
+  }
+
+  async remove(path: string): Promise<void> {
+    this.files.delete(path);
   }
 }
 

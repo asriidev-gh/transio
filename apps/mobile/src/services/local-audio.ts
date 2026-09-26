@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import { Directory, File, Paths } from 'expo-file-system';
 import { localAudioStorageKey } from '@/src/utils/local-audio-key';
 
 /** Keep persisted web audio under typical AsyncStorage quotas (~5MB). */
@@ -85,6 +87,62 @@ export async function clearLocalAudioUri(sessionId: string): Promise<void> {
   }
 }
 
+/** Folder for audio the user asked us to keep on the phone. */
+const DEVICE_AUDIO_DIR = 'device-audio';
+
+function deviceAudioDirectory(): Directory {
+  return new Directory(Paths.document, DEVICE_AUDIO_DIR);
+}
+
+/**
+ * Copies a recording into our own document folder so it outlives the picker
+ * grant that produced it.
+ *
+ * Imported files arrive as `content://` URIs that Android revokes once the
+ * picker session ends, so without this a device-only import would play today
+ * and fail tomorrow. Returns the original URI if the copy cannot be made, so
+ * the caller always has something to upload.
+ */
+export async function persistDeviceAudioCopy(
+  sessionId: string,
+  uri: string,
+  fileName = 'audio.m4a',
+): Promise<string> {
+  if (Platform.OS === 'web') return uri;
+  if (!uri.startsWith('file://') && !uri.startsWith('content://')) return uri;
+
+  try {
+    const dir = deviceAudioDirectory();
+    if (!dir.exists) dir.create({ intermediates: true });
+    // Already ours from an earlier pass; copying again would just duplicate it.
+    if (uri.startsWith(dir.uri)) return uri;
+
+    const safeName = fileName.replace(/[^\w.-]+/g, '_') || 'audio.m4a';
+    const destination = new File(dir, `${sessionId}-${safeName}`);
+    if (destination.exists) destination.delete();
+    await new File(uri).copy(destination);
+    return destination.uri;
+  } catch {
+    return uri;
+  }
+}
+
+/** Removes the on-device copy for a session, if we made one. */
+export async function deleteDeviceAudioCopy(sessionId: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const dir = deviceAudioDirectory();
+    if (!dir.exists) return;
+    for (const entry of dir.list()) {
+      if (entry instanceof File && entry.name.startsWith(`${sessionId}-`)) {
+        entry.delete();
+      }
+    }
+  } catch {
+    // Best-effort: a stray file is better than a failed delete.
+  }
+}
+
 /** Returns true when a stored URI can still be read (blob:/data:/file). */
 export async function isLocalAudioReadable(uri: string): Promise<boolean> {
   if (!uri) return false;
@@ -97,7 +155,15 @@ export async function isLocalAudioReadable(uri: string): Promise<boolean> {
       return false;
     }
   }
-  // Native file:// / content:// URIs — assume readable until upload proves otherwise.
+  // Our own persisted copies can be checked properly; other native URIs
+  // (content:// grants, fresh recordings) are assumed good until upload says otherwise.
+  if (uri.startsWith('file://') && Platform.OS !== 'web') {
+    try {
+      return new File(uri).exists;
+    } catch {
+      return false;
+    }
+  }
   return true;
 }
 

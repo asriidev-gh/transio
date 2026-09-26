@@ -15,6 +15,8 @@ export interface ProcessingPipelineDeps {
   transcriptionProvider: TranscriptionProvider;
   summaryProvider: SummaryProvider;
   downloadAudio: (audioPath: string) => Promise<{ data: Buffer; mimeType: string }>;
+  /** Removes the cloud copy once it is no longer needed. */
+  removeAudio?: (audioPath: string) => Promise<void>;
   userId: string;
 }
 
@@ -23,6 +25,32 @@ export interface ProcessingPipelineDeps {
  * Notes-only capture modes transcribe ephemerally and never persist a transcript.
  * Failures set status to `failed` without deleting audio/transcript.
  */
+/**
+ * Drops the cloud audio for sessions whose owner chose to keep the recording on
+ * their phone. The upload only exists so transcription can run, so this is the
+ * point where it stops being needed.
+ *
+ * Never throws: the transcript is already saved, and failing the whole run over
+ * leftover storage would be worse than the leftover file. A failure here leaves
+ * the audio in place, which the account-deletion sweep still cleans up.
+ */
+async function releaseDeviceOnlyAudio(
+  sessionId: string,
+  audioPath: string,
+  deps: ProcessingPipelineDeps,
+): Promise<void> {
+  try {
+    await deps.removeAudio?.(audioPath);
+    await deps.sessions.update(deps.userId, sessionId, { audioPath: null });
+    logger.info('Released cloud audio for a device-only session', { sessionId });
+  } catch (err) {
+    logger.warn('Could not release cloud audio for a device-only session', {
+      sessionId,
+      message: err instanceof Error ? err.message : 'Unknown error',
+    });
+  }
+}
+
 export async function runProcessingPipeline(
   sessionId: string,
   deps: ProcessingPipelineDeps,
@@ -37,6 +65,8 @@ export async function runProcessingPipeline(
     }
 
     const notesOnly = isNotesOnlyCaptureMode(session.captureMode);
+    // Held before any update nulls it out.
+    const deviceOnlyAudioPath = session.audioStorage === 'device' ? session.audioPath : null;
     let transcriptText = '';
 
     if (!notesOnly) {
@@ -99,6 +129,9 @@ export async function runProcessingPipeline(
         const existing = await deps.summaries.getBySessionId(sessionId, 'notes');
         if (existing && (existing.keyPoints.length > 0 || existing.overview?.trim())) {
           await deps.sessions.update(deps.userId, sessionId, { status: 'completed' });
+          if (deviceOnlyAudioPath) {
+            await releaseDeviceOnlyAudio(sessionId, deviceOnlyAudioPath, deps);
+          }
           logger.info('Notes-only pipeline skipped (live notes already saved)', {
             sessionId,
             keyPointCount: existing.keyPoints.length,
@@ -110,6 +143,9 @@ export async function runProcessingPipeline(
       const notes = rawNotesFromText(transcriptText);
       await deps.summaries.upsertForSession(sessionId, notes, 'notes');
       await deps.sessions.update(deps.userId, sessionId, { status: 'completed' });
+      if (deviceOnlyAudioPath) {
+        await releaseDeviceOnlyAudio(sessionId, deviceOnlyAudioPath, deps);
+      }
 
       logger.info('Notes-only pipeline completed', {
         sessionId,
@@ -121,6 +157,9 @@ export async function runProcessingPipeline(
 
     // Transcript sessions: stop after transcription. AI summary is opt-in.
     await deps.sessions.update(deps.userId, sessionId, { status: 'transcribed' });
+    if (deviceOnlyAudioPath) {
+      await releaseDeviceOnlyAudio(sessionId, deviceOnlyAudioPath, deps);
+    }
     logger.info('Pipeline transcription stage completed (summary deferred)', {
       sessionId,
       transcriptionProvider: deps.transcriptionProvider.name,

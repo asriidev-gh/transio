@@ -25,6 +25,7 @@ import {
 import { SupabaseSummaryRepository } from '../services/summaries/repository.js';
 import {
   createSupabaseAudioDownloader,
+  createSupabaseAudioRemover,
 } from '../services/transcription/job.js';
 import { SupabaseTranscriptRepository } from '../services/transcripts/repository.js';
 import { registerAudioRoutes, type AudioStorageFactory, type MediaPreparer, type RemoteMediaFetcher } from './audio.js';
@@ -95,6 +96,7 @@ function createDefaultProcessJobRunner(
         transcriptionProvider,
         summaryProvider,
         downloadAudio: createSupabaseAudioDownloader(storageClient),
+        removeAudio: createSupabaseAudioRemover(storageClient),
       }),
     );
   };

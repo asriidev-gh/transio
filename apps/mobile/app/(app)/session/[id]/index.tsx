@@ -31,6 +31,8 @@ import { fetchUploadLimits } from '@/src/services/fetch-upload-limits';
 import { durationLimitError } from '@/src/services/upload-limits';
 import {
   clearLocalAudioUri,
+  deleteDeviceAudioCopy,
+  persistDeviceAudioCopy,
   getLocalAudioUri,
   isLocalAudioReadable,
   saveLocalAudioUri,
@@ -117,23 +119,38 @@ export default function SessionDetailsScreen() {
           return false;
         }
 
-        await uploadSessionAudio(sessionId, uri, (progress) => {
+        const deviceOnly = session?.audioStorage === 'device';
+        // Keep our own copy before uploading: the server deletes its copy once
+        // transcription finishes, so this becomes the only one.
+        const keptUri = deviceOnly ? await persistDeviceAudioCopy(sessionId, uri) : uri;
+        if (deviceOnly && keptUri !== uri) {
+          await saveLocalAudioUri(sessionId, keptUri);
+        }
+
+        await uploadSessionAudio(sessionId, keptUri, (progress) => {
           setUploadProgress(progress.ratio);
         });
-        await clearLocalAudioUri(sessionId);
+        if (!deviceOnly) {
+          await clearLocalAudioUri(sessionId);
+        }
         const refreshed = await getSession(sessionId);
         setSession(refreshed);
-        setLocalUri(null);
+        setLocalUri(deviceOnly ? keptUri : null);
         setUploadStatus('success');
         setUploadProgress(1);
 
-        try {
-          const signed = await getSignedAudioUrl(sessionId);
-          setPlaybackUri(signed.url);
+        if (deviceOnly) {
+          setPlaybackUri(keptUri);
           setShowPlayer(true);
-        } catch {
-          setPlaybackUri(uri);
-          setShowPlayer(true);
+        } else {
+          try {
+            const signed = await getSignedAudioUrl(sessionId);
+            setPlaybackUri(signed.url);
+            setShowPlayer(true);
+          } catch {
+            setPlaybackUri(keptUri);
+            setShowPlayer(true);
+          }
         }
 
         if (!options?.skipProcessing) {
@@ -212,6 +229,7 @@ export default function SessionDetailsScreen() {
       try {
         await deleteSession(id);
         await clearLocalAudioUri(id);
+        await deleteDeviceAudioCopy(id);
         router.replace('/');
       } catch (err) {
         setError(
@@ -377,6 +395,17 @@ export default function SessionDetailsScreen() {
           setPlaybackUri(usableUri);
           setShowPlayer(Boolean(usableUri));
         }
+      } else if (data.audioStorage === 'device' && data.status !== 'recording') {
+        // The server copy was deleted on purpose, so the phone holds the only one.
+        setUploadStatus('success');
+        setUploadProgress(1);
+        setPlaybackUri(usableUri);
+        setShowPlayer(Boolean(usableUri));
+        setUploadMessage(
+          usableUri
+            ? undefined
+            : 'This recording was kept on your device only, and the audio is no longer here. Your notes and transcript are safe.',
+        );
       } else if (usableUri) {
         // Local draft only — wait for the user to Proceed or Re-record.
         setPlaybackUri(usableUri);

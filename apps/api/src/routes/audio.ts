@@ -235,6 +235,47 @@ export function registerAudioRoutes(
       next(err);
     }
   });
+
+  /**
+   * Drops the cloud copy once transcription is done, for sessions the user asked
+   * to keep on their phone. audio_storage stays 'device' so the app can tell this
+   * apart from a session that never had audio.
+   */
+  router.delete('/:id/audio', async (req, res, next) => {
+    try {
+      if (!req.user) {
+        throw new AppError('UNAUTHORIZED', 'Authentication required', 401);
+      }
+
+      const { id } = SessionIdParamSchema.parse(req.params);
+      const repository = createRepository(req);
+      const session = await repository.getById(req.user.id, id);
+      if (!session) {
+        throw new AppError('NOT_FOUND', 'Session not found', 404);
+      }
+
+      if (session.audioPath) {
+        // Defense in depth: path must start with the caller's user id.
+        if (!session.audioPath.startsWith(`${req.user.id}/`)) {
+          throw new AppError('FORBIDDEN', 'Audio path does not belong to this user', 403);
+        }
+        await createAudioStorage(req).remove(session.audioPath);
+      }
+
+      // Idempotent: a repeat call on an already-cleared session still succeeds.
+      const updated = await repository.update(req.user.id, id, {
+        audioPath: null,
+        audioStorage: 'device',
+      });
+      if (!updated) {
+        throw new AppError('NOT_FOUND', 'Session not found', 404);
+      }
+
+      res.status(200).json(apiSuccess(updated));
+    } catch (err) {
+      next(err);
+    }
+  });
 }
 
 /** Helper exported for tests that need repository typing. */

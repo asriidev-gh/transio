@@ -67,6 +67,14 @@ export function isNotesOnlyCaptureMode(mode: CaptureMode): boolean {
   return mode === 'notes' || mode === 'live_notes';
 }
 
+/**
+ * Where a session's audio lives once processing has finished.
+ * `device` means the cloud copy was deleted on purpose, so a null audioPath
+ * is expected rather than a sign that audio was never captured.
+ */
+export const AudioStorageSchema = z.enum(['cloud', 'device']);
+export type AudioStorage = z.infer<typeof AudioStorageSchema>;
+
 /** Session row as returned by the API (camelCase). */
 export const SessionSchema = z.object({
   id: z.string().uuid(),
@@ -79,6 +87,7 @@ export const SessionSchema = z.object({
   audioPath: z.string().nullable(),
   status: SessionStatusSchema,
   captureMode: CaptureModeSchema.default('batch'),
+  audioStorage: AudioStorageSchema.default('cloud'),
   favoritedAt: z.string().nullable().default(null),
   folderId: z.string().uuid().nullable().default(null),
   createdAt: z.string(),
@@ -103,6 +112,7 @@ export const CreateSessionSchema = z.object({
   recordedAt: z.string().datetime().optional(),
   folderId: z.string().uuid().optional(),
   captureMode: CaptureModeSchema.optional().default('batch'),
+  audioStorage: AudioStorageSchema.optional().default('cloud'),
 });
 
 export type CreateSessionInput = z.input<typeof CreateSessionSchema>;
@@ -127,6 +137,7 @@ export const UpdateSessionSchema = z
     audioPath: z.string().min(1).nullable().optional(),
     status: SessionStatusSchema.optional(),
     captureMode: CaptureModeSchema.optional(),
+    audioStorage: AudioStorageSchema.optional(),
     /** ISO timestamp to favorite; null to unfavorite. */
     favoritedAt: z.string().datetime().nullable().optional(),
     /** Folder id to file the session; null to move back to Unfiled. */

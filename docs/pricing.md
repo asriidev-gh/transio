@@ -68,13 +68,13 @@ Pro daily caps show an in-app alert instead of the paywall.
 
 ## Billing status (current)
 
-Store billing is **not wired yet** (no RevenueCat / Play Billing / App Store IAP).
+Purchases go through RevenueCat with Google Play Billing. A build without
+`EXPO_PUBLIC_REVENUECAT_ANDROID_KEY` (web, or any build with no key set) falls back to
+unlocking Pro locally so the wall and gates stay testable.
 
-The paywall **Continue** button currently **unlocks Pro locally** on the device so the wall and gates can be tested end-to-end. Replace that stub with real purchases before production submit.
+Play product IDs, one subscription each with a single base plan:
 
-Recommended next step: **RevenueCat** (or native IAP) with product IDs mapped to:
-
-| Plan | Suggested product id |
+| Plan | Product id |
 | --- | --- |
 | Weekly | `pro_weekly` |
 | Monthly | `pro_monthly` |

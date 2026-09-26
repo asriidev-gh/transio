@@ -40,6 +40,20 @@ export function createSupabaseAudioDownloader(client: SupabaseClient) {
 }
 
 /**
+ * Deletes a session's audio from storage. Used when the owner chose to keep the
+ * recording on their device, so the cloud copy only lives as long as the
+ * transcription needs it.
+ */
+export function createSupabaseAudioRemover(client: SupabaseClient) {
+  return async (audioPath: string): Promise<void> => {
+    const { error } = await client.storage.from(SESSION_AUDIO_BUCKET).remove([audioPath]);
+    if (error) {
+      throw new AppError('STORAGE_ERROR', 'Could not delete session audio', 500);
+    }
+  };
+}
+
+/**
  * Runs transcription for a session. Intended to be invoked after status is set to `transcribing`.
  * Failures set session status to `failed` without deleting audio.
  */

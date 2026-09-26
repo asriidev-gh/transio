@@ -12,6 +12,10 @@ import {
   requestNotificationPermission,
   type NotificationPermission,
 } from '@/src/services/notifications';
+import {
+  getAudioStoragePreference,
+  setAudioStoragePreference,
+} from '@/src/services/audio-storage-preference';
 import { resetOnboarding } from '@/src/services/onboarding';
 import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
 import { Icon, type AppIconName } from '@/src/components/ui/Icon';
@@ -129,6 +133,31 @@ export default function SettingsScreen() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
+  const [deviceOnlyAudio, setDeviceOnlyAudio] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getAudioStoragePreference().then((value) => {
+      if (!cancelled) setDeviceOnlyAudio(value === 'device');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function onToggleDeviceOnlyAudio() {
+    const next = !deviceOnlyAudio;
+    if (next) {
+      const ok = await confirmAction(
+        'Keep audio on this device?',
+        'New recordings upload so they can be transcribed, then the cloud copy is deleted. Only this phone will have the audio, so it is lost if you uninstall the app or clear its storage. Notes, transcripts and summaries stay in your account.',
+        'Keep on device',
+      );
+      if (!ok) return;
+    }
+    setDeviceOnlyAudio(next);
+    await setAudioStoragePreference(next ? 'device' : 'cloud');
+  }
   const [requestingNotif, setRequestingNotif] = useState(false);
   const appVersion = Constants.expoConfig?.version ?? '0.1.0';
 
@@ -344,6 +373,22 @@ export default function SettingsScreen() {
           <Text style={[styles.hint, styles.notifHint, { color: colors.inkMuted }]}>
             Alert when a session finishes processing. On Android, also allows recording with the
             screen locked.
+          </Text>
+        </View>
+        <View style={[styles.rowDividerFull, { backgroundColor: colors.border }]} />
+        <View style={styles.notifBlock}>
+          <SettingsRow
+            icon="download-outline"
+            label="Keep audio on this device"
+            value={deviceOnlyAudio ? 'On' : 'Off'}
+            onPress={() => void onToggleDeviceOnlyAudio()}
+            showChevron
+            last
+          />
+          <Text style={[styles.hint, styles.notifHint, { color: colors.inkMuted }]}>
+            {deviceOnlyAudio
+              ? 'New recordings are transcribed, then the cloud copy is deleted. Only this phone keeps the audio — uninstalling loses it. Notes and transcripts stay in your account.'
+              : 'Audio is kept in your account so it plays on any device. Turn this on to delete the cloud copy after transcribing.'}
           </Text>
         </View>
       </SettingsGroup>

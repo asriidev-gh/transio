@@ -18,7 +18,10 @@ import { createSummaryProvider } from '../providers/summary/index.js';
 import type { SummaryProvider } from '../providers/summary/types.js';
 import { createTranscriptionProvider } from '../providers/transcription/index.js';
 import type { TranscriptionProvider } from '../providers/transcription/types.js';
-import { createSupabaseAudioDownloader } from '../services/transcription/job.js';
+import {
+  createSupabaseAudioDownloader,
+  createSupabaseAudioRemover,
+} from '../services/transcription/job.js';
 import { runProcessingPipeline } from '../services/processing/job.js';
 import {
   SupabaseSummaryRepository,
@@ -78,6 +81,7 @@ function defaultProcessJobRunner(
         transcriptionProvider,
         summaryProvider,
         downloadAudio: createSupabaseAudioDownloader(client),
+        removeAudio: createSupabaseAudioRemover(client),
       }),
     );
   };
