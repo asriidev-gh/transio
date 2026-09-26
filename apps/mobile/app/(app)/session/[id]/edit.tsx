@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,6 +10,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { SessionFolder, SessionType } from '@sessionai/shared';
 import { ErrorState } from '@/src/components/ErrorState';
+import { KeyboardSafeScrollView } from '@/src/components/KeyboardSafeScrollView';
 import { FolderPicker } from '@/src/components/FolderPicker';
 import { LoadingState } from '@/src/components/LoadingState';
 import { SessionTypePicker } from '@/src/components/SessionTypePicker';
@@ -140,14 +139,11 @@ export default function EditSessionScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
+    <>
+    <KeyboardSafeScrollView
       style={[styles.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      contentContainerStyle={styles.container}
     >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-      >
         <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
           Update the session title, type, folder, or description.
         </Text>
@@ -248,7 +244,7 @@ export default function EditSessionScreen() {
           loading={saving}
           disabled={saving}
         />
-      </ScrollView>
+    </KeyboardSafeScrollView>
 
       <FolderPicker
         visible={folderPickerOpen}
@@ -263,7 +259,7 @@ export default function EditSessionScreen() {
         allowCreate
         onFoldersChange={setFolders}
       />
-    </KeyboardAvoidingView>
+    </>
   );
 }
 

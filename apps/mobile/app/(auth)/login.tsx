@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardSafeScrollView } from '@/src/components/KeyboardSafeScrollView';
 import { useAuth } from '@/src/hooks/useAuth';
 import { AuthServiceError } from '@/src/services/auth';
 import { resetOnboarding } from '@/src/services/onboarding';
@@ -79,9 +79,9 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]} edges={['top', 'bottom', 'left', 'right']}>
-      <KeyboardAvoidingView
+      <KeyboardSafeScrollView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        contentContainerStyle={{ flexGrow: 1 }}
       >
         <View style={styles.container}>
           <View style={styles.brandBlock}>
@@ -197,7 +197,7 @@ export default function LoginScreen() {
             </Pressable>
           ) : null}
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardSafeScrollView>
     </SafeAreaView>
   );
 }

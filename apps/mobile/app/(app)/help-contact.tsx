@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Linking,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,6 +9,7 @@ import {
 } from 'react-native';
 import Constants from 'expo-constants';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { KeyboardSafeScrollView } from '@/src/components/KeyboardSafeScrollView';
 import { Button } from '@/src/components/ui/Button';
 import { useAuth } from '@/src/hooks/useAuth';
 import { mobileEnv } from '@/src/lib/env';
@@ -106,14 +105,11 @@ export default function HelpContactScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.root, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <>
       <Stack.Screen options={{ title: isBug ? 'Report a bug' : 'Send a message' }} />
-      <ScrollView
+      <KeyboardSafeScrollView
+        style={[styles.root, { backgroundColor: colors.background }]}
         contentContainerStyle={[styles.content, { paddingBottom: tabBarInset + spacing.lg }]}
-        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <Text style={[styles.lead, { color: colors.inkMuted }]}>
@@ -189,8 +185,8 @@ export default function HelpContactScreen() {
           loading={sending}
           accessibilityLabel={isBug ? 'Send bug report' : 'Send message'}
         />
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardSafeScrollView>
+    </>
   );
 }
 

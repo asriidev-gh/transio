@@ -3,7 +3,6 @@ import {
   Linking,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +17,7 @@ import {
   type SessionFolder,
 } from '@sessionai/shared';
 import { AudioPlayer } from '@/src/components/AudioPlayer';
+import { KeyboardSafeScrollView } from '@/src/components/KeyboardSafeScrollView';
 import { AudioRetentionNotice } from '@/src/components/AudioRetentionNotice';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
@@ -30,7 +30,7 @@ import { Icon } from '@/src/components/ui/Icon';
 import { ApiClientError } from '@/src/services/api';
 import { getSignedAudioUrl, uploadSessionAudio } from '@/src/services/audio-upload';
 import { fetchUploadLimits } from '@/src/services/fetch-upload-limits';
-import { durationLimitError } from '@/src/services/upload-limits';
+import { durationLimitError, getCachedUploadLimits } from '@/src/services/upload-limits';
 import {
   clearLocalAudioUri,
   deleteDeviceAudioCopy,
@@ -47,6 +47,10 @@ import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { confirmAction, confirmDestructive } from '@/src/utils/confirm';
 import { formatDurationHuman, formatSessionDateTime } from '@/src/utils/format';
+import {
+  transcriptionEstimatePhrase,
+  transcriptionEstimateSentence,
+} from '@/src/utils/transcription-estimate';
 import { shareSessionContent } from '@/src/utils/share-session';
 import type { SummaryRecord, Transcript } from '@sessionai/shared';
 
@@ -88,6 +92,9 @@ export default function SessionDetailsScreen() {
   const seekIdRef = useRef(0);
   const localDurationRef = useRef<number | null>(null);
   const [localDurationSec, setLocalDurationSec] = useState<number | null>(null);
+  const [maxAudioMinutes, setMaxAudioMinutes] = useState(
+    () => getCachedUploadLimits().maxAudioMinutes,
+  );
   const handleDuration = useCallback((sec: number) => {
     localDurationRef.current = sec;
     setLocalDurationSec(sec);
@@ -478,6 +485,7 @@ export default function SessionDetailsScreen() {
     let cancelled = false;
     void fetchUploadLimits().then((limits) => {
       if (cancelled) return;
+      setMaxAudioMinutes(limits.maxAudioMinutes);
       const tooLong = durationLimitError(localDurationSec, limits);
       if (tooLong) {
         setUploadStatus('error');
@@ -542,13 +550,16 @@ export default function SessionDetailsScreen() {
   const hasSummary = workspaceHasSummary;
   const hasNotes = workspaceHasNotes || (notesOnly && completed);
   const currentFolder = folders.find((folder) => folder.id === session.folderId) ?? null;
+  const audioSeconds = localDurationSec ?? session.durationSeconds;
+  const transcriptionWait = transcriptionEstimateSentence(audioSeconds, maxAudioMinutes);
+  const transcriptionWaitShort = transcriptionEstimatePhrase(audioSeconds, maxAudioMinutes);
   const statusColor = completed ? colors.success : failed ? colors.danger : colors.accent;
   const statusLabel = SESSION_STATUS_LABELS[session.status];
 
   return (
     <>
       <Stack.Screen options={{ title: session.title }} />
-      <ScrollView
+      <KeyboardSafeScrollView
         contentContainerStyle={[
           styles.container,
           { backgroundColor: colors.background, paddingBottom: tabBarInset },
@@ -752,6 +763,9 @@ export default function SessionDetailsScreen() {
               <Text style={[styles.reviewHint, { color: colors.inkMuted }]}>
                 Preview your take, then upload to transcribe and summarize.
               </Text>
+              {transcriptionWait ? (
+                <Text style={[styles.reviewHint, { color: colors.inkMuted }]}>{transcriptionWait}</Text>
+              ) : null}
 
               {hasPlayback && showPlayer && playbackUri ? (
                 <AudioPlayer
@@ -909,7 +923,11 @@ export default function SessionDetailsScreen() {
                 <View style={styles.pipelineBody}>
                   <Text style={[styles.pipelineTitle, { color: colors.ink }]}>Processing</Text>
                   <Text style={[styles.pipelineHint, { color: colors.inkMuted }]}>
-                    {session.status === 'transcribing' || session.status === 'summarizing'
+                    {session.status === 'transcribing'
+                      ? transcriptionWaitShort
+                        ? `In progress · ${transcriptionWaitShort}`
+                        : 'In progress'
+                      : session.status === 'summarizing'
                       ? 'In progress'
                       : failed
                         ? 'Failed — tap to retry'
@@ -951,7 +969,7 @@ export default function SessionDetailsScreen() {
             />
           ) : null}
         </View>
-      </ScrollView>
+      </KeyboardSafeScrollView>
 
       <FolderPicker
         visible={folderPickerOpen}

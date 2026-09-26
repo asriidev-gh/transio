@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRevealFocusedField } from '@/src/components/KeyboardSafeScrollView';
 import { Icon } from '@/src/components/ui/Icon';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
@@ -40,6 +41,7 @@ export function PaperNotesView({
   saving = false,
 }: PaperNotesViewProps) {
   const { colors, scheme } = useTheme();
+  const revealFocusedField = useRevealFocusedField();
   const paperBg = scheme === 'dark' ? colors.surfaceAlt : '#FFFEF9';
   const rule = scheme === 'dark' ? colors.border : '#E4DDD2';
   const margin = scheme === 'dark' ? colors.accent : '#C45C4A';
@@ -157,6 +159,8 @@ export function PaperNotesView({
                 <TextInput
                   value={line}
                   onChangeText={(text) => updateLine(index, text)}
+                  onFocus={revealFocusedField}
+                  onContentSizeChange={revealFocusedField}
                   multiline
                   style={[styles.lineInput, { color: colors.ink, borderColor: rule }]}
                   placeholder="Note line"

@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardSafeScrollView } from '@/src/components/KeyboardSafeScrollView';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -161,7 +162,7 @@ export default function HelpScreen() {
         </Text>
       </LinearGradient>
 
-      <ScrollView
+      <KeyboardSafeScrollView
         ref={scrollRef}
         contentContainerStyle={[
           styles.content,
@@ -313,7 +314,7 @@ export default function HelpScreen() {
             </Pressable>
           </View>
         </View>
-      </ScrollView>
+      </KeyboardSafeScrollView>
     </View>
   );
 }

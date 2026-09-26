@@ -12,6 +12,7 @@ import { ApiClientError } from '@/src/services/api';
 import { askSessionQuestion } from '@/src/services/ask';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
+import { useRevealFocusedField } from '@/src/components/KeyboardSafeScrollView';
 import { Icon } from '@/src/components/ui/Icon';
 
 const DEFAULT_PROMPTS = [
@@ -32,6 +33,7 @@ interface AskSessionPanelProps {
 
 export function AskSessionPanel({ sessionId, sessionTitle }: AskSessionPanelProps) {
   const { colors } = useTheme();
+  const revealFocusedField = useRevealFocusedField();
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -169,6 +171,7 @@ export function AskSessionPanel({ sessionId, sessionTitle }: AskSessionPanelProp
           ]}
           value={input}
           onChangeText={setInput}
+          onFocus={revealFocusedField}
           placeholder="Ask anything about this session"
           placeholderTextColor={colors.inkMuted}
           editable={!busy}

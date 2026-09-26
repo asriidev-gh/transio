@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,6 +11,7 @@ import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SessionFolder, SessionType } from '@sessionai/shared';
 import { CAPTURE_MODE_LABELS } from '@sessionai/shared';
+import { KeyboardSafeScrollView } from '@/src/components/KeyboardSafeScrollView';
 import { SessionTypePicker } from '@/src/components/SessionTypePicker';
 import { useFloatingTabBarContentInset } from '@/src/components/FloatingTabBar';
 import { Button } from '@/src/components/ui/Button';
@@ -430,14 +429,10 @@ export default function NewSessionScreen() {
       style={[styles.safe, { backgroundColor: colors.background }]}
       edges={['bottom', 'left', 'right']}
     >
-      <KeyboardAvoidingView
+      <KeyboardSafeScrollView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        contentContainerStyle={[styles.container, { paddingBottom: tabBarInset }]}
       >
-        <ScrollView
-          contentContainerStyle={[styles.container, { paddingBottom: tabBarInset }]}
-          keyboardShouldPersistTaps="handled"
-        >
           <View style={styles.hero}>
             <View style={styles.heroTitleRow}>
               <View
@@ -936,8 +931,7 @@ export default function NewSessionScreen() {
               </>
             )}
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeScrollView>
     </SafeAreaView>
   );
 }

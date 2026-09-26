@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,6 +11,7 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-rou
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Session, SessionFolder } from '@sessionai/shared';
 import { ErrorState } from '@/src/components/ErrorState';
+import { KeyboardSafeScrollView } from '@/src/components/KeyboardSafeScrollView';
 import { LoadingState } from '@/src/components/LoadingState';
 import { SessionCard } from '@/src/components/SessionCard';
 import { Button } from '@/src/components/ui/Button';
@@ -189,7 +189,7 @@ export default function FolderScreen() {
           contentStyle: { backgroundColor: colors.background },
         }}
       />
-      <ScrollView
+      <KeyboardSafeScrollView
         contentContainerStyle={[styles.container, { paddingBottom: tabBarInset }]}
         keyboardShouldPersistTaps="handled"
         refreshControl={
@@ -328,7 +328,7 @@ export default function FolderScreen() {
             ) : null}
           </>
         ) : null}
-      </ScrollView>
+      </KeyboardSafeScrollView>
     </SafeAreaView>
   );
 }

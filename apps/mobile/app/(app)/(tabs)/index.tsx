@@ -1,11 +1,11 @@
+import { KeyboardSafeScrollView } from '@/src/components/KeyboardSafeScrollView';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
   type AppStateStatus,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -131,13 +131,15 @@ export default function HomeScreen() {
   const announcedIdsRef = useRef<Set<string>>(new Set());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const loadSessions = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
+  const loadSessions = useCallback(async (isRefresh = false, silent = false) => {
+    if (!silent) {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      setError(null);
+    }
 
     // Paint cached library immediately so Render cold starts don't hold the skeleton.
-    if (!isRefresh) {
+    if (!isRefresh && !silent) {
       const cached = await readHomeCache();
       if (cached && (cached.sessions.length > 0 || cached.folders.length > 0)) {
         setSessions(cached.sessions);
@@ -152,6 +154,7 @@ export default function HomeScreen() {
         listFolders().catch(() => [] as SessionFolder[]),
       ]);
       setSessions((prev) => (sessionsUnchanged(prev, data) ? prev : data));
+      setError(null);
       // Don't wait on ensureDefaultFolder to clear the skeleton.
       setLoading(false);
 
@@ -173,16 +176,30 @@ export default function HomeScreen() {
       const notices = await listCompletionNotices();
       setNotice(notices[0] ?? null);
     } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : 'Could not load sessions. Check that the API is running.',
-      );
+      if (!silent) {
+        setError(
+          err instanceof ApiClientError
+            ? err.message
+            : 'Could not load sessions. Check that the API is running.',
+        );
+      }
       setLoading(false);
     } finally {
-      setRefreshing(false);
+      if (!silent) setRefreshing(false);
     }
   }, []);
+
+  const wasUnreachable = useRef(false);
+  useEffect(() => {
+    if (reachable === false) {
+      wasUnreachable.current = true;
+      return;
+    }
+    if (reachable === true && wasUnreachable.current) {
+      wasUnreachable.current = false;
+      void loadSessions(true, true);
+    }
+  }, [reachable, loadSessions]);
 
   const reconcileCompletions = useCallback(async (data: Session[]) => {
     const previouslyInFlight = inFlightIdsRef.current;
@@ -386,7 +403,7 @@ export default function HomeScreen() {
         style={styles.atmosphere}
         pointerEvents="none"
       />
-      <ScrollView
+      <KeyboardSafeScrollView
         contentContainerStyle={[styles.container, { paddingHorizontal: pagePad }]}
         style={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -693,7 +710,7 @@ export default function HomeScreen() {
             ) : null}
           </View>
         ) : null}
-      </ScrollView>
+      </KeyboardSafeScrollView>
 
       <InsightsCalendarModal
         visible={insightBrowse === 'calendar'}

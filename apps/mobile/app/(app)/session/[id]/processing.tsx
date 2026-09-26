@@ -14,9 +14,12 @@ import {
 } from '@/src/services/notifications';
 import { getSessionStatus, startProcessing } from '@/src/services/processing';
 import { getSession } from '@/src/services/sessions';
+import { fetchUploadLimits } from '@/src/services/fetch-upload-limits';
+import { getCachedUploadLimits } from '@/src/services/upload-limits';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { Button } from '@/src/components/ui/Button';
+import { transcriptionEstimateSentence } from '@/src/utils/transcription-estimate';
 import { WaveformVisualizer } from '@/src/components/WaveformVisualizer';
 
 export default function ProcessingScreen() {
@@ -29,10 +32,24 @@ export default function ProcessingScreen() {
   const [starting, setStarting] = useState(false);
   const [sessionTitle, setSessionTitle] = useState<string>('Session');
   const [captureMode, setCaptureMode] = useState<CaptureMode>('batch');
+  const [durationSeconds, setDurationSeconds] = useState<number | null>(null);
+  const [maxAudioMinutes, setMaxAudioMinutes] = useState(
+    () => getCachedUploadLimits().maxAudioMinutes,
+  );
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedRef = useRef(false);
   const notifiedRef = useRef(false);
   const sawInFlightRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchUploadLimits().then((limits) => {
+      if (!cancelled) setMaxAudioMinutes(limits.maxAudioMinutes);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -139,6 +156,7 @@ export default function ProcessingScreen() {
         const session = await getSession(id);
         setSessionTitle(session.title);
         setCaptureMode(session.captureMode);
+        setDurationSeconds(session.durationSeconds);
       } catch {
         // Title is optional for notifications.
       }
@@ -213,6 +231,10 @@ export default function ProcessingScreen() {
     starting ||
     status?.status === 'transcribing' ||
     status?.status === 'summarizing';
+  const transcriptionWait =
+    status?.status === 'summarizing'
+      ? null
+      : transcriptionEstimateSentence(durationSeconds, maxAudioMinutes);
 
   const done = Boolean(status && isPipelineDone(status));
   const failed = Boolean(status && status.status === 'failed') || Boolean(error);
@@ -269,6 +291,9 @@ export default function ProcessingScreen() {
                 ? 'We’ll listen privately and write structured notes.'
                 : 'We’ll transcribe speech so you can review and summarize when you want.'}
       </Text>
+      {!done && !failed && transcriptionWait ? (
+        <Text style={[styles.subtitle, { color: colors.ink }]}>{transcriptionWait}</Text>
+      ) : null}
 
       {inFlight && !done ? (
         <View style={styles.waveWrap}>

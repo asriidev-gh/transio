@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -65,9 +65,10 @@ export default function PaywallScreen() {
   const [isPremium, setIsPremium] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [packages, setPackages] = useState<PlanPackage[]>([]);
-  const [storeLoading, setStoreLoading] = useState(false);
+  const [storeRetrying, setStoreRetrying] = useState(false);
   // Real store billing needs Android, a RevenueCat key and the native module in this build.
   const billing = useMemo(() => isBillingAvailable(), []);
+  const hasPlans = useRef(false);
 
   useEffect(() => {
     void loadEntitlements().then((s) => {
@@ -79,25 +80,52 @@ export default function PaywallScreen() {
   useEffect(() => {
     if (!billing) return;
     let cancelled = false;
-    setStoreLoading(true);
-    loadPlanPackages()
-      .then((list) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = () => {
+      if (cancelled || hasPlans.current) return;
+      setStoreRetrying(true);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void attempt();
+      }, 3000);
+    };
+
+    const attempt = async () => {
+      if (cancelled) return;
+      try {
+        const list = await loadPlanPackages();
         if (cancelled) return;
+        if (list.length === 0) {
+          schedule();
+          return;
+        }
+        hasPlans.current = true;
         setPackages(list);
+        setStoreRetrying(false);
         setPlanId((current) =>
           list.some((p) => p.planId === current) ? current : (list[0]?.planId ?? current),
         );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setError('Could not load subscription options. Check your connection and try again.');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setStoreLoading(false);
-      });
+      } catch {
+        if (!cancelled) schedule();
+      }
+    };
+
+    void attempt();
+
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active' || cancelled || hasPlans.current) return;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      void attempt();
+    });
+
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
+      sub.remove();
     };
   }, [billing]);
 
@@ -296,12 +324,9 @@ export default function PaywallScreen() {
           Cancel anytime in your store settings. Sign in later to keep your library across devices.
         </Text>
 
-        {billing && storeLoading ? (
-          <Text style={[styles.trialNote, { color: colors.inkMuted }]}>Loading plans…</Text>
-        ) : null}
-        {billing && !storeLoading && plans.length === 0 ? (
+        {billing && plans.length === 0 ? (
           <Text style={[styles.trialNote, { color: colors.inkMuted }]}>
-            Subscriptions are unavailable right now. Please try again later.
+            {storeRetrying ? 'Retrying…' : 'Loading plans…'}
           </Text>
         ) : null}
 

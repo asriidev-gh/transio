@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useKeyboardInset } from '@/src/components/KeyboardSafeScrollView';
 import {
   ActivityIndicator,
   Modal,
@@ -53,6 +54,7 @@ export function FolderPicker({
   onFoldersChange,
 }: FolderPickerProps) {
   const { colors, shadows } = useTheme();
+  const keyboardInset = useKeyboardInset();
   const [draftId, setDraftId] = useState<string | null>(selectedId);
   const [localFolders, setLocalFolders] = useState(folders);
   const [defaultId, setDefaultId] = useState<string | null>(null);
@@ -86,7 +88,6 @@ export function FolderPicker({
         const initial =
           selectedId && merged.some((f) => f.id === selectedId) ? selectedId : def.id;
         setDraftId(initial);
-        onSelect(initial);
         setReady(true);
       } catch (err) {
         if (cancelled) return;
@@ -147,7 +148,16 @@ export function FolderPicker({
           accessibilityLabel="Close folder picker"
         />
         <View style={[styles.center, { pointerEvents: 'box-none' }]}>
-          <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                marginBottom: keyboardInset,
+              },
+            ]}
+          >
             <View style={styles.header}>
               <Text style={[styles.title, { color: colors.ink }]}>{title}</Text>
               <Pressable

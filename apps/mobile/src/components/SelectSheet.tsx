@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useKeyboardInset } from '@/src/components/KeyboardSafeScrollView';
 import { Icon } from '@/src/components/ui/Icon';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
@@ -47,6 +48,7 @@ export function SelectSheet<T extends string>({
 }: SelectSheetProps<T>) {
   const { colors, shadows } = useTheme();
   const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardInset();
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -77,6 +79,7 @@ export function SelectSheet<T extends string>({
               backgroundColor: colors.surface,
               borderColor: colors.border,
               paddingBottom: Math.max(insets.bottom, spacing.md),
+              marginBottom: keyboardInset,
             },
             shadows.soft,
           ]}
