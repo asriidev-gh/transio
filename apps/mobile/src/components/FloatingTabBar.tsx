@@ -1,7 +1,7 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { usePathname, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GlossOrb } from '@/src/components/ui/GlossOrb';
 import { Icon, type AppIconName } from '@/src/components/ui/Icon';
 import { radii, sizes, spacing } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
@@ -122,10 +122,9 @@ export function FloatingTabBar() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
-  const { colors, shadows, scheme } = useTheme();
+  const { shadows } = useTheme();
   const bottomPad = Math.max(insets.bottom, spacing.sm);
   const focused = activeTabFromPath(pathname);
-  const rim = scheme === 'light' ? colors.background : colors.backgroundAlt;
 
   if (!isFloatingTabBarRoute(pathname)) {
     return null;
@@ -186,49 +185,9 @@ export function FloatingTabBar() {
           accessibilityRole="button"
           accessibilityLabel="Record"
         >
-          {/* Soft outer candy glow */}
-          <View style={[styles.fabHalo, { backgroundColor: colors.brand + '33' }]} />
-          <View style={[styles.fabHaloInner, { backgroundColor: colors.brandSoft + '40' }]} />
-
-          <View style={[styles.fabShell, { borderColor: rim }, shadows.emboss]}>
-            <LinearGradient
-              colors={[
-                'rgba(160, 100, 255, 0.72)',
-                'rgba(74, 108, 247, 0.78)',
-                'rgba(123, 108, 255, 0.82)',
-              ]}
-              locations={[0, 0.45, 1]}
-              start={{ x: 0.15, y: 0 }}
-              end={{ x: 0.9, y: 1 }}
-              style={styles.fabFill}
-            >
-              {/* Specular glare across the top curve */}
-              <LinearGradient
-                colors={[
-                  'rgba(255,255,255,0.85)',
-                  'rgba(255,255,255,0.35)',
-                  'rgba(255,255,255,0.06)',
-                  'transparent',
-                ]}
-                locations={[0, 0.28, 0.55, 1]}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 1 }}
-                style={styles.fabGlare}
-                pointerEvents="none"
-              />
-              {/* Side catch-light */}
-              <LinearGradient
-                colors={['rgba(255,255,255,0.45)', 'transparent']}
-                start={{ x: 0, y: 0.2 }}
-                end={{ x: 0.55, y: 0.8 }}
-                style={styles.fabCatch}
-                pointerEvents="none"
-              />
-              <View style={styles.fabIcon}>
-                <Icon name="microphone" size={26} color="#FFFFFF" variant="line" />
-              </View>
-            </LinearGradient>
-          </View>
+          <GlossOrb size={FAB} halo>
+            <Icon name="microphone" size={26} color="#FFFFFF" variant="line" />
+          </GlossOrb>
         </Pressable>
       </View>
     </View>
@@ -301,56 +260,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 20,
     elevation: 16,
-  },
-  fabHalo: {
-    position: 'absolute',
-    width: FAB + 26,
-    height: FAB + 26,
-    borderRadius: (FAB + 26) / 2,
-    opacity: 0.9,
-  },
-  fabHaloInner: {
-    position: 'absolute',
-    width: FAB + 12,
-    height: FAB + 12,
-    borderRadius: (FAB + 12) / 2,
-  },
-  fabShell: {
-    width: FAB,
-    height: FAB,
-    borderRadius: FAB / 2,
-    borderWidth: 3,
-    overflow: 'hidden',
-    ...Platform.select({
-      web: { backdropFilter: 'blur(12px)' } as object,
-      default: {},
-    }),
-  },
-  fabFill: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  fabGlare: {
-    position: 'absolute',
-    top: 0,
-    left: '8%',
-    right: '8%',
-    height: '52%',
-    borderBottomLeftRadius: FAB,
-    borderBottomRightRadius: FAB,
-  },
-  fabCatch: {
-    position: 'absolute',
-    top: 6,
-    left: 6,
-    width: '42%',
-    height: '42%',
-    borderRadius: FAB,
-  },
-  fabIcon: {
-    zIndex: 2,
   },
   pressed: {
     opacity: 0.7,

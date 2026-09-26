@@ -17,8 +17,10 @@ import {
 import { EmptyState } from '@/src/components/EmptyState';
 import { ErrorState } from '@/src/components/ErrorState';
 import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
+import { InsightsCalendarModal } from '@/src/components/InsightsCalendarModal';
 import { SessionCard } from '@/src/components/SessionCard';
 import { SessionListSkeleton } from '@/src/components/Skeleton';
+import { Icon } from '@/src/components/ui/Icon';
 import { SearchBar } from '@/src/components/ui/SearchBar';
 import { ApiClientError } from '@/src/services/api';
 import { clearLocalAudioUri } from '@/src/services/local-audio';
@@ -67,8 +69,9 @@ const HistoryRow = memo(function HistoryRow({ session, onOpen, onDelete }: Histo
 
 export default function HistoryScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, shadows } = useTheme();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,12 +157,29 @@ export default function HistoryScreen() {
 
   const header = (
     <View style={styles.header}>
-      <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
-        History
-      </Text>
-      <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
-        Search and revisit every capture.
-      </Text>
+      <View style={styles.titleRow}>
+        <View style={styles.titleText}>
+          <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
+            History
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.inkMuted, marginTop: 2 }]}>
+            Search and revisit every capture.
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => setCalendarOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Browse by date"
+          accessibilityHint="Opens a calendar to see the recordings from a day"
+          style={({ pressed }) => [
+            styles.calendarButton,
+            { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
+            shadows.soft,
+          ]}
+        >
+          <Icon name="calendar" size={22} color={colors.ink} variant="line" />
+        </Pressable>
+      </View>
 
       <SearchBar value={query} onChangeText={setQuery} placeholder="Search transcripts" />
 
@@ -254,6 +274,13 @@ export default function HistoryScreen() {
           />
         }
       />
+
+      <InsightsCalendarModal
+        visible={calendarOpen}
+        sessions={sessions}
+        onClose={() => setCalendarOpen(false)}
+        onOpenSession={onOpenSession}
+      />
     </SafeAreaView>
   );
 }
@@ -279,6 +306,22 @@ const styles = StyleSheet.create({
   },
   chipText: { fontSize: 13, fontWeight: '600' },
   header: { gap: spacing.md },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  titleText: { flex: 1 },
+  calendarButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.xs,
+  },
   rowGap: { height: spacing.smd },
   groupLabel: {
     ...typography.caption,

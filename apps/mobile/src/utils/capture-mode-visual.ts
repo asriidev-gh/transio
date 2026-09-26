@@ -32,9 +32,9 @@ export const CAPTURE_MODE_VISUAL: Record<CaptureMode, CaptureModeVisual> = {
   },
   batch: {
     icon: 'microphone',
-    light: 'rgba(156, 163, 175, 0.14)',
-    dark: '#323A3E',
-    colorKey: 'accentDeep',
+    light: 'rgba(91, 76, 232, 0.12)',
+    dark: '#2B2A52',
+    colorKey: 'accent',
   },
 };
 

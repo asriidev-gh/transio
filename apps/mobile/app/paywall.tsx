@@ -377,11 +377,11 @@ export default function PaywallScreen() {
             onPress={() => void leavePaywall()}
             disabled={busy}
             accessibilityRole="button"
-            accessibilityLabel="Continue with free trial"
+            accessibilityLabel="Not now"
             style={styles.freeLink}
           >
             <Text style={[styles.freeLinkText, { color: colors.ink }]}>
-              {busy ? 'Starting…' : 'Continue with free trial'}
+              {busy ? 'Starting…' : 'Not now'}
             </Text>
           </Pressable>
         ) : null}

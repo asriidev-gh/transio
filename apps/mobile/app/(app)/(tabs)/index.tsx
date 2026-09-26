@@ -35,10 +35,10 @@ import {
   InsightsCalendarModal,
   InsightsListModal,
 } from '@/src/components/InsightsCalendarModal';
+import { HomeBanner } from '@/src/components/HomeBanner';
 import { HomeLibrarySkeleton } from '@/src/components/Skeleton';
 import { SectionHeader } from '@/src/components/ui/SectionHeader';
 import { Icon } from '@/src/components/ui/Icon';
-import { IconSquircle } from '@/src/components/ui/IconWell';
 import { useApiReachable } from '@/src/hooks/useApiReachable';
 import { useAuth } from '@/src/hooks/useAuth';
 import { ApiClientError } from '@/src/services/api';
@@ -61,7 +61,7 @@ import { readHomeCache, writeHomeCache } from '@/src/services/home-cache';
 import { notifyProcessingComplete } from '@/src/services/notifications';
 import { clearLocalAudioUri } from '@/src/services/local-audio';
 import { deleteSession, listSessions } from '@/src/services/sessions';
-import { fonts, radii, spacing, typography, gradients } from '@/src/theme';
+import { fonts, radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { formatDurationHuman } from '@/src/utils/format';
 import { confirmDestructive } from '@/src/utils/confirm';
@@ -461,106 +461,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={styles.actionGrid}>
-          <Pressable
-            onPress={() => openCapture('record')}
-            accessibilityRole="button"
-            accessibilityLabel="Record"
-            style={({ pressed }) => [
-              styles.actionTile,
-              styles.actionTilePrimary,
-              { transform: [{ scale: pressed ? 0.98 : 1 }], opacity: pressed ? 0.96 : 1 },
-              shadows.emboss,
-            ]}
-          >
-            <LinearGradient
-              colors={[...gradients.primary]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.actionTileGradient}
-            >
-              <View style={styles.actionIconOnBrand}>
-                <Icon name="microphone" size={24} color="#FFFFFF" variant="line" />
-              </View>
-              <View>
-                <Text style={styles.actionTitleOnBrand}>Record</Text>
-                <Text style={styles.actionHintOnBrand}>Start speaking</Text>
-              </View>
-            </LinearGradient>
-          </Pressable>
-
-          <Pressable
-            onPress={() => openCapture('import')}
-            accessibilityRole="button"
-            accessibilityLabel="Upload audio or video"
-            style={({ pressed }) => [
-              styles.actionTile,
-              styles.actionTilePad,
-              {
-                backgroundColor: colors.surface,
-                opacity: pressed ? 0.92 : 1,
-              },
-              shadows.soft,
-            ]}
-          >
-            <IconSquircle
-              name="download-outline"
-              tint={colors.actionImport}
-              color={colors.cyan}
-              size={22}
-            />
-            <Text style={[styles.actionTitle, { color: colors.ink }]}>Upload</Text>
-            <Text style={[styles.actionHint, { color: colors.inkMuted }]}>Audio or video</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push('/(app)/(tabs)/translate' as Href)}
-            accessibilityRole="button"
-            accessibilityLabel="Translate"
-            style={({ pressed }) => [
-              styles.actionTile,
-              styles.actionTilePad,
-              {
-                backgroundColor: colors.surface,
-                opacity: pressed ? 0.92 : 1,
-              },
-              shadows.soft,
-            ]}
-          >
-            <IconSquircle
-              name="translate"
-              tint={colors.accentSoft}
-              color={colors.accent}
-              size={22}
-            />
-            <Text style={[styles.actionTitle, { color: colors.ink }]}>Translate</Text>
-            <Text style={[styles.actionHint, { color: colors.inkMuted }]}>Live or saved</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push('/(app)/(tabs)/history' as Href)}
-            accessibilityRole="button"
-            accessibilityLabel="Favorites and history"
-            style={({ pressed }) => [
-              styles.actionTile,
-              styles.actionTilePad,
-              {
-                backgroundColor: colors.surface,
-                opacity: pressed ? 0.92 : 1,
-              },
-              shadows.soft,
-            ]}
-          >
-            <IconSquircle
-              name="star-outline"
-              tint={colors.actionFav}
-              color={colors.warning}
-              size={22}
-            />
-            <Text style={[styles.actionTitle, { color: colors.ink }]}>Library</Text>
-            <Text style={[styles.actionHint, { color: colors.inkMuted }]}>History & favorites</Text>
-          </Pressable>
-        </View>
+        <HomeBanner onRecord={() => openCapture('record')} onImport={() => openCapture('import')} />
 
         {loading ? <HomeLibrarySkeleton /> : null}
 
@@ -901,69 +802,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontSize: 15,
     lineHeight: 22,
-  },
-  actionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.smd,
-    width: '100%',
-  },
-  actionTile: {
-    width: '47%',
-    flexGrow: 1,
-    minWidth: 148,
-    minHeight: 128,
-    borderRadius: radii.card,
-    borderWidth: 0,
-    overflow: 'hidden',
-  },
-  actionTilePrimary: {},
-  actionTilePad: {
-    padding: spacing.md,
-    justifyContent: 'flex-end',
-  },
-  actionTileGradient: {
-    flex: 1,
-    padding: spacing.md,
-    gap: spacing.sm,
-    justifyContent: 'space-between',
-    minHeight: 128,
-  },
-  actionIconOnBrand: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionTitleOnBrand: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  actionHintOnBrand: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
-  },
-  actionIconSoft: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-  actionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-    marginTop: spacing.sm,
-  },
-  actionHint: {
-    ...typography.caption,
-    marginTop: 2,
   },
   recentList: {
     gap: spacing.smd,

@@ -22,9 +22,9 @@ What the store and the servers need before a public release. Tick items as you f
 
 ## Data safety form: what to declare
 
-The app collects or shares the following. Confirm against the current build before submitting.
+The app collects the following. Confirm against the current build before submitting.
 
-| Data | Collected | Purpose | Shared with |
+| Data | Collected | Purpose | Processed by |
 | --- | --- | --- | --- |
 | Email address | Yes, optional (email accounts only) | Account management | Supabase |
 | User IDs | Yes | Account management, app functionality | Supabase |
@@ -35,8 +35,12 @@ The app collects or shares the following. Confirm against the current build befo
 | Purchase history | Yes, after billing launches | Subscriptions | RevenueCat, Google Play |
 | Crash logs | Yes, after Sentry launches | Analytics, diagnostics | Sentry |
 
+- Mark each type as **collected**. Do **not** mark it as **shared** when the recipient only processes
+  it on your behalf. Google does not count a transfer to a service provider, such as Supabase,
+  Deepgram or Anthropic, as sharing. Read the "Learn more" definition on the form before answering.
 - Data is encrypted in transit.
 - Users can request deletion (in the app and on the web).
+- Do not declare crash logs until Sentry is actually integrated.
 
 ## Permissions to justify
 

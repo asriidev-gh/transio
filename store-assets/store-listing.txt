@@ -1,0 +1,42 @@
+GOOGLE PLAY LISTING TEXT (paste into Play Console > Store listing)
+
+SHORT DESCRIPTION (75 of 80 characters)
+------------------------------------------------------------
+Record or import audio for transcripts, AI summaries and voice translation.
+
+FULL DESCRIPTION (1899 of 4000 characters)
+------------------------------------------------------------
+Turn conversations into clear notes.
+
+Smart Transcriber records or imports audio, turns speech into a searchable transcript, and gives you notes, summaries and translations when you want them. Use it for lectures, interviews, meetings, group discussions and voice memos.
+
+CAPTURE YOUR WAY
+• Record, then transcribe: record a session and process it when you are done.
+• Live captions: watch the words appear while people speak.
+• Live Note Taker: notes grow as you speak, like writing on paper.
+• Import audio or video files, or share a recording to the app from Files, Drive or another app.
+
+READ, SEARCH AND REVIEW
+• Transcripts with speaker labels.
+• Tap any line to jump to that moment in the recording. Play at faster speeds and skip 15 seconds either way.
+• Organize sessions in folders and mark your favorites.
+
+AI WHEN YOU WANT IT
+• AI Summary is opt-in, so nothing is summarized behind your back.
+• Ask questions about a session and get answers from what was said.
+• The Map view shows the main ideas of a summary.
+• Translate notes, summaries and transcripts into other languages.
+
+VOICE TRANSLATE
+Hold to talk in one language and hear the translation spoken aloud on your phone. Handy for face-to-face conversations.
+
+FREE TO TRY, PRO WHEN YOU NEED MORE
+Start free with a small allowance of sessions, AI Summaries and Voice translate chats. Smart Transcriber Pro unlocks more, with weekly, monthly and yearly plans. Subscriptions renew automatically until you cancel them in Google Play under Payments and subscriptions.
+
+YOUR DATA
+You can delete any session, or your whole account, from Settings. To transcribe and summarize, audio and text are processed by third-party AI services. Read the privacy policy for details.
+
+PLEASE RECORD RESPONSIBLY
+Laws about recording conversations differ from place to place. Always get consent from the people you record.
+
+Support: andyr@consorttech.com

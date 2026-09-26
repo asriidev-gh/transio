@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
   Dimensions,
@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GlossOrb, type GlossOrbTint } from '@/src/components/ui/GlossOrb';
 import { Icon, type AppIconName } from '@/src/components/ui/Icon';
 import { markOnboardingSeen } from '@/src/services/onboarding';
 import { fonts, gradients, radii, spacing } from '@/src/theme';
@@ -274,32 +275,137 @@ function TranscriptBubble({
   );
 }
 
-function NotesArt() {
-  const { colors, shadows } = useTheme();
+const NOTE_TABS: { label: string; icon: AppIconName }[] = [
+  { label: 'Summary', icon: 'file-text' },
+  { label: 'Transcript', icon: 'file-text' },
+  { label: 'Ask', icon: 'file-text' },
+];
+const NOTE_BULLETS = ['Launch moved to March 12', 'Design review due Friday', 'Sam owns the budget draft'];
+const NOTE_LINES = [
+  { who: 'Sam', text: 'We should lock the launch date today.' },
+  { who: 'Priya', text: 'March 12 works if design signs off Friday.' },
+  { who: 'Sam', text: 'Great, I will draft the budget.' },
+];
+
+/** Runs 0 to 1 whenever the page becomes visible, and resets when it leaves so it replays. */
+function useEntrance(active: boolean, reduceMotion: boolean, duration = 1100) {
+  const value = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduceMotion) {
+      value.setValue(active ? 1 : 0);
+      return;
+    }
+    if (!active) {
+      value.setValue(0);
+      return;
+    }
+    const anim = Animated.timing(value, {
+      toValue: 1,
+      duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    anim.start();
+    return () => anim.stop();
+  }, [active, reduceMotion, duration, value]);
+  return value;
+}
+
+function FadeIn({ children }: { children: ReactNode }) {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(v, { toValue: 1, duration: 320, useNativeDriver: true }).start();
+  }, [v]);
+  return (
+    <Animated.View
+      style={{
+        opacity: v,
+        transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+function NotesArt({ active }: { active: boolean }) {
+  const { colors, shadows, reduceMotion } = useTheme();
+  const enter = useEntrance(active, reduceMotion);
   const float = useRef(new Animated.Value(0)).current;
+  const progress = useRef(new Animated.Value(0)).current;
+  const badge = useRef(new Animated.Value(0)).current;
+  const [tab, setTab] = useState(0);
+  const [trackW, setTrackW] = useState(0);
 
   useEffect(() => {
+    if (reduceMotion) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(float, { toValue: 1, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(float, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(float, { toValue: 1, duration: 2400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(float, { toValue: 0, duration: 2400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       ]),
     );
     loop.start();
     return () => loop.stop();
-  }, [float]);
+  }, [float, reduceMotion]);
 
-  const lift = float.interpolate({ inputRange: [0, 1], outputRange: [0, -6] });
+  useEffect(() => {
+    if (reduceMotion || !active) {
+      progress.setValue(reduceMotion ? 0.38 : 0);
+      badge.setValue(reduceMotion && active ? 1 : 0);
+      return;
+    }
+    progress.setValue(0);
+    const bar = Animated.loop(
+      Animated.timing(progress, { toValue: 1, duration: 7000, easing: Easing.linear, useNativeDriver: true }),
+    );
+    bar.start();
+    const pop = Animated.sequence([
+      Animated.delay(900),
+      Animated.spring(badge, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }),
+    ]);
+    pop.start();
+    const timer = setInterval(() => setTab((t) => (t + 1) % NOTE_TABS.length), 2800);
+    return () => {
+      bar.stop();
+      pop.stop();
+      clearInterval(timer);
+    };
+  }, [active, reduceMotion, progress, badge]);
+
+  useEffect(() => {
+    if (!active) setTab(0);
+  }, [active]);
+
+  const lift = float.interpolate({ inputRange: [0, 1], outputRange: [0, -7] });
+  const cardRise = enter.interpolate({ inputRange: [0, 1], outputRange: [70, 0] });
+  const cardScale = enter.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] });
+  const backSlide = enter.interpolate({ inputRange: [0, 1], outputRange: [-40, 0] });
+  const backSpin = enter.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-6deg'] });
+  const reveal = (i: number) => ({
+    opacity: enter.interpolate({ inputRange: [0.35 + i * 0.13, 0.6 + i * 0.13], outputRange: [0, 1], extrapolate: 'clamp' }),
+    transform: [
+      {
+        translateX: enter.interpolate({
+          inputRange: [0.35 + i * 0.13, 0.6 + i * 0.13],
+          outputRange: [-14, 0],
+          extrapolate: 'clamp',
+        }),
+      },
+    ],
+  });
+  const fillX = progress.interpolate({ inputRange: [0, 1], outputRange: [-trackW, 0] });
 
   return (
     <View style={styles.notesStage}>
-      <View
+      <Animated.View
         style={[
           styles.backCard,
           {
             backgroundColor: colors.surface,
             borderColor: colors.border,
-            transform: [{ rotate: '-6deg' }],
+            opacity: enter.interpolate({ inputRange: [0, 1], outputRange: [0, 0.72] }),
+            transform: [{ translateX: backSlide }, { rotate: backSpin }],
           },
           shadows.soft,
         ]}
@@ -307,8 +413,7 @@ function NotesArt() {
         <Text style={[styles.backCardTitle, { color: colors.inkMuted }]}>Psychology lecture</Text>
         <View style={[styles.line, { backgroundColor: colors.border, width: '78%' }]} />
         <View style={[styles.line, { backgroundColor: colors.border, width: '62%' }]} />
-        <View style={[styles.line, { backgroundColor: colors.border, width: '70%' }]} />
-      </View>
+      </Animated.View>
 
       <Animated.View
         style={[
@@ -316,37 +421,79 @@ function NotesArt() {
           {
             backgroundColor: colors.surface,
             borderColor: colors.border,
-            transform: [{ translateY: lift }],
+            opacity: enter.interpolate({ inputRange: [0, 0.3], outputRange: [0, 1], extrapolate: 'clamp' }),
+            transform: [{ translateY: Animated.add(cardRise, lift) }, { scale: cardScale }],
           },
           shadows.soft,
         ]}
       >
         <View style={styles.frontHeader}>
           <Text style={[styles.frontTitle, { color: colors.ink }]} numberOfLines={1}>
-            Doctor’s appointment
+            Team kickoff
           </Text>
           <Icon name="share-variant-outline" size={16} color={colors.brand} variant="line" />
         </View>
 
         <View style={styles.tabRow}>
-          <View style={[styles.tabActive, { backgroundColor: colors.accentSoft }]}>
-            <Icon name="file-text" size={12} color={colors.brand} variant="line" />
-            <Text style={[styles.tabActiveText, { color: colors.brand }]}>Summary</Text>
-          </View>
-          <Text style={[styles.tabIdle, { color: colors.inkMuted }]}>Transcript</Text>
-          <Text style={[styles.tabIdle, { color: colors.inkMuted }]}>Ask</Text>
+          {NOTE_TABS.map((item, i) =>
+            i === tab ? (
+              <View key={item.label} style={[styles.tabActive, { backgroundColor: colors.accentSoft }]}>
+                <Icon name={item.icon} size={12} color={colors.brand} variant="line" />
+                <Text style={[styles.tabActiveText, { color: colors.brand }]}>{item.label}</Text>
+              </View>
+            ) : (
+              <Text key={item.label} style={[styles.tabIdle, { color: colors.inkMuted }]}>
+                {item.label}
+              </Text>
+            ),
+          )}
         </View>
 
-        <Text style={[styles.noteSection, { color: colors.ink }]}>Overview</Text>
-        <Text style={[styles.noteBody, { color: colors.inkMuted }]}>
-          • Routine check-up focused on ongoing fatigue{'\n'}
-          • Sleep improved with earlier bedtime{'\n'}
-          • Follow-up labs scheduled next week
-        </Text>
+        <View style={styles.noteBox}>
+          <FadeIn key={tab}>
+            {tab === 0 ? (
+              <View style={styles.noteList}>
+                <Text style={[styles.noteSection, { color: colors.ink }]}>Overview</Text>
+                {NOTE_BULLETS.map((line, i) => (
+                  <Animated.View key={line} style={[styles.bulletRow, reveal(i)]}>
+                    <View style={[styles.bulletDot, { backgroundColor: colors.brand }]} />
+                    <Text style={[styles.noteBody, { color: colors.inkMuted }]}>{line}</Text>
+                  </Animated.View>
+                ))}
+              </View>
+            ) : tab === 1 ? (
+              <View style={styles.noteList}>
+                {NOTE_LINES.map((line, i) => (
+                  <Text key={i} style={[styles.noteBody, { color: colors.inkMuted }]} numberOfLines={1}>
+                    <Text style={{ fontFamily: fonts.sansBold, color: colors.cyan }}>{line.who}  </Text>
+                    {line.text}
+                  </Text>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.noteList}>
+                <View style={[styles.askBubble, { backgroundColor: colors.accentSoft }]}>
+                  <Text style={[styles.noteBody, { color: colors.brand }]}>What are the action items?</Text>
+                </View>
+                <Text style={[styles.noteBody, { color: colors.inkMuted }]}>
+                  Design review by Friday, and Sam drafts the budget.
+                </Text>
+              </View>
+            )}
+          </FadeIn>
+        </View>
 
         <View style={[styles.miniPlayer, { borderTopColor: colors.border }]}>
-          <View style={[styles.miniTrack, { backgroundColor: colors.border }]}>
-            <View style={[styles.miniFill, { backgroundColor: colors.brand, width: '38%' }]} />
+          <View
+            style={[styles.miniTrack, { backgroundColor: colors.border }]}
+            onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
+          >
+            <Animated.View
+              style={[
+                styles.miniFill,
+                { backgroundColor: colors.brand, width: trackW || '100%', transform: [{ translateX: trackW ? fillX : -9999 }] },
+              ]}
+            />
           </View>
           <View style={styles.miniControls}>
             <Text style={[styles.miniSpeed, { color: colors.inkMuted }]}>1×</Text>
@@ -357,12 +504,35 @@ function NotesArt() {
           </View>
         </View>
       </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.aiBadge,
+          {
+            opacity: badge,
+            transform: [
+              { scale: badge.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) },
+              { rotate: '6deg' },
+            ],
+          },
+          shadows.soft,
+        ]}
+      >
+        <LinearGradient
+          colors={[...gradients.primary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.aiBadgeFill}
+        >
+          <Text style={styles.aiBadgeText}>AI Summary</Text>
+        </LinearGradient>
+      </Animated.View>
     </View>
   );
 }
 
 function PrivacyArt() {
-  const { colors, shadows } = useTheme();
+  const { colors } = useTheme();
   const clock = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -393,14 +563,21 @@ function PrivacyArt() {
     right?: `${number}%`;
     size: number;
     phase: number;
+    tint: GlossOrbTint;
   }> = [
-    { icon: 'lock', top: '10%', right: '12%', size: 56, phase: 0 },
-    { icon: 'microphone', top: '62%', left: '4%', size: 54, phase: 0.2 },
-    { icon: 'video', top: '18%', left: '8%', size: 52, phase: 0.4 },
-    { icon: 'file-text', top: '68%', right: '6%', size: 52, phase: 0.55 },
-    { icon: 'sticky-note', top: '42%', right: '0%', size: 50, phase: 0.75 },
-    { icon: 'file-music-outline', top: '38%', left: '0%', size: 48, phase: 0.9 },
+    { icon: 'lock', top: '10%', right: '12%', size: 56, phase: 0, tint: 'violet' },
+    { icon: 'translate', top: '62%', left: '4%', size: 54, phase: 0.2, tint: 'brand' },
+    { icon: 'video', top: '18%', left: '8%', size: 52, phase: 0.4, tint: 'cyan' },
+    { icon: 'file-text', top: '68%', right: '6%', size: 52, phase: 0.55, tint: 'brand' },
+    { icon: 'sticky-note', top: '42%', right: '0%', size: 50, phase: 0.75, tint: 'violet' },
+    { icon: 'file-music-outline', top: '38%', left: '0%', size: 48, phase: 0.9, tint: 'cyan' },
   ];
+
+  // The center orb breathes slowly so it stays the focal point.
+  const coreScale = clock.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.97, 1.04, 0.97],
+  });
 
   return (
     <View style={styles.privacyStage}>
@@ -408,14 +585,11 @@ function PrivacyArt() {
       <View style={[styles.ring, styles.ringMid, { borderColor: colors.accentSoft }]} />
       <View style={[styles.ring, styles.ringInner, { borderColor: colors.accentSoft }]} />
 
-      <LinearGradient
-        colors={[colors.brand + '55', colors.brandSoft + '33']}
-        style={styles.shield}
-      >
-        <View style={[styles.shieldInner, { backgroundColor: colors.surface }]}>
-          <Icon name="account-outline" size={48} color={colors.brand} variant="line" />
-        </View>
-      </LinearGradient>
+      <Animated.View style={{ transform: [{ scale: coreScale }] }}>
+        <GlossOrb size={128} halo>
+          <Icon name="microphone" size={52} color="#FFFFFF" variant="line" />
+        </GlossOrb>
+      </Animated.View>
 
       {chips.map((chip) => {
         const shift = chip.phase * 0.35;
@@ -438,15 +612,13 @@ function PrivacyArt() {
                 right: chip.right,
                 width: chip.size,
                 height: chip.size,
-                borderRadius: chip.size / 2,
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
                 transform: [{ translateY }, { scale }],
               },
-              shadows.soft,
             ]}
           >
-            <Icon name={chip.icon} size={Math.round(chip.size * 0.4)} color={colors.brand} variant="line" />
+            <GlossOrb size={chip.size} tint={chip.tint} intensity={0.55} borderWidth={2}>
+              <Icon name={chip.icon} size={Math.round(chip.size * 0.42)} color="#FFFFFF" variant="line" />
+            </GlossOrb>
           </Animated.View>
         );
       })}
@@ -454,32 +626,82 @@ function PrivacyArt() {
   );
 }
 
-function TranslateArt() {
-  const { colors, shadows } = useTheme();
-  const float = useRef(new Animated.Value(0)).current;
+const PHRASES = [
+  { lang: 'Tagalog', src: 'Salamat!', out: 'Thank you!' },
+  { lang: 'Spanish', src: 'Gracias por todo', out: 'Thanks for everything' },
+  { lang: 'French', src: 'Où est la gare ?', out: 'Where is the station?' },
+];
+const WAVE_BARS = [0.5, 0.9, 0.65, 1, 0.55];
+
+function TranslateArt({ active }: { active: boolean }) {
+  const { colors, shadows, reduceMotion } = useTheme();
+  const enter = useEntrance(active, reduceMotion, 800);
+  const press = useRef(new Animated.Value(0)).current;
+  const ring = useRef(new Animated.Value(0)).current;
+  const src = useRef(new Animated.Value(0)).current;
+  const out = useRef(new Animated.Value(0)).current;
+  const wave = useRef(new Animated.Value(0)).current;
+  const [cycle, setCycle] = useState(0);
+  const phrase = PHRASES[cycle % PHRASES.length]!;
 
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(float, {
-          toValue: 1,
-          duration: 2000,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(float, {
-          toValue: 0,
-          duration: 2000,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
+    if (reduceMotion || !active) {
+      const shown = reduceMotion && active ? 1 : 0;
+      src.setValue(shown);
+      out.setValue(shown);
+      press.setValue(0);
+      ring.setValue(0);
+      return;
+    }
+    press.setValue(0);
+    ring.setValue(0);
+    src.setValue(0);
+    out.setValue(0);
+    const run = Animated.sequence([
+      Animated.delay(cycle === 0 ? 700 : 200),
+      Animated.timing(press, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(ring, { toValue: 1, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(ring, { toValue: 0, duration: 1, useNativeDriver: true }),
+          Animated.timing(ring, { toValue: 1, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.delay(450),
+          Animated.spring(src, { toValue: 1, friction: 6, tension: 110, useNativeDriver: true }),
+        ]),
       ]),
+      Animated.timing(press, { toValue: 0, duration: 200, useNativeDriver: true }),
+      Animated.spring(out, { toValue: 1, friction: 5, tension: 110, useNativeDriver: true }),
+      Animated.delay(2300),
+      Animated.parallel([
+        Animated.timing(src, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(out, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]),
+    ]);
+    run.start(({ finished }) => {
+      if (finished) setCycle((c) => c + 1);
+    });
+    return () => run.stop();
+  }, [active, reduceMotion, cycle, press, ring, src, out]);
+
+  useEffect(() => {
+    if (reduceMotion || !active) return;
+    const loop = Animated.loop(
+      Animated.timing(wave, { toValue: 1, duration: 800, easing: Easing.linear, useNativeDriver: true }),
     );
     loop.start();
     return () => loop.stop();
-  }, [float]);
+  }, [active, reduceMotion, wave]);
 
-  const lift = float.interpolate({ inputRange: [0, 1], outputRange: [0, -5] });
+  const cardRise = enter.interpolate({ inputRange: [0, 1], outputRange: [60, 0] });
+  const pop = (v: Animated.Value, fromX: number) => ({
+    opacity: v.interpolate({ inputRange: [0, 0.5], outputRange: [0, 1], extrapolate: 'clamp' }),
+    transform: [
+      { translateX: v.interpolate({ inputRange: [0, 1], outputRange: [fromX, 0] }) },
+      { scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
+    ],
+  });
 
   return (
     <View style={styles.translateStage}>
@@ -489,53 +711,88 @@ function TranslateArt() {
           {
             backgroundColor: colors.surface,
             borderColor: colors.border,
-            transform: [{ translateY: lift }],
+            opacity: enter,
+            transform: [{ translateY: cardRise }],
           },
           shadows.soft,
         ]}
       >
         <View style={styles.translateLangRow}>
-          <Text style={[styles.translateLang, { color: colors.inkMuted }]}>Auto-detect</Text>
+          <Text style={[styles.translateLang, { color: colors.inkMuted }]}>{phrase.lang}</Text>
           <Icon name="translate" size={16} color={colors.brand} variant="line" />
           <Text style={[styles.translateLang, { color: colors.cyan }]}>English</Text>
         </View>
 
-        <View
-          style={[
-            styles.translateBubble,
-            styles.translateSpeaker,
-            { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
-          ]}
-        >
-          <Text style={[styles.translateLabel, { color: colors.inkMuted }]}>Speaker</Text>
-          <Text style={[styles.translateBody, { color: colors.ink }]}>Salamat!</Text>
-        </View>
+        <View style={styles.translateBubbles}>
+          <Animated.View
+            style={[
+              styles.translateBubble,
+              styles.translateSpeaker,
+              { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+              pop(src, -30),
+            ]}
+          >
+            <Text style={[styles.translateLabel, { color: colors.inkMuted }]}>Speaker</Text>
+            <Text style={[styles.translateBody, { color: colors.ink }]}>{phrase.src}</Text>
+          </Animated.View>
 
-        <View
-          style={[
-            styles.translateBubble,
-            styles.translateOut,
-            { backgroundColor: colors.actionImport, borderColor: colors.cyan + '44' },
-          ]}
-        >
-          <View style={styles.translateOutHeader}>
-            <Text style={[styles.translateLabel, { color: colors.cyan }]}>Translation</Text>
-            <View style={[styles.translatePlay, { backgroundColor: colors.surface }]}>
-              <Icon name="play" size={12} color={colors.cyan} variant="line" />
+          <Animated.View
+            style={[
+              styles.translateBubble,
+              styles.translateOut,
+              { backgroundColor: colors.actionImport, borderColor: colors.cyan + '44' },
+              pop(out, 30),
+            ]}
+          >
+            <View style={styles.translateOutHeader}>
+              <Text style={[styles.translateLabel, { color: colors.cyan }]}>Translation</Text>
+              <View style={styles.soundRow}>
+                {WAVE_BARS.map((h, i) => (
+                  <Animated.View
+                    key={i}
+                    style={[
+                      styles.soundBar,
+                      {
+                        backgroundColor: colors.cyan,
+                        transform: [
+                          {
+                            scaleY: wave.interpolate({
+                              inputRange: [0, 0.25 + i * 0.1, 1],
+                              outputRange: [0.4, h, 0.4],
+                              extrapolate: 'clamp',
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
             </View>
-          </View>
-          <Text style={[styles.translateBody, { color: colors.ink }]}>Thank you!</Text>
+            <Text style={[styles.translateBody, { color: colors.ink }]}>{phrase.out}</Text>
+          </Animated.View>
         </View>
 
         <View style={styles.translateMicRow}>
-          <LinearGradient
-            colors={[...gradients.primary]}
-            start={{ x: 0.15, y: 0 }}
-            end={{ x: 0.9, y: 1 }}
-            style={styles.translateMic}
-          >
-            <Icon name="microphone" size={22} color="#FFFFFF" variant="line" />
-          </LinearGradient>
+          <View style={styles.micWrap}>
+            <Animated.View
+              style={[
+                styles.micRing,
+                {
+                  borderColor: colors.brand,
+                  opacity: ring.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
+                  transform: [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.7] }) }],
+                },
+              ]}
+            />
+            <Animated.View
+              style={{ transform: [{ scale: press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.9] }) }] }}
+            >
+              <GlossOrb size={68} halo>
+                <Icon name="microphone" size={26} color="#FFFFFF" variant="line" />
+              </GlossOrb>
+            </Animated.View>
+          </View>
           <Text style={[styles.translateHint, { color: colors.inkMuted }]}>Hold to talk</Text>
         </View>
       </Animated.View>
@@ -543,10 +800,10 @@ function TranslateArt() {
   );
 }
 
-function SlideArt({ slideKey }: { slideKey: SlideKey }) {
+function SlideArt({ slideKey, active }: { slideKey: SlideKey; active: boolean }) {
   if (slideKey === 'capture') return <WaveformArt />;
-  if (slideKey === 'notes') return <NotesArt />;
-  if (slideKey === 'translate') return <TranslateArt />;
+  if (slideKey === 'notes') return <NotesArt active={active} />;
+  if (slideKey === 'translate') return <TranslateArt active={active} />;
   return <PrivacyArt />;
 }
 
@@ -625,7 +882,7 @@ export default function OnboardingScreen() {
           onLayout={(e) => setPagerHeight(e.nativeEvent.layout.height)}
           accessibilityLabel="Onboarding slides"
         >
-          {SLIDES.map((item) => (
+          {SLIDES.map((item, slideIndex) => (
             <View
               key={item.key}
               style={[
@@ -638,7 +895,7 @@ export default function OnboardingScreen() {
                 <Text style={[styles.subtitle, { color: colors.inkMuted }]}>{item.subtitle}</Text>
               </View>
               <View style={styles.artSlot}>
-                <SlideArt slideKey={item.key} />
+                <SlideArt slideKey={item.key} active={index === slideIndex} />
               </View>
             </View>
           ))}
@@ -868,7 +1125,7 @@ const styles = StyleSheet.create({
   notesStage: {
     width: '100%',
     flex: 1,
-    maxHeight: 420,
+    maxHeight: 460,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -935,6 +1192,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 2,
   },
+  noteBox: {
+    minHeight: 96,
+  },
+  noteList: {
+    gap: 6,
+  },
+  bulletRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  askBubble: {
+    alignSelf: 'flex-start',
+    borderRadius: radii.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  aiBadge: {
+    position: 'absolute',
+    top: '2%',
+    right: 0,
+    borderRadius: radii.pill,
+  },
+  aiBadgeFill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radii.pill,
+  },
+  aiBadgeText: {
+    color: '#FFFFFF',
+    fontFamily: fonts.sansBold,
+    fontSize: 13,
+  },
   noteBody: {
     fontFamily: fonts.sans,
     fontSize: 14,
@@ -998,6 +1293,35 @@ const styles = StyleSheet.create({
   translateLang: {
     fontFamily: fonts.sansBold,
     fontSize: 13,
+  },
+  translateBubbles: {
+    gap: spacing.md,
+    minHeight: 150,
+    justifyContent: 'center',
+  },
+  soundRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    height: 20,
+  },
+  soundBar: {
+    width: 3,
+    height: 18,
+    borderRadius: 2,
+  },
+  micWrap: {
+    width: 96,
+    height: 96,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micRing: {
+    position: 'absolute',
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 2,
   },
   translateBubble: {
     borderRadius: radii.lg,
@@ -1078,26 +1402,8 @@ const styles = StyleSheet.create({
     width: '64%',
     aspectRatio: 1,
   },
-  shield: {
-    width: 168,
-    height: 196,
-    borderRadius: 40,
-    borderBottomLeftRadius: 84,
-    borderBottomRightRadius: 84,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 14,
-  },
-  shieldInner: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   floatChip: {
     position: 'absolute',
-    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
