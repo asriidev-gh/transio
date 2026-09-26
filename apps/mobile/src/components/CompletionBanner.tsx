@@ -3,13 +3,25 @@ import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 
 interface CompletionBannerProps {
-  title: string;
+  /** Session title, used by the default body copy. */
+  title?: string;
+  heading?: string;
+  body?: string;
+  primaryLabel?: string;
   onOpen: () => void;
   onDismiss: () => void;
 }
 
-export function CompletionBanner({ title, onOpen, onDismiss }: CompletionBannerProps) {
+export function CompletionBanner({
+  title,
+  heading = 'Ready to review',
+  body,
+  primaryLabel = 'Open',
+  onOpen,
+  onDismiss,
+}: CompletionBannerProps) {
   const { colors } = useTheme();
+  const bodyText = body ?? `“${title}” finished processing.`;
 
   return (
     <View
@@ -23,9 +35,9 @@ export function CompletionBanner({ title, onOpen, onDismiss }: CompletionBannerP
       accessibilityRole="summary"
     >
       <View style={styles.copy}>
-        <Text style={[styles.heading, { color: colors.brand }]}>Ready to review</Text>
+        <Text style={[styles.heading, { color: colors.brand }]}>{heading}</Text>
         <Text style={[styles.body, { color: colors.ink }]} numberOfLines={2}>
-          “{title}” finished processing.
+          {bodyText}
         </Text>
       </View>
       <View style={styles.actions}>
@@ -33,9 +45,9 @@ export function CompletionBanner({ title, onOpen, onDismiss }: CompletionBannerP
           onPress={onOpen}
           style={[styles.primary, { backgroundColor: colors.brand }]}
           accessibilityRole="button"
-          accessibilityLabel="Open completed session"
+          accessibilityLabel={primaryLabel}
         >
-          <Text style={[styles.primaryText, { color: colors.onBrand }]}>Open</Text>
+          <Text style={[styles.primaryText, { color: colors.onBrand }]}>{primaryLabel}</Text>
         </Pressable>
         <Pressable
           onPress={onDismiss}

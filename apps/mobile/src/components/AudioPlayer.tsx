@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { Icon } from '@/src/components/ui/Icon';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { formatDuration } from '@/src/utils/format';
+
+const KEEP_AWAKE_TAG = 'smart-transcriber-playback';
 
 interface AudioPlayerProps {
   uri: string;
@@ -60,6 +63,22 @@ export function AudioPlayer({
   const loading = !error && (!ready || !effectivelyLoaded);
   const speed = SPEEDS[speedIndex];
   const controlsDisabled = Boolean(error) || loading;
+
+  // Playback stops when the screen locks, so hold the screen on while audio runs.
+  useEffect(() => {
+    if (!status.playing) return;
+    let released = false;
+    void activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
+    return () => {
+      if (released) return;
+      released = true;
+      try {
+        deactivateKeepAwake(KEEP_AWAKE_TAG);
+      } catch {
+        // The tag may already be gone; nothing to release.
+      }
+    };
+  }, [status.playing]);
 
   useEffect(() => {
     let cancelled = false;

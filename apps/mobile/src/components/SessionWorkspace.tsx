@@ -19,6 +19,7 @@ import { MindMapView } from '@/src/components/MindMapView';
 import { PaperNotesView } from '@/src/components/PaperNotesView';
 import { SessionContentSkeleton } from '@/src/components/Skeleton';
 import { SessionTabs, type SessionTabKey } from '@/src/components/SessionTabs';
+import { CompletionBanner } from '@/src/components/CompletionBanner';
 import { SummaryGeneratingBanner } from '@/src/components/SummaryGeneratingBanner';
 import { SummarySections } from '@/src/components/SummarySections';
 import { TranscriptViewer } from '@/src/components/TranscriptViewer';
@@ -142,6 +143,7 @@ export function SessionWorkspace({
   });
   const [feedbackBusy, setFeedbackBusy] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [summaryReady, setSummaryReady] = useState(false);
   const [translateSheetOpen, setTranslateSheetOpen] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   /** False when notes are local-draft only (finalize never landed on the server). */
@@ -451,6 +453,7 @@ export function SessionWorkspace({
   async function onGenerateSummary() {
     if (!(await ensureFeatureAccess('summary', router))) return;
     setGeneratingSummary(true);
+    setSummaryReady(false);
     setTranslateError(null);
     try {
       await startSummarization(sessionId);
@@ -468,7 +471,7 @@ export function SessionWorkspace({
               const next = await getSummary(sessionId);
               setSummary(next);
               setGeneratingSummary(false);
-              setTab('summary');
+              setSummaryReady(true);
               onContentLoaded?.({ summary: next, transcript, notes });
             } else if (status.status === 'failed') {
               if (pollRef.current) {
@@ -599,6 +602,21 @@ export function SessionWorkspace({
         </Text>
       ) : null}
 
+      {generatingSummary ? <SummaryGeneratingBanner /> : null}
+
+      {summaryReady ? (
+        <CompletionBanner
+          heading="Summary ready"
+          body="Your AI Summary finished writing."
+          primaryLabel="View summary"
+          onOpen={() => {
+            setSummaryReady(false);
+            setTab('summary');
+          }}
+          onDismiss={() => setSummaryReady(false)}
+        />
+      ) : null}
+
       {loading ? <SessionContentSkeleton /> : null}
 
       {!loading && error ? (
@@ -607,7 +625,6 @@ export function SessionWorkspace({
 
       {!loading && !error && tab === 'notes' ? (
         <View style={styles.stack}>
-          {generatingSummary ? <SummaryGeneratingBanner /> : null}
           {noteBullets.length > 0 || editingNotes ? (
             <>
               <NotesLanguageToggle
