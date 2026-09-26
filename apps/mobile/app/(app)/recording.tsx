@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import {
+  AudioQuality,
   RecordingPresets,
   requestNotificationPermissionsAsync,
   requestRecordingPermissionsAsync,
@@ -61,8 +62,22 @@ import { bulletsFromCaptionFinals, rawNotesFromFinals, type TranslateLanguage } 
 
 type PermissionState = 'checking' | 'granted' | 'denied' | 'unavailable';
 
+// Speech, not music: mono at 64 kbps halves the file against the stock preset's
+// 128 kbps stereo, with no loss that matters to a listener or to Whisper and
+// Deepgram, which resample to 16 kHz anyway. Keeps AAC/.m4a — the LOW_QUALITY
+// preset switches Android to narrowband AMR in a .3gp the audio bucket rejects.
 const RECORDING_OPTIONS = {
   ...RecordingPresets.HIGH_QUALITY,
+  numberOfChannels: 1,
+  bitRate: 64_000,
+  ios: {
+    ...RecordingPresets.HIGH_QUALITY.ios,
+    audioQuality: AudioQuality.MEDIUM,
+  },
+  web: {
+    ...RecordingPresets.HIGH_QUALITY.web,
+    bitsPerSecond: 64_000,
+  },
   directory: 'document' as const,
 };
 
