@@ -161,6 +161,24 @@ export class QuotaService {
   }
 
   /**
+   * Whether this account has an active subscription. Used for things that are not
+   * metered but still depend on paying, such as how long stored audio is kept.
+   * Without a repository (no service role key) nobody is Pro.
+   */
+  async isPro(userId: string): Promise<boolean> {
+    const repo = this.repo;
+    if (!repo) return false;
+    try {
+      return await repo.isPro(userId);
+    } catch (err) {
+      logger.error('Subscription lookup failed; treating as not Pro', {
+        message: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return false;
+    }
+  }
+
+  /**
    * Record which account is the guest for this device. A second guest account on the same
    * device is a conflict: blocked in "on" mode, only logged in "log" mode.
    */

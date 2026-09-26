@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -17,6 +18,7 @@ import {
   type SessionFolder,
 } from '@sessionai/shared';
 import { AudioPlayer } from '@/src/components/AudioPlayer';
+import { AudioRetentionNotice } from '@/src/components/AudioRetentionNotice';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { SessionWorkspace } from '@/src/components/SessionWorkspace';
@@ -61,6 +63,7 @@ export default function SessionDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [downloadingAudio, setDownloadingAudio] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadMessage, setUploadMessage] = useState<string | undefined>(undefined);
@@ -192,6 +195,23 @@ export default function SessionDetailsScreen() {
       router.push(`/recording?id=${id}&captions=${captions}`);
     })();
   }, [id, router]);
+
+  const onDownloadAudio = useCallback(async () => {
+    if (!id || typeof id !== 'string') return;
+    setDownloadingAudio(true);
+    try {
+      const signed = await getSignedAudioUrl(id);
+      await Linking.openURL(signed.url);
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : 'Could not open the audio for download. Try again.',
+      );
+    } finally {
+      setDownloadingAudio(false);
+    }
+  }, [id]);
 
   const onImportAudio = useCallback(async () => {
     if (!id || typeof id !== 'string' || !session || session.audioPath) return;
@@ -822,6 +842,14 @@ export default function SessionDetailsScreen() {
 
           {!showProcessReview && hasPlayback && !showPlayer ? (
             <Button label="Play recording" onPress={() => setShowPlayer(true)} variant="secondary" />
+          ) : null}
+
+          {!showProcessReview && session.audioPath && session.audioExpiresAt ? (
+            <AudioRetentionNotice
+              expiresAt={session.audioExpiresAt}
+              onDownload={() => void onDownloadAudio()}
+              downloading={downloadingAudio}
+            />
           ) : null}
 
           {!showProcessReview && !hasPlayback && !canRecord && !completed && !isLiveNotes ? (

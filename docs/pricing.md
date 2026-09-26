@@ -82,6 +82,33 @@ Play product IDs, one subscription each with a single base plan:
 
 After store products exist, keep `pricing.ts` labels in sync with App Store Connect / Play Console prices (regional pricing may differ from the USD list above).
 
+## Audio retention
+
+Notes, transcripts and summaries are kept for as long as the account exists,
+whether or not anyone is paying. Audio is what costs money to store, so it is
+the only thing with an expiry.
+
+| State | Stored audio |
+| --- | --- |
+| Free / never subscribed | 30 days from upload |
+| Pro, any plan, active | Kept while the subscription runs |
+| Pro, lapsed | 30 days from the lapse, then removed |
+
+Subscribing clears the expiry from everything the account already holds, so
+paying rescues recordings that were counting down. Lapsing restarts the window
+from the lapse rather than from upload, which is what gives someone 30 days to
+download before anything goes. Both happen in the RevenueCat webhook via
+`reschedule_audio_retention`.
+
+`startAudioRetentionSweeper` deletes expired objects hourly. The session screen
+shows the remaining days and a Download button once an expiry is set.
+
+A lapsed subscriber keeps full read, share and export access to everything they
+already made. Only creating new things is gated, by the usual quota rules.
+
+Settings also has "Keep audio on this device", which skips cloud storage
+entirely: the upload is deleted as soon as it has been transcribed.
+
 ## Changing prices
 
 1. Update `SUBSCRIPTION_PLANS` in `apps/mobile/src/data/pricing.ts`.  

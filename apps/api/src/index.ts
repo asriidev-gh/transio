@@ -7,6 +7,7 @@ import { drainJobs, jobStats } from './lib/job-queue.js';
 import { logger } from './lib/logger.js';
 import { getSupabaseConfigStatus } from './lib/supabase.js';
 import { attachLiveTranscribeServer } from './live/deepgram-proxy.js';
+import { startAudioRetentionSweeper } from './services/sessions/audio-retention.js';
 import { startStaleSessionSweeper } from './services/sessions/stale-sweeper.js';
 
 const env = getEnv();
@@ -21,6 +22,7 @@ if (missingConfig.length > 0) {
 }
 
 const stopSweeper = startStaleSessionSweeper();
+const stopAudioSweeper = startAudioRetentionSweeper();
 
 server.listen(env.PORT, () => {
   const supabase = getSupabaseConfigStatus();
@@ -43,6 +45,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info('Shutting down', { signal, ...jobStats() });
 
   stopSweeper();
+  stopAudioSweeper();
   server.close();
 
   const drained = await drainJobs(SHUTDOWN_DRAIN_MS);

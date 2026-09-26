@@ -93,6 +93,7 @@ export class SupabaseSessionRepository implements SessionRepository {
     if (input.status !== undefined) patch.status = input.status;
     if (input.captureMode !== undefined) patch.capture_mode = input.captureMode;
     if (input.audioStorage !== undefined) patch.audio_storage = input.audioStorage;
+    if (input.audioExpiresAt !== undefined) patch.audio_expires_at = input.audioExpiresAt;
     if (input.favoritedAt !== undefined) patch.favorited_at = input.favoritedAt;
     if (input.folderId !== undefined) patch.folder_id = input.folderId;
 
@@ -171,6 +172,7 @@ export class InMemorySessionRepository implements SessionRepository {
       status: 'recording',
       captureMode: input.captureMode ?? 'batch',
       audioStorage: input.audioStorage ?? 'cloud',
+      audioExpiresAt: null,
       favoritedAt: null,
       folderId: input.folderId ?? null,
       createdAt: now,
@@ -203,6 +205,8 @@ export class InMemorySessionRepository implements SessionRepository {
       status: input.status ?? existing.status,
       captureMode: input.captureMode ?? existing.captureMode,
       audioStorage: input.audioStorage ?? existing.audioStorage,
+      audioExpiresAt:
+        input.audioExpiresAt !== undefined ? input.audioExpiresAt : existing.audioExpiresAt,
       favoritedAt:
         input.favoritedAt !== undefined ? input.favoritedAt : existing.favoritedAt,
       folderId: input.folderId !== undefined ? input.folderId : existing.folderId,

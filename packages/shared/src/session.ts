@@ -88,6 +88,8 @@ export const SessionSchema = z.object({
   status: SessionStatusSchema,
   captureMode: CaptureModeSchema.default('batch'),
   audioStorage: AudioStorageSchema.default('cloud'),
+  /** When the stored audio may be deleted. Null means it is kept (active subscription). */
+  audioExpiresAt: z.string().nullable().default(null),
   favoritedAt: z.string().nullable().default(null),
   folderId: z.string().uuid().nullable().default(null),
   createdAt: z.string(),
@@ -138,6 +140,7 @@ export const UpdateSessionSchema = z
     status: SessionStatusSchema.optional(),
     captureMode: CaptureModeSchema.optional(),
     audioStorage: AudioStorageSchema.optional(),
+    audioExpiresAt: z.string().datetime().nullable().optional(),
     /** ISO timestamp to favorite; null to unfavorite. */
     favoritedAt: z.string().datetime().nullable().optional(),
     /** Folder id to file the session; null to move back to Unfiled. */

@@ -27,8 +27,10 @@ function body(type = 'INITIAL_PURCHASE') {
 function makeApp(options: {
   secret?: string;
   apply?: (update: SubscriptionUpdate) => Promise<boolean>;
+  onSubscriptionChanged?: (userId: string, isPro: boolean) => Promise<void>;
 }) {
   const applied: SubscriptionUpdate[] = [];
+  const rescheduled: { userId: string; isPro: boolean }[] = [];
   const app = express();
   app.use(express.json());
   app.use(
@@ -42,10 +44,15 @@ function makeApp(options: {
           applied.push(update);
           return true;
         }),
+      onSubscriptionChanged:
+        options.onSubscriptionChanged ??
+        (async (userId, isPro) => {
+          rescheduled.push({ userId, isPro });
+        }),
     }),
   );
   app.use(errorHandler);
-  return { app, applied };
+  return { app, applied, rescheduled };
 }
 
 describe('authorizationMatches', () => {
@@ -121,5 +128,43 @@ describe('POST /webhooks/revenuecat', () => {
     });
     const res = await request(app).post('/webhooks/revenuecat', body(), { Authorization: SECRET });
     assert.equal(res.status, 500);
+  });
+});
+
+describe('audio retention after a billing event', () => {
+  it('reschedules stored audio when the subscription is recorded', async () => {
+    const { app, rescheduled } = makeApp({});
+
+    const res = await request(app).post('/webhooks/revenuecat', body(), {
+      Authorization: `Bearer ${SECRET}`,
+    });
+
+    assert.equal(res.status, 200);
+    assert.equal(rescheduled.length, 1);
+    assert.equal(rescheduled[0]?.isPro, true);
+  });
+
+  it('leaves retention alone when the event was a duplicate', async () => {
+    const { app, rescheduled } = makeApp({ apply: async () => false });
+
+    await request(app).post('/webhooks/revenuecat', body(), {
+      Authorization: `Bearer ${SECRET}`,
+    });
+
+    assert.deepEqual(rescheduled, []);
+  });
+
+  it('still answers 200 when rescheduling fails, so RevenueCat does not retry', async () => {
+    const { app } = makeApp({
+      onSubscriptionChanged: async () => {
+        throw new Error('database unavailable');
+      },
+    });
+
+    const res = await request(app).post('/webhooks/revenuecat', body(), {
+      Authorization: `Bearer ${SECRET}`,
+    });
+
+    assert.equal(res.status, 200);
   });
 });

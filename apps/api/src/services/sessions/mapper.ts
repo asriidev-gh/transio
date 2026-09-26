@@ -13,6 +13,7 @@ export interface SessionRow {
   status: string;
   capture_mode?: string | null;
   audio_storage?: string | null;
+  audio_expires_at?: string | null;
   favorited_at?: string | null;
   folder_id?: string | null;
   created_at: string;
@@ -32,6 +33,7 @@ export function mapSessionRow(row: SessionRow) {
     status: row.status,
     captureMode: row.capture_mode ?? 'batch',
     audioStorage: row.audio_storage ?? 'cloud',
+    audioExpiresAt: row.audio_expires_at ?? null,
     favoritedAt: row.favorited_at ?? null,
     folderId: row.folder_id ?? null,
     createdAt: row.created_at,

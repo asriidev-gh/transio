@@ -5,6 +5,7 @@ import { getEnv } from '../lib/env.js';
 import { logger } from '../lib/logger.js';
 import { getSupabaseServiceClient } from '../lib/supabase.js';
 import { AppError } from '../middleware/error-handler.js';
+import { rescheduleAudioRetention } from '../services/sessions/audio-retention.js';
 import {
   createSupabaseSubscriptionApplier,
   type SubscriptionApplier,
@@ -27,7 +28,13 @@ export function authorizationMatches(header: string | undefined, secret: string)
 
 /** Server-to-server callbacks. Not authenticated with a user token, so each one checks a secret. */
 export function createWebhooksRouter(
-  options: { apply?: SubscriptionApplier; secret?: () => string; entitlementId?: () => string } = {},
+  options: {
+    apply?: SubscriptionApplier;
+    secret?: () => string;
+    entitlementId?: () => string;
+    /** Re-dates the user's stored audio after the subscription changes. */
+    onSubscriptionChanged?: (userId: string, isPro: boolean) => Promise<void>;
+  } = {},
 ) {
   const router = Router();
   const secret = options.secret ?? (() => getEnv().REVENUECAT_WEBHOOK_SECRET);
@@ -35,6 +42,10 @@ export function createWebhooksRouter(
   const apply =
     options.apply ??
     ((update) => createSupabaseSubscriptionApplier(getSupabaseServiceClient())(update));
+  const onSubscriptionChanged =
+    options.onSubscriptionChanged ??
+    ((userId: string, isPro: boolean) =>
+      rescheduleAudioRetention(getSupabaseServiceClient(), userId, isPro));
 
   router.post('/revenuecat', async (req, res, next) => {
     try {
@@ -54,6 +65,18 @@ export function createWebhooksRouter(
       }
 
       const applied = await apply(update);
+      if (applied) {
+        // Subscribing lifts the expiry from stored audio; lapsing starts the
+        // countdown that gives them time to download it. Never fail the webhook
+        // over this — RevenueCat would retry an event we already recorded.
+        try {
+          await onSubscriptionChanged(update.userId, update.isActive);
+        } catch (err) {
+          logger.warn('Could not reschedule audio retention after a billing event', {
+            message: err instanceof Error ? err.message : 'Unknown error',
+          });
+        }
+      }
       logger.info('Billing event processed', {
         type: event?.type,
         applied,

@@ -23,6 +23,8 @@ import {
   SupabaseAudioStorage,
   type AudioStorage,
 } from '../services/storage/audio-storage.js';
+import { getQuotaService } from '../services/quota/index.js';
+import { audioExpiryFor } from '../services/sessions/audio-retention.js';
 import type { SessionRepoFactory } from './sessions.js';
 
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour
@@ -59,6 +61,8 @@ async function storePreparedMedia(options: {
   media: MediaBytes;
   repo: SessionRepository;
   storage: AudioStorage;
+  /** Active subscriptions keep their audio; everyone else gets a retention window. */
+  isPro: boolean;
 }): Promise<{ audioPath: string; status: string }> {
   const audioPath = resolveUploadPath(
     options.userId,
@@ -82,6 +86,7 @@ async function storePreparedMedia(options: {
   const updated = await options.repo.update(options.userId, options.sessionId, {
     audioPath,
     status: nextStatus === 'recording' ? 'uploaded' : nextStatus,
+    audioExpiresAt: audioExpiryFor(options.isPro),
   });
   if (!updated) {
     throw new AppError('NOT_FOUND', 'Session not found', 404);
@@ -98,12 +103,15 @@ export function registerAudioRoutes(
     onUploaded?: (sessionId: string, req: Request) => void;
     prepareMedia?: MediaPreparer;
     fetchRemoteMedia?: RemoteMediaFetcher;
+    /** Decides how long an upload's audio is kept. Defaults to the subscription lookup. */
+    isPro?: (userId: string) => Promise<boolean>;
   },
 ): void {
   const createAudioStorage = options.createAudioStorage ?? defaultAudioStorageFactory;
   const createRepository = options.createRepository;
   const prepareMedia = options.prepareMedia ?? prepareMediaForTranscription;
   const downloadRemote = options.fetchRemoteMedia ?? fetchRemoteMedia;
+  const isPro = options.isPro ?? ((userId: string) => getQuotaService().isPro(userId));
 
   router.post('/:id/audio', uploadGate(), audioUpload.single('file'), async (req, res, next) => {
     try {
@@ -135,6 +143,7 @@ export function registerAudioRoutes(
         media: prepared,
         repo,
         storage: createAudioStorage(req),
+        isPro: await isPro(req.user.id),
       });
 
       const payload = AudioUploadResultSchema.parse({
@@ -186,6 +195,7 @@ export function registerAudioRoutes(
         media: prepared,
         repo,
         storage: createAudioStorage(req),
+        isPro: await isPro(req.user.id),
       });
 
       const payload = AudioUploadResultSchema.parse({
