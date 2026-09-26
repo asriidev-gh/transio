@@ -149,9 +149,9 @@ export default function SettingsScreen() {
     const next = !deviceOnlyAudio;
     if (next) {
       const ok = await confirmAction(
-        'Keep audio on this device?',
-        'New recordings upload so they can be transcribed, then the cloud copy is deleted. Only this phone will have the audio, so it is lost if you uninstall the app or clear its storage. Notes, transcripts and summaries stay in your account.',
-        'Keep on device',
+        'Keep audio private to this phone?',
+        'New recordings will be uploaded only long enough to transcribe, then deleted from our servers. This phone will hold the only audio, so it is lost if you uninstall the app or clear its storage. Notes, transcripts and summaries stay in your account.',
+        'Turn on',
       );
       if (!ok) return;
     }
@@ -379,7 +379,7 @@ export default function SettingsScreen() {
         <View style={styles.notifBlock}>
           <SettingsRow
             icon="download-outline"
-            label="Keep audio on this device"
+            label="Private audio"
             value={deviceOnlyAudio ? 'On' : 'Off'}
             onPress={() => void onToggleDeviceOnlyAudio()}
             showChevron
@@ -387,8 +387,8 @@ export default function SettingsScreen() {
           />
           <Text style={[styles.hint, styles.notifHint, { color: colors.inkMuted }]}>
             {deviceOnlyAudio
-              ? 'New recordings are transcribed, then the cloud copy is deleted. Only this phone keeps the audio — uninstalling loses it. Notes and transcripts stay in your account.'
-              : 'Audio is kept in your account so it plays on any device. Turn this on to delete the cloud copy after transcribing.'}
+              ? 'Recordings are uploaded only long enough to transcribe, then deleted from our servers. This phone keeps the only audio, so uninstalling loses it.'
+              : 'Audio is stored in your account for 30 days, or for as long as you subscribe. Turn this on to have it deleted as soon as it has been transcribed.'}
           </Text>
         </View>
       </SettingsGroup>
