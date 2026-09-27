@@ -20,10 +20,19 @@ import { mobileEnv } from '@/src/lib/env';
 import { hasSeenOnboarding } from '@/src/services/onboarding';
 import { QuotaBlockedHandler } from '@/src/components/QuotaBlockedHandler';
 import { ShareIntentHandler } from '@/src/components/ShareIntentHandler';
+import { recordAppOpen } from '@/src/services/store-review';
 
 export { ErrorBoundary } from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
+
+/** One open per process, including launches that stop on the paywall. */
+function AppOpenCounter() {
+  useEffect(() => {
+    void recordAppOpen();
+  }, []);
+  return null;
+}
 
 /** Fire-and-forget /health so Render free tier can wake during boot video. */
 function warmApi(): void {
@@ -153,6 +162,7 @@ function ThemedRoot() {
       <AuthProvider>
         <StatusBar style={scheme === 'light' ? 'dark' : 'light'} />
         <AuthGate>
+          <AppOpenCounter />
           <ShareIntentHandler />
           <QuotaBlockedHandler />
           <Stack

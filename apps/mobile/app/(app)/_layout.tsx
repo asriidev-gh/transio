@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { FloatingTabBar } from '@/src/components/FloatingTabBar';
+import { StoreReviewPrompt } from '@/src/components/StoreReviewPrompt';
 import { useTheme } from '@/src/theme/ThemeContext';
 
 export default function AppLayout() {
@@ -30,6 +31,7 @@ export default function AppLayout() {
         </Stack>
       </View>
       <FloatingTabBar />
+      <StoreReviewPrompt />
     </View>
   );
 }
