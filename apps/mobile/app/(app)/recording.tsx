@@ -30,7 +30,6 @@ import { WaveformVisualizer } from '@/src/components/WaveformVisualizer';
 import { ApiClientError } from '@/src/services/api';
 import {
   createLiveCaptionController,
-  getLiveCaptionLanguagePref,
   isLiveCaptionsSupported,
   LIVE_CAPTION_LANGUAGES,
   saveLiveTranscript,
@@ -99,7 +98,7 @@ const EMPTY_CAPTIONS: LiveCaptionSnapshot = {
   finalSpeakers: [],
   interim: '',
   error: null,
-  language: 'tl',
+  language: 'multi',
 };
 
 export default function RecordingScreen() {
@@ -146,7 +145,7 @@ export default function RecordingScreen() {
     parseRecordCaptionsMode(captionsParam),
   );
   const [captions, setCaptions] = useState<LiveCaptionSnapshot>(EMPTY_CAPTIONS);
-  const [captionLanguage, setCaptionLanguage] = useState<LiveCaptionLanguage>('tl');
+  const [captionLanguage, setCaptionLanguage] = useState<LiveCaptionLanguage>('multi');
   const [translateTarget, setTranslateTarget] = useState<TranslateLanguage | null>(null);
   /** Translation per sentence index; null when that sentence failed to translate. */
   const [translations, setTranslations] = useState<Record<number, string | null>>({});
@@ -156,7 +155,7 @@ export default function RecordingScreen() {
   const startedRef = useRef(false);
   const activeRef = useRef(false);
   const liveRef = useRef<LiveCaptionController | null>(null);
-  const captionLanguageRef = useRef<LiveCaptionLanguage>('tl');
+  const captionLanguageRef = useRef<LiveCaptionLanguage>('multi');
   const translateTargetRef = useRef<TranslateLanguage | null>(null);
   /** Last language picked, so turning translate back on restores it. */
   const lastTranslateTargetRef = useRef<TranslateLanguage | null>(null);
@@ -325,16 +324,12 @@ export default function RecordingScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([getLiveCaptionLanguagePref(), getLiveTranslateTargetPref()]).then(
-      ([lang, target]) => {
-        if (cancelled) return;
-        captionLanguageRef.current = lang;
-        setCaptionLanguage(lang);
-        translateTargetRef.current = target;
-        lastTranslateTargetRef.current = target;
-        setTranslateTarget(target);
-      },
-    );
+    // Each recording starts on Auto with translation off; the last translate
+    // language is only remembered for when the toggle is turned on.
+    void getLiveTranslateTargetPref().then((target) => {
+      if (cancelled || !target) return;
+      lastTranslateTargetRef.current = target;
+    });
     return () => {
       cancelled = true;
     };
@@ -354,9 +349,11 @@ export default function RecordingScreen() {
   const chooseTranslateTarget = useCallback(
     (target: TranslateLanguage | null) => {
       translateTargetRef.current = target;
-      if (target) lastTranslateTargetRef.current = target;
+      if (target) {
+        lastTranslateTargetRef.current = target;
+        void setLiveTranslateTargetPref(target);
+      }
       setTranslateTarget(target);
-      void setLiveTranslateTargetPref(target);
       resetTranslations();
     },
     [resetTranslations],
@@ -925,10 +922,18 @@ export default function RecordingScreen() {
             >
               <Icon
                 name="translate"
-                size={18}
+                size={16}
                 variant="line"
                 color={translateOn ? '#FFFFFF' : colors.inkMuted}
               />
+              <Text
+                style={[
+                  styles.translateToggleText,
+                  { color: translateOn ? '#FFFFFF' : colors.inkMuted },
+                ]}
+              >
+                Translation: {translateOn ? 'On' : 'Off'}
+              </Text>
             </Pressable>
           </View>
 
@@ -1290,12 +1295,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   translateToggle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+  },
+  translateToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   translateBar: {
     borderTopWidth: StyleSheet.hairlineWidth,
