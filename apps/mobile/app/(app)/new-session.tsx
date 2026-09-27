@@ -226,6 +226,10 @@ export default function NewSessionScreen() {
   async function onStartRecording() {
     const trimmed = resolveTitle();
     if (!trimmed) return;
+    if (sessionType === 'other' && !customTypeLabel.trim()) {
+      setError('Enter a name for this session type, or pick another type.');
+      return;
+    }
     if (!(await ensureSessionQuota())) return;
 
     let modeToUse = captionsMode;
@@ -233,24 +237,16 @@ export default function NewSessionScreen() {
       modeToUse = 'batch';
     }
 
-    setLoading(true);
-    setError(null);
-    try {
-      await setRecordCaptionsModePref(modeToUse);
-      const session = await createDraft(trimmed, modeToUse);
-      await consumeFeature('session');
-      router.replace(`/recording?id=${session.id}&captions=${modeToUse}`);
-    } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : 'Could not create session. Check your connection and try again.',
-      );
-    } finally {
-      setLoading(false);
-    }
+    void setRecordCaptionsModePref(modeToUse);
+    const qs = new URLSearchParams({
+      captions: modeToUse,
+      draftTitle: trimmed,
+      sessionType,
+      description: description.trim(),
+    });
+    if (folderId) qs.set('folderId', folderId);
+    if (sessionType === 'other') qs.set('customType', customTypeLabel.trim());
+    router.replace(`/recording?${qs.toString()}` as Href);
   }
 
   async function onChooseFile() {
@@ -482,7 +478,7 @@ export default function NewSessionScreen() {
                 {renderModeOption(
                   'batch',
                   CAPTURE_MODE_LABELS.batch,
-                  'Save audio only while recording. Transcribe after you upload and proceed — quieter and uses less data.',
+                  'Save audio only while recording. Transcribe after you upload.',
                   false,
                 )}
                 <Pressable
@@ -509,8 +505,7 @@ export default function NewSessionScreen() {
                       Transcribe Audio/Video File
                     </Text>
                     <Text style={[styles.modeHint, { color: colors.inkMuted }]}>
-                      Upload an audio or video file, or paste a direct file link — same as Home →
-                      Upload.
+                      Upload an audio or video file, or paste a direct file link.
                     </Text>
                   </View>
                 </Pressable>
@@ -519,13 +514,13 @@ export default function NewSessionScreen() {
                     {renderModeOption(
                       'live_notes',
                       'Live Note Taker',
-                      'Notes grow while you speak. Audio is kept; transcript is not saved.',
+                      'Notes grow while you speak.',
                       false,
                     )}
                     {renderModeOption(
                       'live',
                       'Live captions',
-                      'See speech as you talk. Choose Tagalog or English on the recording screen.',
+                      'See speech as you talk.',
                       false,
                     )}
                   </>
@@ -571,7 +566,7 @@ export default function NewSessionScreen() {
                   <View style={styles.modeCopy}>
                     <Text style={[styles.modeTitle, { color: colors.ink }]}>Live Translator</Text>
                     <Text style={[styles.modeHint, { color: colors.inkMuted }]}>
-                      Hold to talk — we translate and your phone speaks it back. No session file.
+                      Hold to talk — we translate and your phone speaks it back.
                     </Text>
                   </View>
                 </Pressable>

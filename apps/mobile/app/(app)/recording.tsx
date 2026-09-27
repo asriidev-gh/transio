@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
   type AppStateStatus,
@@ -22,6 +22,8 @@ import {
 } from 'expo-audio';
 import { RecordingButton } from '@/src/components/RecordingButton';
 import { RecordingTimer } from '@/src/components/RecordingTimer';
+import { GlossOrb } from '@/src/components/ui/GlossOrb';
+import { Icon } from '@/src/components/ui/Icon';
 import { ErrorState } from '@/src/components/ErrorState';
 import { LoadingState } from '@/src/components/LoadingState';
 import { WaveformVisualizer } from '@/src/components/WaveformVisualizer';
@@ -40,6 +42,7 @@ import {
   getLiveTranslateTargetPref,
   isSameLiveLanguage,
   LIVE_TRANSLATE_TARGET_OPTIONS,
+  liveTranslateTargetLabel,
   setLiveTranslateTargetPref,
   translateLiveChunk,
 } from '@/src/services/live-translate';
@@ -53,12 +56,21 @@ import {
 import { finalizeSessionNotes } from '@/src/services/live-notes';
 import { writeNotesDraft } from '@/src/services/notes-draft';
 import { saveLocalAudioUri } from '@/src/services/local-audio';
-import { getSession, updateSession } from '@/src/services/sessions';
+import { getSession, updateSession, createSession } from '@/src/services/sessions';
 import { PaperNotesView } from '@/src/components/PaperNotesView';
 import { radii, sizes, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { confirmAction } from '@/src/utils/confirm';
-import { bulletsFromCaptionFinals, rawNotesFromFinals, type TranslateLanguage } from '@sessionai/shared';
+import {
+  buildCaptionTurns,
+  hasMultipleSpeakers,
+  liveSpeakerLabel,
+} from '@/src/utils/live-caption-lines';
+import { bulletsFromCaptionFinals, rawNotesFromFinals, type SessionType, type TranslateLanguage } from '@sessionai/shared';
+import { consumeFeature } from '@/src/services/entitlements';
+import { ensureDefaultFolder } from '@/src/services/default-folder';
+import { getAudioStoragePreference } from '@/src/services/audio-storage-preference';
+import { rememberCustomSessionType } from '@/src/services/custom-session-types';
 
 type PermissionState = 'checking' | 'granted' | 'denied' | 'unavailable';
 
@@ -84,16 +96,34 @@ const RECORDING_OPTIONS = {
 const EMPTY_CAPTIONS: LiveCaptionSnapshot = {
   status: 'idle',
   finals: [],
+  finalSpeakers: [],
   interim: '',
   error: null,
   language: 'tl',
 };
 
 export default function RecordingScreen() {
-  const { id, captions: captionsParam } = useLocalSearchParams<{
-    id: string;
+  const {
+    id: routeId,
+    captions: captionsParam,
+    draftTitle,
+    sessionType: sessionTypeParam,
+    description: descriptionParam,
+    folderId: folderIdParam,
+    customType: customTypeParam,
+  } = useLocalSearchParams<{
+    id?: string;
     captions?: string;
+    draftTitle?: string;
+    sessionType?: string;
+    description?: string;
+    folderId?: string;
+    customType?: string;
   }>();
+  const initialId = typeof routeId === 'string' ? routeId : null;
+  const [sessionId, setSessionId] = useState<string | null>(initialId);
+  const sessionIdRef = useRef<string | null>(initialId);
+  const openingSessionRef = useRef<Promise<{ id: string; title: string }> | null>(null);
   const router = useRouter();
   const navigation = useNavigation();
 
@@ -109,6 +139,7 @@ export default function RecordingScreen() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [captionsMode, setCaptionsMode] = useState<RecordCaptionsMode | null>(
@@ -117,8 +148,9 @@ export default function RecordingScreen() {
   const [captions, setCaptions] = useState<LiveCaptionSnapshot>(EMPTY_CAPTIONS);
   const [captionLanguage, setCaptionLanguage] = useState<LiveCaptionLanguage>('tl');
   const [translateTarget, setTranslateTarget] = useState<TranslateLanguage | null>(null);
-  const [translatedFinals, setTranslatedFinals] = useState<string[]>([]);
-  const [translateBusy, setTranslateBusy] = useState(false);
+  /** Translation per sentence index; null when that sentence failed to translate. */
+  const [translations, setTranslations] = useState<Record<number, string | null>>({});
+  const [translateInFlight, setTranslateInFlight] = useState(0);
   const [translateError, setTranslateError] = useState<string | null>(null);
   const [notesError, setNotesError] = useState<string | null>(null);
   const startedRef = useRef(false);
@@ -126,9 +158,14 @@ export default function RecordingScreen() {
   const liveRef = useRef<LiveCaptionController | null>(null);
   const captionLanguageRef = useRef<LiveCaptionLanguage>('tl');
   const translateTargetRef = useRef<TranslateLanguage | null>(null);
-  const translatedCountRef = useRef(0);
-  const translateQueueRef = useRef(Promise.resolve());
+  /** Last language picked, so turning translate back on restores it. */
+  const lastTranslateTargetRef = useRef<TranslateLanguage | null>(null);
+  const requestedSentencesRef = useRef(new Set<number>());
+  /** Sentences before this index are not translated (limits backfill after a switch). */
+  const translateFromRef = useRef(0);
   const translateGenRef = useRef(0);
+  const captionScrollRef = useRef<ScrollView>(null);
+  const captionStickToEndRef = useRef(true);
   const captionsModeRef = useRef<RecordCaptionsMode | null>(
     parseRecordCaptionsMode(captionsParam),
   );
@@ -141,9 +178,20 @@ export default function RecordingScreen() {
     captionsInterimRef.current = captions.interim;
   }, [captions.finals, captions.interim]);
 
+  const captionTurns = useMemo(
+    () => buildCaptionTurns(captions.finals, captions.finalSpeakers),
+    [captions.finals, captions.finalSpeakers],
+  );
+  const showSpeakers = useMemo(
+    () => hasMultipleSpeakers(captions.finalSpeakers),
+    [captions.finalSpeakers],
+  );
+  const sentenceCountRef = useRef(0);
+  sentenceCountRef.current = captionTurns.reduce((n, t) => n + t.sentences.length, 0);
+
   const { colors, shadows } = useTheme();
-  const { width: windowWidth } = useWindowDimensions();
-  const sideBySideCaptions = windowWidth >= 720;
+  const { height: windowHeight } = useWindowDimensions();
+  const captionMaxHeight = Math.max(260, Math.round(windowHeight * 0.5));
   const elapsedSeconds = Math.max(0, Math.floor((recorderState.durationMillis ?? 0) / 1000));
   const isRecording = recorderState.isRecording;
   const blockingNavigation = (isRecording || isPaused) && !stopping;
@@ -170,7 +218,7 @@ export default function RecordingScreen() {
     }
   }, []);
 
-  const startLiveCaptions = useCallback(async () => {
+  const startLiveCaptions = useCallback(async (opts?: { capture?: boolean }) => {
     const mode = captionsModeRef.current;
     if (!mode || !modeNeedsLiveStt(mode)) return;
     if (!isLiveCaptionsSupported() || !isLiveCaptionsModeAvailable()) return;
@@ -181,7 +229,12 @@ export default function RecordingScreen() {
       live.subscribe(setCaptions);
     }
     try {
-      await liveRef.current.start({ language: captionLanguageRef.current });
+      const language =
+        captionsModeRef.current === 'live_notes' ? 'multi' : captionLanguageRef.current;
+      await liveRef.current.start({
+        language,
+        capture: opts?.capture,
+      });
     } catch {
       // Snapshot already has error; recording file path continues.
     }
@@ -230,17 +283,27 @@ export default function RecordingScreen() {
 
       recorder.record();
       startedRef.current = true;
+      setHasStarted(true);
       activeRef.current = true;
       setIsPaused(false);
       if (captionsModeRef.current && modeNeedsLiveStt(captionsModeRef.current)) {
-        // Native: brief delay so expo-audio can own the session before PCM streaming starts.
-        const delay = Platform.OS === 'web' ? 0 : 300;
-        if (delay === 0) {
-          void startLiveCaptions();
-        } else {
+        const alreadyLive = liveRef.current?.getSnapshot().status === 'live';
+        if (alreadyLive) {
+          // Let the file recorder take the mic, then start captions so they stay up.
+          const delay = Platform.OS === 'web' ? 0 : 300;
           setTimeout(() => {
-            void startLiveCaptions();
+            void liveRef.current?.beginCapture();
           }, delay);
+        } else {
+          // Native: brief delay so expo-audio can own the session before PCM streaming starts.
+          const delay = Platform.OS === 'web' ? 0 : 300;
+          if (delay === 0) {
+            void startLiveCaptions();
+          } else {
+            setTimeout(() => {
+              void startLiveCaptions();
+            }, delay);
+          }
         }
       }
     } catch (err) {
@@ -268,6 +331,7 @@ export default function RecordingScreen() {
         captionLanguageRef.current = lang;
         setCaptionLanguage(lang);
         translateTargetRef.current = target;
+        lastTranslateTargetRef.current = target;
         setTranslateTarget(target);
       },
     );
@@ -276,58 +340,92 @@ export default function RecordingScreen() {
     };
   }, []);
 
+  /** Drop translations after the spoken or target language changes. */
+  const resetTranslations = useCallback(() => {
+    translateGenRef.current += 1;
+    requestedSentencesRef.current = new Set();
+    // Re-translate only the last few sentences, not the whole session so far.
+    translateFromRef.current = Math.max(0, sentenceCountRef.current - 6);
+    setTranslations({});
+    setTranslateInFlight(0);
+    setTranslateError(null);
+  }, []);
+
+  const chooseTranslateTarget = useCallback(
+    (target: TranslateLanguage | null) => {
+      translateTargetRef.current = target;
+      if (target) lastTranslateTargetRef.current = target;
+      setTranslateTarget(target);
+      void setLiveTranslateTargetPref(target);
+      resetTranslations();
+    },
+    [resetTranslations],
+  );
+
+  const toggleTranslate = useCallback(() => {
+    if (translateTargetRef.current) {
+      chooseTranslateTarget(null);
+      return;
+    }
+    const source = captionLanguageRef.current;
+    const remembered = lastTranslateTargetRef.current;
+    const fallback = LIVE_TRANSLATE_TARGET_OPTIONS.find(
+      (opt) => opt.code != null && !isSameLiveLanguage(source, opt.code),
+    )?.code;
+    const next =
+      remembered && !isSameLiveLanguage(source, remembered) ? remembered : (fallback ?? null);
+    chooseTranslateTarget(next);
+  }, [chooseTranslateTarget]);
+
+  // Translate each sentence once it is complete, keyed by its index so it lines up
+  // under the spoken sentence. Requests run side by side to keep up with speech.
   useEffect(() => {
-    if (!liveEnabled || !id || typeof id !== 'string') return;
+    if (!liveEnabled || !sessionId) return;
     const target = translateTargetRef.current;
     if (!target) return;
-    if (isSameLiveLanguage(captionLanguageRef.current, target)) return;
-
     const source = captionLanguageRef.current;
-    const sessionId = id;
+    if (isSameLiveLanguage(source, target)) return;
 
-    while (translatedCountRef.current < captions.finals.length) {
-      const nextIndex = translatedCountRef.current;
-      const chunk = captions.finals[nextIndex];
-      translatedCountRef.current = nextIndex + 1;
-      if (!chunk?.trim()) continue;
+    const gen = translateGenRef.current;
+    for (const turn of captionTurns) {
+      for (const sentence of turn.sentences) {
+        if (!sentence.complete) continue;
+        if (sentence.index < translateFromRef.current) continue;
+        if (requestedSentencesRef.current.has(sentence.index)) continue;
+        requestedSentencesRef.current.add(sentence.index);
 
-      const gen = translateGenRef.current;
-      translateQueueRef.current = translateQueueRef.current
-        .then(async () => {
-          if (gen !== translateGenRef.current) return;
-          setTranslateBusy(true);
-          setTranslateError(null);
-          try {
-            const result = await translateLiveChunk(sessionId, chunk, target, source);
+        setTranslateInFlight((n) => n + 1);
+        void translateLiveChunk(sessionId, sentence.text, target, source)
+          .then((result) => {
             if (gen !== translateGenRef.current) return;
-            setTranslatedFinals((prev) => [...prev, result.text]);
-          } catch (err) {
+            setTranslations((prev) => ({ ...prev, [sentence.index]: result.text }));
+            setTranslateError(null);
+          })
+          .catch((err: unknown) => {
             if (gen !== translateGenRef.current) return;
+            setTranslations((prev) => ({ ...prev, [sentence.index]: null }));
             setTranslateError(
-              err instanceof ApiClientError
+              err instanceof ApiClientError && err.status === 429
                 ? err.message
-                : 'Live translation paused — captions continue.',
+                : 'Some lines could not be translated — captions continue.',
             );
-          } finally {
-            if (gen === translateGenRef.current) {
-              setTranslateBusy(false);
-            }
-          }
-        })
-        .catch(() => undefined);
+          })
+          .finally(() => {
+            if (gen !== translateGenRef.current) return;
+            setTranslateInFlight((n) => Math.max(0, n - 1));
+          });
+      }
     }
-  }, [captions.finals, liveEnabled, id, translateTarget]);
+  }, [captionTurns, liveEnabled, sessionId, translateTarget, captionLanguage]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function boot() {
-      if (!id || typeof id !== 'string') {
-        setBootError('Missing session id.');
-        return;
-      }
+      const one = (value: string | string[] | undefined) =>
+        Array.isArray(value) ? value[0] : value;
 
-      let mode = parseRecordCaptionsMode(captionsParam) ?? captionsModeRef.current;
+      let mode = parseRecordCaptionsMode(one(captionsParam)) ?? captionsModeRef.current;
       if (!mode) {
         mode = await getRecordCaptionsModePref();
       }
@@ -342,26 +440,76 @@ export default function RecordingScreen() {
         setCaptionsMode(mode);
       }
 
+      const permissionPromise = ensurePermission();
+
       try {
-        const session = await getSession(id);
-        if (!cancelled) {
-          setTitle(session.title);
+        let activeId = sessionIdRef.current;
+        if (!activeId) {
+          if (!openingSessionRef.current) {
+            const titleDraft = one(draftTitle)?.trim() ?? '';
+            const rawType = one(sessionTypeParam);
+            const sessionType: SessionType =
+              rawType === 'seminar' ||
+              rawType === 'group_discussion' ||
+              rawType === 'bible_study' ||
+              rawType === 'meeting' ||
+              rawType === 'lecture' ||
+              rawType === 'other'
+                ? rawType
+                : 'group_discussion';
+            const customLabel = one(customTypeParam)?.trim() ?? '';
+            const requestedFolder = one(folderIdParam)?.trim() ?? '';
+            const description = one(descriptionParam)?.trim() || null;
+            const captureMode = mode ?? 'batch';
+            openingSessionRef.current = (async () => {
+              if (!titleDraft) throw new Error('Missing session id.');
+              if (sessionType === 'other' && customLabel) {
+                await rememberCustomSessionType(customLabel);
+              }
+              const folderId = requestedFolder || (await ensureDefaultFolder()).id;
+              const created = await createSession({
+                title: titleDraft,
+                sessionType,
+                description,
+                folderId,
+                captureMode,
+                audioStorage: await getAudioStoragePreference(),
+              });
+              await consumeFeature('session');
+              return { id: created.id, title: created.title };
+            })();
+          }
+          const created = await openingSessionRef.current;
+          activeId = created.id;
+          sessionIdRef.current = activeId;
+          if (!cancelled) {
+            setSessionId(activeId);
+            setTitle(created.title);
+          }
+        } else {
+          const session = await getSession(activeId);
+          if (!cancelled) setTitle(session.title);
         }
       } catch (err) {
         if (!cancelled) {
           setBootError(
             err instanceof ApiClientError
               ? err.message
-              : 'Could not load this session for recording.',
+              : 'Could not open this session for recording.',
           );
         }
         return;
       }
 
-      const granted = await ensurePermission();
+      const granted = await permissionPromise;
       if (cancelled || !granted) return;
 
       if (!startedRef.current) {
+        // Connect live captions first. The audio file starts only when the user taps record.
+        if (mode && modeNeedsLiveStt(mode)) {
+          await startLiveCaptions({ capture: false });
+          return;
+        }
         await startRecording();
         return;
       }
@@ -381,7 +529,19 @@ export default function RecordingScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, captionsParam, ensurePermission, startRecording, startLiveCaptions]);
+  }, [captionsParam, draftTitle, sessionTypeParam, descriptionParam, folderIdParam, customTypeParam, ensurePermission, startRecording, startLiveCaptions]);
+
+  // Keep trying the caption service until it is up. Recording stays off until then.
+  useEffect(() => {
+    if (!liveSttEnabled || hasStarted) return;
+    if (captions.status !== 'error') return;
+    const message = captions.error ?? '';
+    if (/sign in|not available|development or EAS|Expo Go/i.test(message)) return;
+    const timer = setTimeout(() => {
+      void startLiveCaptions({ capture: false });
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [liveSttEnabled, hasStarted, captions.status, captions.error, startLiveCaptions]);
 
   // Stop live STT only when leaving the recording screen — not when boot deps churn.
   useEffect(() => {
@@ -443,7 +603,8 @@ export default function RecordingScreen() {
   }
 
   async function onStop() {
-    if (!id || typeof id !== 'string') return;
+    const id = sessionIdRef.current;
+    if (!id) return;
     setStopping(true);
     setRecordError(null);
     try {
@@ -565,6 +726,18 @@ export default function RecordingScreen() {
     );
   }
 
+  if (!sessionId) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <LoadingState
+          message={
+            permission === 'checking' ? 'Checking microphone…' : 'Opening your session…'
+          }
+        />
+      </View>
+    );
+  }
+
   if (permission === 'checking' || starting) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
@@ -572,6 +745,47 @@ export default function RecordingScreen() {
           message={
             permission === 'checking' ? 'Checking microphone…' : 'Preparing to record…'
           }
+        />
+      </View>
+    );
+  }
+
+  const translateOn = translateTarget != null;
+  const translateSameLanguage =
+    translateTarget != null && isSameLiveLanguage(captionLanguage, translateTarget);
+  const translateTargetLabel = translateTarget ? liveTranslateTargetLabel(translateTarget) : '';
+  const interimText = captions.interim.trim();
+  const lastSentenceOpen =
+    captionTurns[captionTurns.length - 1]?.sentences.at(-1)?.complete === false;
+
+  const waitingForStage =
+    permission === 'granted' &&
+    liveSttEnabled &&
+    !hasStarted &&
+    captions.status !== 'live';
+  const stageBlocked =
+    waitingForStage &&
+    /sign in|not available|development or EAS|Expo Go/i.test(captions.error ?? '');
+
+  if (stageBlocked) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ErrorState
+          title="Live captions aren’t available"
+          description={captions.error ?? 'Could not start live captions.'}
+          onRetry={() => router.back()}
+          actionLabel="Go back"
+        />
+      </View>
+    );
+  }
+
+  if (waitingForStage) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <LoadingState
+          message="We are setting up the stage for you"
+          detail="Hang on for a second…"
         />
       </View>
     );
@@ -587,7 +801,19 @@ export default function RecordingScreen() {
               ? 'Smart Transcriber needs microphone access to record seminars and discussions. Enable it in system settings, then try again.'
               : 'Microphone access is unavailable in this environment.'
           }
-          onRetry={() => void ensurePermission().then((ok) => (ok ? startRecording() : undefined))}
+          onRetry={() =>
+            void ensurePermission().then((ok) => {
+              if (!ok) return;
+              if (
+                captionsModeRef.current &&
+                modeNeedsLiveStt(captionsModeRef.current)
+              ) {
+                void startLiveCaptions({ capture: false });
+                return;
+              }
+              void startRecording();
+            })
+          }
         />
       </View>
     );
@@ -643,46 +869,6 @@ export default function RecordingScreen() {
       {liveNotesEnabled ? (
         <View style={styles.liveNotesWrap} accessibilityLiveRegion="polite">
           <Text style={[styles.captionLabel, { color: colors.inkMuted }]}>Notes</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.langScroll}
-            contentContainerStyle={styles.langRow}
-          >
-            {LIVE_CAPTION_LANGUAGES.map((opt) => {
-              const selected = captionLanguage === opt.code;
-              return (
-                <Pressable
-                  key={opt.code}
-                  onPress={() => {
-                    setNotesError(null);
-                    captionLanguageRef.current = opt.code;
-                    setCaptionLanguage(opt.code);
-                    void liveRef.current?.setLanguage(opt.code);
-                  }}
-                  style={[
-                    styles.langChip,
-                    {
-                      borderColor: selected ? colors.accent : colors.border,
-                      backgroundColor: colors.surface,
-                    },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={`Spoken language ${opt.label}`}
-                >
-                  <Text
-                    style={[
-                      styles.langChipText,
-                      { color: selected ? colors.accent : colors.inkMuted },
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
           {notesError ? (
             <Text style={[styles.captionText, { color: colors.danger }]}>{notesError}</Text>
           ) : null}
@@ -696,7 +882,9 @@ export default function RecordingScreen() {
                   ? captions.error
                   : captions.status === 'error'
                     ? 'Mic text unavailable — recording continues.'
-                    : 'Speak to write notes…'
+                    : hasStarted
+                      ? 'Speak to write notes…'
+                      : 'Tap record, then speak to write notes…'
             }
             compact
           />
@@ -706,82 +894,226 @@ export default function RecordingScreen() {
       {liveEnabled ? (
         <View
           style={[
-            styles.captionPanes,
-            sideBySideCaptions ? styles.captionPanesRow : styles.captionPanesStack,
+            styles.captionCard,
+            {
+              backgroundColor: colors.surface,
+              borderColor: translateOn ? colors.cyan : colors.border,
+            },
           ]}
         >
-          <View
-            style={[
-              styles.captionCard,
-              styles.spokenPane,
-              sideBySideCaptions && styles.captionCardHalf,
-              { backgroundColor: colors.surface, borderColor: colors.border },
-            ]}
+          <View style={styles.paneHeader}>
+            <View style={[styles.paneDot, { backgroundColor: colors.accent }]} />
+            <Text style={[styles.captionLabel, { color: colors.inkMuted }]}>Spoken</Text>
+            {translateInFlight > 0 ? (
+              <Text style={[styles.translateBusy, { color: colors.inkMuted }]}>Translating…</Text>
+            ) : null}
+            <Pressable
+              onPress={toggleTranslate}
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.translateToggle,
+                {
+                  backgroundColor: translateOn ? colors.cyan : colors.surface,
+                  borderColor: translateOn ? colors.cyan : colors.border,
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: translateOn }}
+              accessibilityLabel="Live translate"
+              accessibilityHint="Shows a translation under each sentence"
+            >
+              <Icon
+                name="translate"
+                size={18}
+                variant="line"
+                color={translateOn ? '#FFFFFF' : colors.inkMuted}
+              />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.langScroll}
+            contentContainerStyle={styles.langRow}
+          >
+            {LIVE_CAPTION_LANGUAGES.map((opt) => {
+              const selected = captionLanguage === opt.code;
+              return (
+                <Pressable
+                  key={opt.code}
+                  onPress={() => {
+                    captionLanguageRef.current = opt.code;
+                    setCaptionLanguage(opt.code);
+                    resetTranslations();
+                    void liveRef.current?.setLanguage(opt.code);
+                  }}
+                  style={[
+                    styles.langChip,
+                    {
+                      borderColor: selected ? colors.accent : colors.border,
+                      backgroundColor: colors.surface,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`Caption language ${opt.label}`}
+                >
+                  <Text
+                    style={[
+                      styles.langChipText,
+                      { color: selected ? colors.accent : colors.inkMuted },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          {captionLanguage === 'multi' ? (
+            <Text style={[styles.autoHint, { color: colors.inkMuted }]}>
+              Auto works for English, Spanish, French, German, Hindi, Russian, Portuguese,
+              Japanese, Italian, and Dutch. Use Tagalog or Chinese chips for those languages.
+            </Text>
+          ) : null}
+
+          {translateOn ? (
+            <View style={[styles.translateBar, { borderTopColor: colors.border }]}>
+              <Text style={[styles.translateBarLabel, { color: colors.cyan }]}>Translate to</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.langScroll}
+                contentContainerStyle={styles.langRow}
+              >
+                {LIVE_TRANSLATE_TARGET_OPTIONS.map((opt) => {
+                  if (opt.code == null) return null;
+                  const code = opt.code;
+                  const selected = translateTarget === code;
+                  const disabled = isSameLiveLanguage(captionLanguage, code);
+                  return (
+                    <Pressable
+                      key={code}
+                      disabled={disabled}
+                      onPress={() => chooseTranslateTarget(code)}
+                      style={[
+                        styles.langChip,
+                        {
+                          borderColor: selected ? colors.cyan : colors.border,
+                          backgroundColor: colors.surface,
+                          opacity: disabled ? 0.4 : 1,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected, disabled }}
+                      accessibilityLabel={`Translate to ${opt.label}`}
+                    >
+                      <Text
+                        style={[
+                          styles.langChipText,
+                          { color: selected ? colors.cyan : colors.inkMuted },
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+              {translateSameLanguage ? (
+                <Text style={[styles.autoHint, { color: colors.inkMuted }]}>
+                  Pick a language different from the spoken one.
+                </Text>
+              ) : translateError ? (
+                <Text style={[styles.autoHint, { color: colors.inkMuted }]}>{translateError}</Text>
+              ) : null}
+            </View>
+          ) : null}
+
+          <ScrollView
+            ref={captionScrollRef}
+            nestedScrollEnabled
+            style={[styles.captionScroll, { maxHeight: captionMaxHeight }]}
+            contentContainerStyle={styles.captionScrollContent}
+            scrollEventThrottle={64}
+            onScroll={(e) => {
+              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+              // Follow new captions unless the listener scrolled up to reread.
+              captionStickToEndRef.current =
+                contentOffset.y + layoutMeasurement.height >= contentSize.height - 48;
+            }}
+            onContentSizeChange={() => {
+              if (captionStickToEndRef.current) {
+                captionScrollRef.current?.scrollToEnd({ animated: true });
+              }
+            }}
             accessibilityLiveRegion="polite"
           >
-            <View style={styles.paneHeader}>
-              <View style={[styles.paneDot, { backgroundColor: colors.accent }]} />
-              <Text style={[styles.captionLabel, { color: colors.inkMuted }]}>Spoken</Text>
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.langScroll}
-              contentContainerStyle={styles.langRow}
-            >
-              {LIVE_CAPTION_LANGUAGES.map((opt) => {
-                const selected = captionLanguage === opt.code;
-                return (
-                  <Pressable
-                    key={opt.code}
-                    onPress={() => {
-                      translateGenRef.current += 1;
-                      captionLanguageRef.current = opt.code;
-                      setCaptionLanguage(opt.code);
-                      translatedCountRef.current = 0;
-                      setTranslatedFinals([]);
-                      setTranslateError(null);
-                      void liveRef.current?.setLanguage(opt.code);
-                    }}
-                    style={[
-                      styles.langChip,
-                      {
-                        borderColor: selected ? colors.accent : colors.border,
-                        backgroundColor: colors.surface,
-                      },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    accessibilityLabel={`Caption language ${opt.label}`}
-                  >
-                    <Text
-                      style={[
-                        styles.langChipText,
-                        { color: selected ? colors.accent : colors.inkMuted },
-                      ]}
-                    >
-                      {opt.label}
+            {captionTurns.length > 0 || interimText ? (
+              <>
+                {captionTurns.map((turn, t) => {
+                  const lastTurn = t === captionTurns.length - 1;
+                  return (
+                    <View key={`turn-${turn.sentences[0]?.index ?? t}`} style={styles.turn}>
+                      {showSpeakers && turn.speaker != null ? (
+                        <Text style={[styles.speakerLabel, { color: colors.accent }]}>
+                          {liveSpeakerLabel(turn.speaker)}
+                        </Text>
+                      ) : null}
+                      {turn.sentences.map((sentence, s) => {
+                        const isTail = lastTurn && s === turn.sentences.length - 1;
+                        const translated = translations[sentence.index];
+                        const showTranslation =
+                          translateOn &&
+                          !translateSameLanguage &&
+                          sentence.complete &&
+                          sentence.index >= translateFromRef.current &&
+                          translated !== null;
+                        return (
+                          <View key={sentence.index} style={styles.sentence}>
+                            <View style={styles.sentenceRow}>
+                              <View
+                                style={[styles.sentenceDot, { backgroundColor: colors.inkMuted }]}
+                              />
+                              <Text style={[styles.captionText, { color: colors.ink }]}>
+                                {sentence.text}
+                                {isTail && !sentence.complete && interimText ? (
+                                  <Text style={{ color: colors.inkMuted }}> {interimText}</Text>
+                                ) : null}
+                              </Text>
+                            </View>
+                            {showTranslation ? (
+                              <View style={[styles.translation, { borderLeftColor: colors.cyan }]}>
+                                <Text style={[styles.translationLabel, { color: colors.cyan }]}>
+                                  {translateTargetLabel}
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.translateText,
+                                    { color: translated ? colors.ink : colors.inkMuted },
+                                  ]}
+                                >
+                                  {translated ?? 'Translating…'}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })}
+                {interimText && !lastSentenceOpen ? (
+                  <View style={styles.sentenceRow}>
+                    <View style={[styles.sentenceDot, { backgroundColor: colors.border }]} />
+                    <Text style={[styles.captionText, { color: colors.inkMuted }]}>
+                      {interimText}
                     </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-            {captionLanguage === 'multi' ? (
-              <Text style={[styles.autoHint, { color: colors.inkMuted }]}>
-                Auto works for English, Spanish, French, German, Hindi, Russian, Portuguese,
-                Japanese, Italian, and Dutch. Use Tagalog or Chinese chips for those languages.
-              </Text>
-            ) : null}
-            {captions.finals.length > 0 || Boolean(captions.interim.trim()) ? (
-              <Text style={[styles.captionText, { color: colors.ink }]}>
-                {captions.finals.join(' ')}
-                {captions.interim.trim() ? (
-                  <Text style={{ color: colors.inkMuted }}>
-                    {captions.finals.length > 0 ? ' ' : ''}
-                    {captions.interim}
-                  </Text>
+                  </View>
                 ) : null}
-              </Text>
+              </>
             ) : (
               <Text style={[styles.captionText, { color: colors.inkMuted }]}>
                 {captions.status === 'connecting'
@@ -790,102 +1122,12 @@ export default function RecordingScreen() {
                     ? captions.error
                     : captions.status === 'error'
                       ? 'Captions unavailable — recording continues.'
-                      : 'Speak to see captions…'}
+                      : hasStarted
+                        ? 'Speak to see captions…'
+                        : 'Tap record, then speak to see captions…'}
               </Text>
             )}
-          </View>
-
-          <View
-            style={[
-              styles.captionCard,
-              styles.translatePane,
-              sideBySideCaptions && styles.captionCardHalf,
-              {
-                backgroundColor: colors.actionImport,
-                borderColor: colors.cyan,
-              },
-            ]}
-            accessibilityLiveRegion="polite"
-          >
-            <View style={styles.paneHeader}>
-              <View style={[styles.paneDot, { backgroundColor: colors.cyan }]} />
-              <Text style={[styles.captionLabel, { color: colors.cyan }]}>Live translate</Text>
-              {translateBusy ? (
-                <Text style={[styles.translateBusy, { color: colors.inkMuted }]}>Updating…</Text>
-              ) : null}
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.langScroll}
-              contentContainerStyle={styles.langRow}
-            >
-              {LIVE_TRANSLATE_TARGET_OPTIONS.map((opt) => {
-                const selected = translateTarget === opt.code;
-                const disabled =
-                  opt.code != null && isSameLiveLanguage(captionLanguage, opt.code);
-                return (
-                  <Pressable
-                    key={opt.label}
-                    disabled={disabled}
-                    onPress={() => {
-                      translateGenRef.current += 1;
-                      translateTargetRef.current = opt.code;
-                      setTranslateTarget(opt.code);
-                      void setLiveTranslateTargetPref(opt.code);
-                      translatedCountRef.current = 0;
-                      setTranslatedFinals([]);
-                      setTranslateError(null);
-                    }}
-                    style={[
-                      styles.langChip,
-                      {
-                        borderColor: selected ? colors.cyan : colors.border,
-                        backgroundColor: selected ? colors.surface : colors.surface,
-                        opacity: disabled ? 0.4 : 1,
-                      },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected, disabled }}
-                    accessibilityLabel={`Translate to ${opt.label}`}
-                  >
-                    <Text
-                      style={[
-                        styles.langChipText,
-                        { color: selected ? colors.cyan : colors.inkMuted },
-                      ]}
-                    >
-                      {opt.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-            {!translateTarget ? (
-              <Text style={[styles.translateText, { color: colors.inkMuted }]}>
-                Pick a language to mirror captions in real time.
-              </Text>
-            ) : isSameLiveLanguage(captionLanguage, translateTarget) ? (
-              <Text style={[styles.translateText, { color: colors.inkMuted }]}>
-                Choose a different language than the spoken captions.
-              </Text>
-            ) : translatedFinals.length ? (
-              <Text style={[styles.translateText, { color: colors.ink }]}>
-                {translatedFinals.join(' ')}
-                {translateBusy ? (
-                  <Text style={{ color: colors.inkMuted }}> …</Text>
-                ) : null}
-              </Text>
-            ) : (
-              <Text style={[styles.translateText, { color: colors.inkMuted }]}>
-                {translateError
-                  ? translateError
-                  : translateBusy
-                    ? 'Translating…'
-                    : 'Translation appears as phrases finalize…'}
-              </Text>
-            )}
-          </View>
+          </ScrollView>
         </View>
       ) : captionsMode === 'live' && !liveEnabled ? (
         <Text style={[styles.hint, { color: colors.inkMuted }]}>
@@ -911,34 +1153,54 @@ export default function RecordingScreen() {
       ) : null}
 
       <View style={styles.controls}>
-        <Pressable
-          onPress={() => void onPauseResume()}
-          disabled={stopping || (!isRecording && !isPaused)}
-          style={[
-            styles.secondaryButton,
-            { borderColor: colors.border, backgroundColor: colors.surface },
-            (stopping || (!isRecording && !isPaused)) && styles.disabled,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={isPaused ? 'Resume' : 'Pause'}
-        >
-          <Text style={[styles.secondaryText, { color: colors.ink }]}>
-            {isPaused ? 'Resume' : 'Pause'}
-          </Text>
-        </Pressable>
-
-        <RecordingButton
-          recording={isRecording || isPaused}
-          paused={isPaused}
-          disabled={stopping}
-          onPress={() => {
-            if (isRecording || isPaused) {
-              void onStop();
-              return;
-            }
-            void startRecording();
-          }}
-        />
+        {isRecording || isPaused ? (
+          <>
+            <Pressable
+              onPress={() => void onPauseResume()}
+              disabled={stopping}
+              style={[
+                styles.secondaryButton,
+                { borderColor: colors.border, backgroundColor: colors.surface },
+                stopping && styles.disabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={isPaused ? 'Resume' : 'Pause'}
+            >
+              <Text style={[styles.secondaryText, { color: colors.ink }]}>
+                {isPaused ? 'Resume' : 'Pause'}
+              </Text>
+            </Pressable>
+            <RecordingButton
+              recording
+              paused={isPaused}
+              disabled={stopping}
+              onPress={() => {
+                if (isPaused) {
+                  void onPauseResume();
+                  return;
+                }
+                void onStop();
+              }}
+            />
+          </>
+        ) : (
+          <Pressable
+            onPress={() => void startRecording()}
+            disabled={stopping}
+            accessibilityRole="button"
+            accessibilityLabel="Tap to record"
+            style={({ pressed }) => [
+              styles.startMic,
+              pressed && !stopping && styles.startMicPressed,
+              stopping && styles.disabled,
+            ]}
+          >
+            <GlossOrb size={sizes.record} halo>
+              <Icon name="microphone" size={26} color="#FFFFFF" variant="line" />
+            </GlossOrb>
+            <Text style={[styles.startMicLabel, { color: colors.inkMuted }]}>Tap to record</Text>
+          </Pressable>
+        )}
       </View>
 
       <Pressable
@@ -1013,41 +1275,80 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontWeight: '600',
   },
-  captionPanes: {
-    width: '100%',
-    maxWidth: 960,
-    gap: spacing.md,
-  },
   liveNotesWrap: {
     width: '100%',
     maxWidth: 960,
     gap: spacing.sm,
   },
-  captionPanesRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  captionPanesStack: {
-    flexDirection: 'column',
-  },
   captionCard: {
     width: '100%',
-    minHeight: 120,
+    maxWidth: 960,
+    minHeight: 140,
     borderWidth: 1,
     borderRadius: radii.card,
     padding: spacing.md,
     gap: spacing.sm,
   },
-  spokenPane: {
-    minHeight: 140,
+  translateToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  translatePane: {
-    minHeight: 160,
+  translateBar: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: spacing.sm,
+    gap: 6,
   },
-  captionCardHalf: {
-    flex: 1,
-    width: undefined,
-    minWidth: 0,
+  translateBarLabel: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  captionScroll: {
+    alignSelf: 'stretch',
+    flexGrow: 0,
+  },
+  captionScrollContent: {
+    gap: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  turn: {
+    gap: spacing.sm,
+  },
+  speakerLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sentence: {
+    gap: 6,
+  },
+  sentenceRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  sentenceDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginTop: 9,
+  },
+  translation: {
+    marginLeft: 13,
+    borderLeftWidth: 2,
+    paddingLeft: spacing.sm,
+    gap: 2,
+  },
+  translationLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   paneHeader: {
     flexDirection: 'row',
@@ -1072,8 +1373,8 @@ const styles = StyleSheet.create({
   },
   translateText: {
     ...typography.body,
-    fontSize: 17,
-    lineHeight: 26,
+    fontSize: 15,
+    lineHeight: 22,
     fontWeight: '500',
   },
   langScroll: {
@@ -1110,8 +1411,9 @@ const styles = StyleSheet.create({
   },
   captionText: {
     ...typography.body,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 16,
+    lineHeight: 23,
+    flexShrink: 1,
   },
   error: {
     textAlign: 'center',
@@ -1123,6 +1425,17 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     alignItems: 'center',
     gap: spacing.lg,
+  },
+  startMic: {
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  startMicPressed: {
+    opacity: 0.88,
+  },
+  startMicLabel: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   secondaryButton: {
     borderWidth: 1,

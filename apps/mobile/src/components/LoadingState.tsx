@@ -209,17 +209,20 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   copy: {
-    alignItems: 'center',
+    alignSelf: 'stretch',
     gap: spacing.xs,
     marginTop: spacing.sm,
-    maxWidth: 280,
+    paddingHorizontal: spacing.lg,
   },
   message: {
     ...typography.section,
     textAlign: 'center',
+    // Bold Plus Jakarta glyphs paint past a shrink-wrapped line on Android.
+    paddingHorizontal: spacing.sm,
   },
   detail: {
     ...typography.caption,
     textAlign: 'center',
+    paddingHorizontal: spacing.sm,
   },
 });

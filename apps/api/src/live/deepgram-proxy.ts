@@ -41,6 +41,8 @@ function deepgramListenUrl(language: string): string {
     smart_format: 'true',
     interim_results: 'true',
     punctuate: 'true',
+    // Word-level speaker ids so the app can group captions by speaker.
+    diarize: 'true',
     endpointing: language === 'multi' ? '100' : '300',
     utterance_end_ms: '1000',
   });
@@ -153,6 +155,25 @@ function awaitAuthToken(client: WebSocket, headerToken: string | null): Promise<
   });
 }
 
+/** The speaker who said most of the words in a result, when diarization is on. */
+function dominantSpeaker(words: Array<{ speaker?: unknown }> | undefined): number | null {
+  if (!Array.isArray(words)) return null;
+  const counts = new Map<number, number>();
+  for (const word of words) {
+    if (typeof word?.speaker !== 'number' || !Number.isInteger(word.speaker)) continue;
+    counts.set(word.speaker, (counts.get(word.speaker) ?? 0) + 1);
+  }
+  let best: number | null = null;
+  let bestCount = 0;
+  for (const [speaker, count] of counts) {
+    if (count > bestCount) {
+      best = speaker;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
 function mapDeepgramMessage(raw: unknown): Record<string, unknown> | null {
   let parsed: unknown;
   try {
@@ -174,7 +195,9 @@ function mapDeepgramMessage(raw: unknown): Record<string, unknown> | null {
     speech_final?: unknown;
     start?: unknown;
     duration?: unknown;
-    channel?: { alternatives?: Array<{ transcript?: unknown }> };
+    channel?: {
+      alternatives?: Array<{ transcript?: unknown; words?: Array<{ speaker?: unknown }> }>;
+    };
     description?: unknown;
     message?: unknown;
   };
@@ -185,6 +208,7 @@ function mapDeepgramMessage(raw: unknown): Record<string, unknown> | null {
         ? msg.channel.alternatives[0].transcript
         : '';
     if (!transcript.trim()) return null;
+    const speaker = dominantSpeaker(msg.channel?.alternatives?.[0]?.words);
     return {
       type: 'transcript',
       text: transcript,
@@ -196,6 +220,7 @@ function mapDeepgramMessage(raw: unknown): Record<string, unknown> | null {
         typeof msg.duration === 'number' && Number.isFinite(msg.duration)
           ? msg.duration
           : undefined,
+      ...(speaker != null ? { speaker } : {}),
     };
   }
 

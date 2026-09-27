@@ -25,6 +25,24 @@ describe('deepgram-proxy mapDeepgramMessage', () => {
     });
   });
 
+  it('tags a result with the speaker who said most of its words', () => {
+    const mapped = __test.mapDeepgramMessage(
+      JSON.stringify({
+        type: 'Results',
+        is_final: true,
+        channel: {
+          alternatives: [
+            {
+              transcript: 'thank you very much',
+              words: [{ speaker: 1 }, { speaker: 1 }, { speaker: 0 }, { speaker: 1 }],
+            },
+          ],
+        },
+      }),
+    );
+    assert.equal(mapped?.speaker, 1);
+  });
+
   it('skips empty transcripts', () => {
     const mapped = __test.mapDeepgramMessage(
       JSON.stringify({

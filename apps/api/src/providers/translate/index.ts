@@ -79,7 +79,7 @@ function sanitizeLiveTranslation(raw: string): string {
 
 function isChattyTranslatorReply(output: string, source: string): boolean {
   const chatty =
-    /^(?:i'?m ready|sure[,!]?\s+please share|please share the|i can help translate|however,? i don'?t)\b/i;
+    /^(?:i'?m ready|sure[,!]?\s+please share|please share the|i can help translate|however,? i don'?t|i (?:don'?t|do not|can'?t|cannot) see|please provide|there(?:'s| is) no (?:\w+ )?text|could you (?:please )?(?:share|provide))\b/i;
   if (chatty.test(output)) return true;
   // Extremely long vs source — likely an essay / refusal, not a caption.
   const limit = Math.max(800, source.length * 20);
@@ -256,6 +256,7 @@ export class ClaudeTranslateProvider implements TranslateProvider {
       `Output ONLY the translation — one or a few spoken sentences.`,
       `No quotes, labels, markdown, preambles, or offers to help.`,
       `If the input is already in ${input.languageLabel}, return it unchanged.`,
+      `The input may be a fragment or mix languages; translate whatever is there and never ask for more text.`,
     ].join(' ');
 
     const raw = await callClaude({

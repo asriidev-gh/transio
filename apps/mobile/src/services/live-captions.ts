@@ -5,6 +5,7 @@ import type { TranscriptSegment } from '@sessionai/shared';
 import { mobileEnv } from '../lib/env';
 import { getCurrentSession } from './auth';
 import { apiRequest } from './api';
+import { liveSpeakerLabel } from '../utils/live-caption-lines';
 
 export type LiveCaptionStatus = 'idle' | 'connecting' | 'live' | 'error' | 'unsupported';
 
@@ -55,13 +56,17 @@ export async function setLiveCaptionLanguagePref(language: LiveCaptionLanguage):
 export interface LiveCaptionSnapshot {
   status: LiveCaptionStatus;
   finals: string[];
+  /** Speaker id per final (same order), or null when the stream has no diarization. */
+  finalSpeakers: Array<number | null>;
   interim: string;
   error: string | null;
   language: LiveCaptionLanguage;
 }
 
 export interface LiveCaptionController {
-  start: (opts?: { language?: LiveCaptionLanguage }) => Promise<void>;
+  start: (opts?: { language?: LiveCaptionLanguage; capture?: boolean }) => Promise<void>;
+  /** Open the microphone. Setup can connect without this so speech is not captured early. */
+  beginCapture: () => Promise<void>;
   stop: () => Promise<{ text: string; segments: TranscriptSegment[]; language: LiveCaptionLanguage }>;
   pause: () => void;
   resume: () => void;
@@ -76,6 +81,7 @@ type LiveMessage = {
   isFinal?: boolean;
   start?: number;
   duration?: number;
+  speaker?: number;
   message?: string;
   reason?: string;
 };
@@ -189,7 +195,9 @@ export function createLiveCaptionController(): LiveCaptionController | null {
 
   let status: LiveCaptionStatus = 'idle';
   let finals: string[] = [];
+  let finalSpeakers: Array<number | null> = [];
   let interim = '';
+  let interimSpeaker: number | null = null;
   let error: string | null = null;
   let language: LiveCaptionLanguage = 'tl';
   const segments: TranscriptSegment[] = [];
@@ -209,11 +217,14 @@ export function createLiveCaptionController(): LiveCaptionController | null {
   let accessToken: string | null = null;
   let reconnectAttempt = 0;
   let audioReady = false;
+  let micOn = false;
+  let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
   function emit() {
     const snap: LiveCaptionSnapshot = {
       status,
       finals: [...finals],
+      finalSpeakers: [...finalSpeakers],
       interim,
       error,
       language,
@@ -229,9 +240,14 @@ export function createLiveCaptionController(): LiveCaptionController | null {
 
   function applyTranscriptMessage(msg: LiveMessage) {
     if (msg.type !== 'transcript' || typeof msg.text !== 'string') return;
+    const speaker = typeof msg.speaker === 'number' ? msg.speaker : null;
     if (msg.isFinal) {
-      finals = [...finals, msg.text.trim()].filter(Boolean);
+      if (msg.text.trim()) {
+        finals = [...finals, msg.text.trim()];
+        finalSpeakers = [...finalSpeakers, speaker];
+      }
       interim = '';
+      interimSpeaker = null;
       if (
         typeof msg.start === 'number' &&
         typeof msg.duration === 'number' &&
@@ -241,11 +257,12 @@ export function createLiveCaptionController(): LiveCaptionController | null {
           startMs: Math.max(0, Math.round(msg.start * 1000)),
           endMs: Math.max(0, Math.round((msg.start + msg.duration) * 1000)),
           text: msg.text.trim(),
-          speaker: null,
+          speaker: speaker != null ? liveSpeakerLabel(speaker) : null,
         });
       }
     } else {
       interim = msg.text;
+      interimSpeaker = speaker;
     }
     emit();
   }
@@ -338,6 +355,11 @@ export function createLiveCaptionController(): LiveCaptionController | null {
     mediaStream?.getTracks().forEach((t) => t.stop());
     mediaStream = null;
     audioReady = false;
+    micOn = false;
+    if (keepaliveTimer != null) {
+      clearInterval(keepaliveTimer);
+      keepaliveTimer = null;
+    }
   }
 
   function teardownAll() {
@@ -487,14 +509,66 @@ export function createLiveCaptionController(): LiveCaptionController | null {
     nativeActive = true;
   }
 
-  async function start(opts?: { language?: LiveCaptionLanguage }) {
+  function stopKeepalive() {
+    if (keepaliveTimer != null) {
+      clearInterval(keepaliveTimer);
+      keepaliveTimer = null;
+    }
+  }
+
+  /** Keeps the caption socket open without turning the microphone on. */
+  function startKeepalive() {
+    stopKeepalive();
+    const silence = new ArrayBuffer(3200);
+    keepaliveTimer = setInterval(() => {
+      if (micOn || paused || stopping) return;
+      sendPcm(silence);
+    }, 1000);
+  }
+
+  async function beginCapture() {
+    if (micOn || stopping) return;
+    stopKeepalive();
+    paused = false;
+    try {
+      if (useWeb) {
+        if (!mediaStream) {
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              channelCount: 1,
+              sampleRate: TARGET_SAMPLE_RATE,
+            },
+            video: false,
+          });
+        }
+        attachWebPcmPipeline(mediaStream);
+        if (audioContext?.state === 'suspended') {
+          await audioContext.resume();
+        }
+      } else if (nativePcm && !nativeActive) {
+        attachNativePcmPipeline(nativePcm);
+      } else {
+        return;
+      }
+      micOn = true;
+      audioReady = true;
+    } catch {
+      // The file recorder can still run if the caption mic cannot start.
+    }
+  }
+
+  async function start(opts?: { language?: LiveCaptionLanguage; capture?: boolean }) {
     if (status === 'connecting' || status === 'live') return;
 
     stopping = false;
     status = 'connecting';
     error = null;
     finals = [];
+    finalSpeakers = [];
     interim = '';
+    interimSpeaker = null;
     segments.length = 0;
     reconnectAttempt = 0;
     if (opts?.language) {
@@ -513,8 +587,10 @@ export function createLiveCaptionController(): LiveCaptionController | null {
     }
     accessToken = token;
 
+    const capture = opts?.capture !== false;
+
     try {
-      if (useWeb) {
+      if (capture && useWeb) {
         mediaStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
@@ -528,13 +604,26 @@ export function createLiveCaptionController(): LiveCaptionController | null {
 
       await openSocket(token);
 
-      if (useWeb && mediaStream) {
-        attachWebPcmPipeline(mediaStream);
-        if (audioContext?.state === 'suspended') {
-          await audioContext.resume();
+      if (capture) {
+        if (useWeb && mediaStream) {
+          attachWebPcmPipeline(mediaStream);
+          if (audioContext?.state === 'suspended') {
+            await audioContext.resume();
+          }
+        } else if (nativePcm) {
+          attachNativePcmPipeline(nativePcm);
+        } else {
+          throw new Error('Live captions are not available on this build.');
         }
+        micOn = true;
+        stopKeepalive();
+      } else if (useWeb) {
+        mediaStream = null;
+        micOn = false;
+        startKeepalive();
       } else if (nativePcm) {
-        attachNativePcmPipeline(nativePcm);
+        micOn = false;
+        startKeepalive();
       } else {
         throw new Error('Live captions are not available on this build.');
       }
@@ -565,6 +654,15 @@ export function createLiveCaptionController(): LiveCaptionController | null {
     if (audioContext?.state === 'suspended') {
       void audioContext.resume();
     }
+    // A long pause can drop the socket. Reconnect only if it is no longer open.
+    if (
+      socket?.readyState !== WebSocket.OPEN &&
+      accessToken &&
+      audioReady &&
+      !stopping
+    ) {
+      scheduleReconnect();
+    }
   }
 
   async function setLanguage(next: LiveCaptionLanguage) {
@@ -579,7 +677,9 @@ export function createLiveCaptionController(): LiveCaptionController | null {
     const trailing = interim.trim();
     if (trailing) {
       finals = [...finals, trailing];
+      finalSpeakers = [...finalSpeakers, interimSpeaker];
       interim = '';
+      interimSpeaker = null;
       emit();
     }
 
@@ -623,7 +723,9 @@ export function createLiveCaptionController(): LiveCaptionController | null {
     const trailing = interim.trim();
     if (trailing) {
       finals = [...finals, trailing];
+      finalSpeakers = [...finalSpeakers, interimSpeaker];
       interim = '';
+      interimSpeaker = null;
     }
     status = 'idle';
     emit();
@@ -634,14 +736,29 @@ export function createLiveCaptionController(): LiveCaptionController | null {
 
   return {
     start,
+    beginCapture,
     stop,
     pause,
     resume,
     setLanguage,
-    getSnapshot: () => ({ status, finals: [...finals], interim, error, language }),
+    getSnapshot: () => ({
+      status,
+      finals: [...finals],
+      finalSpeakers: [...finalSpeakers],
+      interim,
+      error,
+      language,
+    }),
     subscribe: (listener) => {
       listeners.add(listener);
-      listener({ status, finals: [...finals], interim, error, language });
+      listener({
+        status,
+        finals: [...finals],
+        finalSpeakers: [...finalSpeakers],
+        interim,
+        error,
+        language,
+      });
       return () => listeners.delete(listener);
     },
   };
