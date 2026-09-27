@@ -202,15 +202,15 @@ export function featureDailyLimitMessage(feature: GatedFeature): string {
   }
 }
 
-/**
- * Check whether a gated action is allowed.
- * Free/guest → lifetime cap then paywall.
- * Pro → daily cap then wait-until-tomorrow (not paywall).
- */
 export async function gateFeature(
   feature: GatedFeature,
   options?: { voiceConversationId?: string | null },
 ): Promise<FeatureGateResult> {
+  // Play purchases cannot finish on the current test builds, so recording stays open.
+  if (feature === 'session') {
+    return { ok: true };
+  }
+
   const state = await loadEntitlements();
 
   if (state.isPremium) {
