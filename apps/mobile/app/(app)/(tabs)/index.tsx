@@ -40,6 +40,7 @@ import { HomeLibrarySkeleton } from '@/src/components/Skeleton';
 import { SectionHeader } from '@/src/components/ui/SectionHeader';
 import { Icon } from '@/src/components/ui/Icon';
 import { useApiReachable } from '@/src/hooks/useApiReachable';
+import { reportApiOutage } from '@/src/services/api-outage-report';
 import { useAuth } from '@/src/hooks/useAuth';
 import { ApiClientError } from '@/src/services/api';
 import { sessionsUnchanged } from '@/src/utils/sessions-unchanged';
@@ -107,7 +108,7 @@ export default function HomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const { colors, shadows, scheme, reduceMotion } = useTheme();
   const { user } = useAuth();
-  const { reachable, refresh: refreshReachable } = useApiReachable();
+  const { reachable, outageConfirmed, refresh: refreshReachable } = useApiReachable();
 
   const pagePad = windowWidth < 480 ? spacing.md : spacing.lg;
   const usableWidth = Math.max(280, windowWidth - pagePad * 2);
@@ -190,6 +191,7 @@ export default function HomeScreen() {
   }, []);
 
   const wasUnreachable = useRef(false);
+  const reportedOutage = useRef(false);
   useEffect(() => {
     if (reachable === false) {
       wasUnreachable.current = true;
@@ -197,9 +199,16 @@ export default function HomeScreen() {
     }
     if (reachable === true && wasUnreachable.current) {
       wasUnreachable.current = false;
+      reportedOutage.current = false;
       void loadSessions(true, true);
     }
   }, [reachable, loadSessions]);
+
+  useEffect(() => {
+    if (!outageConfirmed || reportedOutage.current) return;
+    reportedOutage.current = true;
+    void reportApiOutage(user?.email ?? null);
+  }, [outageConfirmed, user?.email]);
 
   const reconcileCompletions = useCallback(async (data: Session[]) => {
     const previouslyInFlight = inFlightIdsRef.current;
@@ -418,13 +427,7 @@ export default function HomeScreen() {
           />
         }
       >
-        <ConnectivityBanner
-          reachable={reachable}
-          onRetry={() => {
-            void refreshReachable();
-            void loadSessions(true);
-          }}
-        />
+        <ConnectivityBanner visible={outageConfirmed} />
 
         {notice ? (
           <CompletionBanner

@@ -1,29 +1,24 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 
 interface ConnectivityBannerProps {
-  reachable: boolean | null;
-  onRetry?: () => void;
+  /** Shown only after silent retries have failed. */
+  visible: boolean;
 }
 
-export function ConnectivityBanner({ reachable, onRetry }: ConnectivityBannerProps) {
+export function ConnectivityBanner({ visible }: ConnectivityBannerProps) {
   const { colors } = useTheme();
-  if (reachable !== false) return null;
+  if (!visible) return null;
 
   return (
     <View
-      style={[styles.banner, { backgroundColor: colors.actionRecord, borderColor: colors.danger }]}
-      accessibilityRole="alert"
+      style={[styles.banner, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
+      accessibilityRole="text"
     >
-      <Text style={[styles.text, { color: colors.danger }]}>
-        Can’t reach the Smart Transcriber API. Retrying…
+      <Text style={[styles.text, { color: colors.ink }]}>
+        The API is currently experiencing high traffic. We’re resolving this as soon as we can.
       </Text>
-      {onRetry ? (
-        <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry connection">
-          <Text style={[styles.retry, { color: colors.ink }]}>Retry</Text>
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -34,18 +29,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
   },
   text: {
     ...typography.meta,
-    flex: 1,
     fontWeight: '600',
-  },
-  retry: {
-    ...typography.meta,
-    fontWeight: '700',
   },
 });
