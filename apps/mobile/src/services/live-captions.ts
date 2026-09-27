@@ -5,7 +5,7 @@ import type { TranscriptSegment } from '@sessionai/shared';
 import { mobileEnv } from '../lib/env';
 import { getCurrentSession } from './auth';
 import { apiRequest } from './api';
-import { liveSpeakerLabel } from '../utils/live-caption-lines';
+import { liveSpeakerLabel, nextStableSpeaker } from '../utils/live-caption-lines';
 
 export type LiveCaptionStatus = 'idle' | 'connecting' | 'live' | 'error' | 'unsupported';
 
@@ -82,6 +82,8 @@ type LiveMessage = {
   start?: number;
   duration?: number;
   speaker?: number;
+  speakerShare?: number;
+  wordCount?: number;
   message?: string;
   reason?: string;
 };
@@ -197,7 +199,11 @@ export function createLiveCaptionController(): LiveCaptionController | null {
   let finals: string[] = [];
   let finalSpeakers: Array<number | null> = [];
   let interim = '';
-  let interimSpeaker: number | null = null;
+  /** Smoothed Deepgram speaker id, so one voice is not split into two by short phrases. */
+  let rawSpeaker: number | null = null;
+  /** That speaker renumbered by first accepted appearance, so the first voice is always A. */
+  let currentSpeaker: number | null = null;
+  const speakerOrder = new Map<number, number>();
   let error: string | null = null;
   let language: LiveCaptionLanguage = 'tl';
   const segments: TranscriptSegment[] = [];
@@ -238,16 +244,30 @@ export function createLiveCaptionController(): LiveCaptionController | null {
     emit();
   }
 
+  function orderedSpeaker(raw: number | null): number | null {
+    if (raw == null) return null;
+    let ordinal = speakerOrder.get(raw);
+    if (ordinal == null) {
+      ordinal = speakerOrder.size;
+      speakerOrder.set(raw, ordinal);
+    }
+    return ordinal;
+  }
+
   function applyTranscriptMessage(msg: LiveMessage) {
     if (msg.type !== 'transcript' || typeof msg.text !== 'string') return;
-    const speaker = typeof msg.speaker === 'number' ? msg.speaker : null;
     if (msg.isFinal) {
+      rawSpeaker = nextStableSpeaker(rawSpeaker, {
+        speaker: typeof msg.speaker === 'number' ? msg.speaker : null,
+        share: msg.speakerShare,
+        words: msg.wordCount,
+      });
+      const speaker = (currentSpeaker = orderedSpeaker(rawSpeaker));
       if (msg.text.trim()) {
         finals = [...finals, msg.text.trim()];
         finalSpeakers = [...finalSpeakers, speaker];
       }
       interim = '';
-      interimSpeaker = null;
       if (
         typeof msg.start === 'number' &&
         typeof msg.duration === 'number' &&
@@ -262,7 +282,6 @@ export function createLiveCaptionController(): LiveCaptionController | null {
       }
     } else {
       interim = msg.text;
-      interimSpeaker = speaker;
     }
     emit();
   }
@@ -568,7 +587,9 @@ export function createLiveCaptionController(): LiveCaptionController | null {
     finals = [];
     finalSpeakers = [];
     interim = '';
-    interimSpeaker = null;
+    rawSpeaker = null;
+    currentSpeaker = null;
+    speakerOrder.clear();
     segments.length = 0;
     reconnectAttempt = 0;
     if (opts?.language) {
@@ -677,9 +698,8 @@ export function createLiveCaptionController(): LiveCaptionController | null {
     const trailing = interim.trim();
     if (trailing) {
       finals = [...finals, trailing];
-      finalSpeakers = [...finalSpeakers, interimSpeaker];
+      finalSpeakers = [...finalSpeakers, currentSpeaker];
       interim = '';
-      interimSpeaker = null;
       emit();
     }
 
@@ -723,9 +743,8 @@ export function createLiveCaptionController(): LiveCaptionController | null {
     const trailing = interim.trim();
     if (trailing) {
       finals = [...finals, trailing];
-      finalSpeakers = [...finalSpeakers, interimSpeaker];
+      finalSpeakers = [...finalSpeakers, currentSpeaker];
       interim = '';
-      interimSpeaker = null;
     }
     status = 'idle';
     emit();

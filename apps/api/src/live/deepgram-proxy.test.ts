@@ -41,6 +41,8 @@ describe('deepgram-proxy mapDeepgramMessage', () => {
       }),
     );
     assert.equal(mapped?.speaker, 1);
+    assert.equal(mapped?.speakerShare, 0.75);
+    assert.equal(mapped?.wordCount, 4);
   });
 
   it('skips empty transcripts', () => {

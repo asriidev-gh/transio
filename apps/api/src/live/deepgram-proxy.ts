@@ -155,13 +155,20 @@ function awaitAuthToken(client: WebSocket, headerToken: string | null): Promise<
   });
 }
 
-/** The speaker who said most of the words in a result, when diarization is on. */
-function dominantSpeaker(words: Array<{ speaker?: unknown }> | undefined): number | null {
+/**
+ * The speaker who said most of the words in a result, with how many words the
+ * result has and what share of them that speaker said (when diarization is on).
+ */
+function dominantSpeaker(
+  words: Array<{ speaker?: unknown }> | undefined,
+): { speaker: number; share: number; words: number } | null {
   if (!Array.isArray(words)) return null;
   const counts = new Map<number, number>();
+  let total = 0;
   for (const word of words) {
     if (typeof word?.speaker !== 'number' || !Number.isInteger(word.speaker)) continue;
     counts.set(word.speaker, (counts.get(word.speaker) ?? 0) + 1);
+    total += 1;
   }
   let best: number | null = null;
   let bestCount = 0;
@@ -171,7 +178,8 @@ function dominantSpeaker(words: Array<{ speaker?: unknown }> | undefined): numbe
       bestCount = count;
     }
   }
-  return best;
+  if (best == null) return null;
+  return { speaker: best, share: Math.round((bestCount / total) * 100) / 100, words: total };
 }
 
 function mapDeepgramMessage(raw: unknown): Record<string, unknown> | null {
@@ -220,7 +228,9 @@ function mapDeepgramMessage(raw: unknown): Record<string, unknown> | null {
         typeof msg.duration === 'number' && Number.isFinite(msg.duration)
           ? msg.duration
           : undefined,
-      ...(speaker != null ? { speaker } : {}),
+      ...(speaker != null
+        ? { speaker: speaker.speaker, speakerShare: speaker.share, wordCount: speaker.words }
+        : {}),
     };
   }
 

@@ -4,6 +4,7 @@ import {
   buildCaptionTurns,
   hasMultipleSpeakers,
   liveSpeakerLabel,
+  nextStableSpeaker,
   splitSentences,
 } from './live-caption-lines.js';
 
@@ -70,8 +71,20 @@ describe('speaker helpers', () => {
     assert.equal(liveSpeakerLabel(1), 'Speaker B');
   });
 
-  it('needs two distinct speakers', () => {
+  it('needs two speakers with a few captions each', () => {
     assert.equal(hasMultipleSpeakers([0, 0, null]), false);
-    assert.equal(hasMultipleSpeakers([0, null, 1]), true);
+    assert.equal(hasMultipleSpeakers([0, 0, 1, 0]), false);
+    assert.equal(hasMultipleSpeakers([0, 1, null, 0, 1]), true);
+  });
+
+  it('keeps the current speaker on short or mixed captions', () => {
+    assert.equal(nextStableSpeaker(null, { speaker: 1, share: 0.5, words: 1 }), 1);
+    assert.equal(nextStableSpeaker(0, { speaker: 1, share: 1, words: 2 }), 0);
+    assert.equal(nextStableSpeaker(0, { speaker: 1, share: 0.6, words: 10 }), 0);
+    assert.equal(nextStableSpeaker(0, { speaker: null }), 0);
+  });
+
+  it('switches when a long caption is clearly someone else', () => {
+    assert.equal(nextStableSpeaker(0, { speaker: 1, share: 0.9, words: 8 }), 1);
   });
 });

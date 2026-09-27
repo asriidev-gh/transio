@@ -92,12 +92,39 @@ export function buildCaptionTurns(
   });
 }
 
-/** True when the stream has told apart at least two speakers. */
+/** Words a caption needs, and the share one voice must hold, to switch speaker. */
+const SWITCH_MIN_WORDS = 4;
+const SWITCH_MIN_SHARE = 0.75;
+
+/**
+ * Live diarization from one phone mic often splits a single voice into two,
+ * mostly on short or mixed phrases. Keep the current speaker unless a caption is
+ * long enough and clearly said by someone else.
+ */
+export function nextStableSpeaker(
+  current: number | null,
+  heard: { speaker: number | null; share?: number; words?: number },
+): number | null {
+  if (heard.speaker == null) return current;
+  if (current == null || heard.speaker === current) return heard.speaker;
+  const words = heard.words ?? 0;
+  const share = heard.share ?? 0;
+  return words >= SWITCH_MIN_WORDS && share >= SWITCH_MIN_SHARE ? heard.speaker : current;
+}
+
+/** Captions a speaker needs before labels appear, so one stray switch shows nothing. */
+const MIN_CAPTIONS_PER_SPEAKER = 2;
+
+/** True when at least two speakers each have a few captions of their own. */
 export function hasMultipleSpeakers(speakers: Array<number | null>): boolean {
-  const seen = new Set<number>();
+  const counts = new Map<number, number>();
+  let established = 0;
   for (const s of speakers) {
-    if (s != null) seen.add(s);
-    if (seen.size > 1) return true;
+    if (s == null) continue;
+    const next = (counts.get(s) ?? 0) + 1;
+    counts.set(s, next);
+    if (next === MIN_CAPTIONS_PER_SPEAKER) established += 1;
+    if (established > 1) return true;
   }
   return false;
 }
