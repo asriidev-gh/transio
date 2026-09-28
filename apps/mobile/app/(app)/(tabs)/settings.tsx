@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import { useRouter, type Href } from 'expo-router';
 import { useAuth } from '@/src/hooks/useAuth';
@@ -183,6 +184,8 @@ export default function SettingsScreen() {
   }
   const [requestingNotif, setRequestingNotif] = useState(false);
   const appVersion = Constants.expoConfig?.version ?? '0.1.0';
+  // The build number tells builds of the same version apart, e.g. which Play build is installed.
+  const buildNumber = Application.nativeBuildVersion;
 
   useEffect(() => {
     void getNotificationPermission().then(setNotifPermission);
@@ -478,7 +481,7 @@ export default function SettingsScreen() {
           onPress={() => router.push('/terms')}
           last={false}
         />
-        <SettingsRow icon="chart" label="Version" value={appVersion} last={false} />
+        <SettingsRow icon="chart" label="Version" value={buildNumber ? `${appVersion} (${buildNumber})` : appVersion} last={false} />
         <SettingsRow
           icon="bulb"
           label="Replay onboarding"
