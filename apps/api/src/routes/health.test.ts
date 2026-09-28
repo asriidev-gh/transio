@@ -15,11 +15,13 @@ describe('GET /health', () => {
       service: string;
       timestamp: string;
       supabaseConfigured: boolean;
+      commit: string | null;
     };
     assert.equal(data.status, 'ok');
     assert.equal(data.service, 'sessionai-api');
     assert.equal(typeof data.timestamp, 'string');
     assert.equal(typeof data.supabaseConfigured, 'boolean');
+    assert.ok(data.commit === null || /^[0-9a-f]{7}$/.test(data.commit));
   });
 
   it('returns 404 for unknown routes', async () => {

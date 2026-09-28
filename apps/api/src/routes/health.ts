@@ -12,6 +12,7 @@ healthRouter.get('/health', (_req, res) => {
     version: '0.1.0',
     timestamp: new Date().toISOString(),
     supabaseConfigured: isSupabaseConfigured(env),
+    commit: process.env.RENDER_GIT_COMMIT?.trim().slice(0, 7) || null,
   };
 
   res.status(200).json(apiSuccess(payload));

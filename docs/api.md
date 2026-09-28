@@ -30,6 +30,7 @@ Unauthenticated liveness + config probe.
 | `version` | string | API version |
 | `timestamp` | ISO string | Server time |
 | `supabaseConfigured` | boolean | `SUPABASE_URL` + `SUPABASE_ANON_KEY` present |
+| `commit` | string \| null | Short git commit of the running deploy (from Render's `RENDER_GIT_COMMIT`); null locally |
 
 ### `GET /me`
 

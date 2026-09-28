@@ -186,6 +186,8 @@ export const HealthResponseSchema = z.object({
   version: z.string(),
   timestamp: z.string(),
   supabaseConfigured: z.boolean(),
+  /** Short git commit of the running deploy (Render sets RENDER_GIT_COMMIT), or null locally. */
+  commit: z.string().nullable().optional(),
 });
 
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;

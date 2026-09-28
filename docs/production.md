@@ -52,7 +52,7 @@ Never put `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, or `TRANSCRIPTION_AP
 4. Deploy the API behind HTTPS; set `CORS_ORIGINS` to your Expo web / site origins (empty deny browsers in production).
 5. Point mobile `EXPO_PUBLIC_API_BASE_URL` at the public API URL.
 6. Build the app with EAS or `expo export` / store builds; keep splash + icons from `apps/mobile/assets/images/`.
-7. Verify `/health` returns `supabaseConfigured: true` and run a short record → process smoke test.
+7. Verify `/health` returns `supabaseConfigured: true` and the `commit` you just deployed, and run a short record → process smoke test.
 
 ## Subscriptions
 
