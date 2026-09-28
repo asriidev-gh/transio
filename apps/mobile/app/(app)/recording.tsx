@@ -63,7 +63,6 @@ import { confirmAction } from '@/src/utils/confirm';
 import {
   buildCaptionTurns,
   hasMultipleSpeakers,
-  liveSpeakerLabel,
 } from '@/src/utils/live-caption-lines';
 import { bulletsFromCaptionFinals, rawNotesFromFinals, type SessionType, type TranslateLanguage } from '@sessionai/shared';
 import { consumeFeature } from '@/src/services/entitlements';
@@ -1064,7 +1063,7 @@ export default function RecordingScreen() {
                     <View key={`turn-${turn.sentences[0]?.index ?? t}`} style={styles.turn}>
                       {showSpeakers && turn.speaker != null ? (
                         <Text style={[styles.speakerLabel, { color: colors.accent }]}>
-                          {liveSpeakerLabel(turn.speaker)}
+                          Speaker
                         </Text>
                       ) : null}
                       {turn.sentences.map((sentence, s) => {

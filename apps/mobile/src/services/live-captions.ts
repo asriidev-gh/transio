@@ -5,7 +5,7 @@ import type { TranscriptSegment } from '@sessionai/shared';
 import { mobileEnv } from '../lib/env';
 import { getCurrentSession } from './auth';
 import { apiRequest } from './api';
-import { liveSpeakerLabel, nextStableSpeaker } from '../utils/live-caption-lines';
+import { joinAtPause, mergeLiveSegments, nextStableSpeaker } from '../utils/live-caption-lines';
 
 export type LiveCaptionStatus = 'idle' | 'connecting' | 'live' | 'error' | 'unsupported';
 
@@ -277,7 +277,7 @@ export function createLiveCaptionController(): LiveCaptionController | null {
           startMs: Math.max(0, Math.round(msg.start * 1000)),
           endMs: Math.max(0, Math.round((msg.start + msg.duration) * 1000)),
           text: msg.text.trim(),
-          speaker: speaker != null ? liveSpeakerLabel(speaker) : null,
+          speaker: null,
         });
       }
     } else {
@@ -749,8 +749,8 @@ export function createLiveCaptionController(): LiveCaptionController | null {
     status = 'idle';
     emit();
 
-    const text = finals.join(' ').replace(/\s+/g, ' ').trim();
-    return { text, segments: [...segments], language };
+    const text = finals.reduce(joinAtPause, '').replace(/\s+/g, ' ').trim();
+    return { text, segments: mergeLiveSegments(segments), language };
   }
 
   return {

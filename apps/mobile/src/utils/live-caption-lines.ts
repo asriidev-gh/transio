@@ -1,16 +1,19 @@
+import type { TranscriptSegment } from '@sessionai/shared';
+
 /**
  * Turns the live caption stream (finals + speaker ids) into speaker turns made of
- * sentences, so each sentence can sit on its own line with its translation under it.
+ * lines, so each line can sit on its own with its translation under it. A line is
+ * one sentence, or several short ones joined until it has a few words.
  *
- * Finals only ever get appended, so a sentence keeps its index once it exists and
- * its text stops changing once it is complete — safe to key translations on.
+ * Finals only ever get appended, so a line keeps its index once it exists and its
+ * text stops changing once it is complete — safe to key translations on.
  */
 
 export interface LiveCaptionSentence {
   /** Position across the whole session; stable while finals are appended. */
   index: number;
   text: string;
-  /** False only for the last sentence while it still waits for its end mark. */
+  /** False only for the last line while it still waits for its end mark or words. */
   complete: boolean;
 }
 
@@ -23,10 +26,37 @@ const TERMINATORS = new Set(['.', '!', '?', '…', '。', '！', '？']);
 const CLOSERS = new Set(['"', "'", '”', '’', ')', ']', '」', '』']);
 const CJK_TERMINATORS = new Set(['。', '！', '？']);
 
-/** 0 -> "Speaker A", 1 -> "Speaker B" — same labels as batch Deepgram transcripts. */
-export function liveSpeakerLabel(speaker: number): string {
-  if (speaker >= 0 && speaker < 26) return `Speaker ${String.fromCharCode(65 + speaker)}`;
-  return `Speaker ${speaker + 1}`;
+/** Short sentences are joined until a line has at least this many words. */
+export const MIN_LINE_WORDS = 5;
+/** Saved transcript lines stop growing here even without an end mark. */
+const MAX_SEGMENT_WORDS = 40;
+
+const ENDS_WITH_PUNCTUATION = /[.,!?;:…。，！？、；：]["'”’)\]」』]*$/;
+const ENDS_WITH_TERMINATOR = /[.!?…。！？]["'”’)\]」』]*$/;
+const CJK_CHAR = /[぀-ヿ㐀-鿿가-힯]/;
+
+/** Words in a line; each CJK character counts as one since there are no spaces. */
+export function countWords(text: string): number {
+  let count = 0;
+  for (const token of text.trim().split(/\s+/)) {
+    if (!token) continue;
+    const cjk = [...token].filter((ch) => CJK_CHAR.test(ch)).length;
+    count += cjk > 0 ? cjk : 1;
+  }
+  return count;
+}
+
+/**
+ * Join two caption pieces. Each piece ends where the speaker paused, so a piece
+ * without its own punctuation gets a comma rather than running into the next.
+ */
+export function joinAtPause(prev: string, next: string): string {
+  const a = prev.trim();
+  const b = next.trim();
+  if (!a) return b;
+  if (!b) return a;
+  if (ENDS_WITH_PUNCTUATION.test(a)) return `${a} ${b}`;
+  return CJK_CHAR.test(a.slice(-1)) ? `${a}，${b}` : `${a}, ${b}`;
 }
 
 /** Split text into sentences; the last piece has no end mark when `trailing` is set. */
@@ -79,15 +109,21 @@ export function buildCaptionTurns(
   let index = 0;
   return groups.map((group, g) => {
     const isLastGroup = g === groups.length - 1;
-    const { sentences, trailing } = splitSentences(group.parts.join(' '));
-    const turn: LiveCaptionTurn = {
-      speaker: group.speaker,
-      sentences: sentences.map((text) => ({ index: index++, text, complete: true })),
-    };
-    // A new speaker ends the previous turn even without punctuation.
-    if (trailing) {
-      turn.sentences.push({ index: index++, text: trailing, complete: !isLastGroup });
+    const { sentences, trailing } = splitSentences(group.parts.reduce(joinAtPause, ''));
+    const turn: LiveCaptionTurn = { speaker: group.speaker, sentences: [] };
+    // Join short sentences so a line has a few words; a line closes only once its
+    // finished sentences reach that, so earlier lines never change afterwards.
+    let line = '';
+    for (const sentence of sentences) {
+      line = line ? `${line} ${sentence}` : sentence;
+      if (countWords(line) >= MIN_LINE_WORDS) {
+        turn.sentences.push({ index: index++, text: line, complete: true });
+        line = '';
+      }
     }
+    if (trailing) line = line ? `${line} ${trailing}` : trailing;
+    // A new speaker ends the previous turn even without punctuation.
+    if (line) turn.sentences.push({ index: index++, text: line, complete: !isLastGroup });
     return turn;
   });
 }
@@ -127,4 +163,33 @@ export function hasMultipleSpeakers(speakers: Array<number | null>): boolean {
     if (established > 1) return true;
   }
   return false;
+}
+
+/**
+ * Saved live transcripts: join the short pieces Deepgram finalizes at every pause
+ * into readable lines of a few words, with commas at pauses. Speaker labels are
+ * dropped — live diarization from one mic cannot tell one voice from two reliably.
+ */
+export function mergeLiveSegments(segments: TranscriptSegment[]): TranscriptSegment[] {
+  const merged: TranscriptSegment[] = [];
+  let current: TranscriptSegment | null = null;
+  for (const seg of segments) {
+    const text = seg.text.trim();
+    if (!text) continue;
+    if (current) {
+      const words = countWords(current.text);
+      const done =
+        words >= MAX_SEGMENT_WORDS ||
+        (words >= MIN_LINE_WORDS && ENDS_WITH_TERMINATOR.test(current.text));
+      if (!done) {
+        current.text = joinAtPause(current.text, text);
+        current.endMs = Math.max(current.endMs, seg.endMs);
+        continue;
+      }
+      merged.push(current);
+    }
+    current = { startMs: seg.startMs, endMs: seg.endMs, text, speaker: null };
+  }
+  if (current) merged.push(current);
+  return merged;
 }
