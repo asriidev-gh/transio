@@ -147,6 +147,8 @@ export default function PaywallScreen() {
       ];
     });
   }, [billing, packages]);
+  // Empty while the store plans are still loading, so the button never shows a dangling "·".
+  const ctaPrice = plans.find((p) => p.id === planId)?.priceLabel ?? '';
 
   const subtitle = useMemo(() => {
     if (feature) return featurePaywallMessage(feature);
@@ -391,7 +393,7 @@ export default function PaywallScreen() {
               style={styles.ctaGradient}
             >
               <Text style={styles.ctaText}>
-                {busy ? 'Starting…' : `Continue · ${plans.find((p) => p.id === planId)?.priceLabel ?? ''}`}
+                {busy ? 'Starting…' : ctaPrice ? `Continue · ${ctaPrice}` : 'Continue'}
               </Text>
             </LinearGradient>
           </Pressable>
