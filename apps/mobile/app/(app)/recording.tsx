@@ -1201,7 +1201,15 @@ export default function RecordingScreen() {
                   void onPauseResume();
                   return;
                 }
-                void onStop();
+                // A stray tap (say, while unlocking with a fingerprint) must not end the recording.
+                void confirmAction(
+                  'Stop recording?',
+                  'We will save what you have recorded so far.',
+                  'Stop and save',
+                  { cancelLabel: 'Keep recording' },
+                ).then((ok) => {
+                  if (ok) void onStop();
+                });
               }}
             />
           </>
