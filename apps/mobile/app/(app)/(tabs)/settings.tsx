@@ -23,7 +23,7 @@ import {
   type EntitlementState,
 } from '@/src/services/entitlements';
 import { SUBSCRIPTION_PLANS } from '@/src/data/pricing';
-import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
+import { useFloatingTabBarContentInset } from '@/src/components/FloatingTabBar';
 import { Icon, type AppIconName } from '@/src/components/ui/Icon';
 import { radii, spacing, typography, type AppearancePreference } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
@@ -132,6 +132,7 @@ function SettingsGroup({
 }
 
 export default function SettingsScreen() {
+  const bottomInset = useFloatingTabBarContentInset();
   const router = useRouter();
   const { user, signOut, isAnonymous } = useAuth();
   const { colors, preference, setPreference, scheme, shadows } = useTheme();
@@ -290,7 +291,7 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView
-      contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={[styles.container, { backgroundColor: colors.background, paddingBottom: bottomInset }]}
       showsVerticalScrollIndicator={false}
     >
       <Text style={[styles.title, { color: colors.ink }]} accessibilityRole="header">
@@ -534,7 +535,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    paddingBottom: FLOATING_TAB_BAR_CONTENT_INSET,
     gap: spacing.lgSoft,
   },
   title: {

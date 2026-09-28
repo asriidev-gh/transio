@@ -23,7 +23,7 @@ import { CompletionBanner } from '@/src/components/CompletionBanner';
 import { ConnectivityBanner } from '@/src/components/ConnectivityBanner';
 import { EmptyState } from '@/src/components/EmptyState';
 import { ErrorState } from '@/src/components/ErrorState';
-import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
+import { useFloatingTabBarContentInset } from '@/src/components/FloatingTabBar';
 import { HorizontalCarousel } from '@/src/components/HorizontalCarousel';
 import {
   InsightSessionCard,
@@ -104,6 +104,7 @@ function sortRecent(a: Session, b: Session): number {
 }
 
 export default function HomeScreen() {
+  const bottomInset = useFloatingTabBarContentInset();
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   const { colors, shadows, scheme, reduceMotion } = useTheme();
@@ -413,7 +414,7 @@ export default function HomeScreen() {
         pointerEvents="none"
       />
       <KeyboardSafeScrollView
-        contentContainerStyle={[styles.container, { paddingHorizontal: pagePad }]}
+        contentContainerStyle={[styles.container, { paddingHorizontal: pagePad, paddingBottom: bottomInset }]}
         style={styles.scroll}
         keyboardShouldPersistTaps="handled"
         refreshControl={
@@ -761,7 +762,6 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, width: '100%' },
   container: {
     paddingTop: spacing.md,
-    paddingBottom: FLOATING_TAB_BAR_CONTENT_INSET,
     gap: spacing.lgSoft,
     width: '100%',
     maxWidth: '100%',

@@ -6,7 +6,7 @@ import { Icon, type AppIconName } from '@/src/components/ui/Icon';
 import { radii, sizes, spacing } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 
-/** Extra bottom padding so content clears the floating dock + Record FAB. */
+/** Bottom padding so content clears the floating dock + Record FAB, before the safe-area inset. */
 export const FLOATING_TAB_BAR_CONTENT_INSET = 120;
 
 /** True on primary tab screens where the dock should stay visible. */
@@ -35,7 +35,8 @@ export function useFloatingTabBarContentInset(): number {
   if (!isFloatingTabBarRoute(pathname)) {
     return Math.max(insets.bottom, spacing.md) + spacing.lg;
   }
-  return FLOATING_TAB_BAR_CONTENT_INSET;
+  // The dock sits above the system navigation bar, so its height adds to the inset.
+  return FLOATING_TAB_BAR_CONTENT_INSET + insets.bottom;
 }
 
 type SideTabKey = 'index' | 'history' | 'translate' | 'settings';

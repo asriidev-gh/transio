@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Session } from '@sessionai/shared';
 import { EmptyState } from '@/src/components/EmptyState';
 import { ErrorState } from '@/src/components/ErrorState';
-import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
+import { useFloatingTabBarContentInset } from '@/src/components/FloatingTabBar';
 import { SessionListSkeleton } from '@/src/components/Skeleton';
 import { Icon } from '@/src/components/ui/Icon';
 import { ApiClientError } from '@/src/services/api';
@@ -34,6 +34,7 @@ const LANG_PRESETS = [
 ] as const;
 
 export default function TranslateHubScreen() {
+  const bottomInset = useFloatingTabBarContentInset();
   const router = useRouter();
   const { colors, shadows } = useTheme();
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -89,7 +90,7 @@ export default function TranslateHubScreen() {
       edges={['top', 'left', 'right']}
     >
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingBottom: bottomInset }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -276,7 +277,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: {
     padding: spacing.md,
-    paddingBottom: FLOATING_TAB_BAR_CONTENT_INSET,
     gap: spacing.md,
   },
   title: { ...typography.pageTitle },

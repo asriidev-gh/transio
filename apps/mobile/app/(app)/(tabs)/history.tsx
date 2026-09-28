@@ -16,7 +16,7 @@ import {
 } from '@sessionai/shared';
 import { EmptyState } from '@/src/components/EmptyState';
 import { ErrorState } from '@/src/components/ErrorState';
-import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
+import { useFloatingTabBarContentInset } from '@/src/components/FloatingTabBar';
 import { InsightsCalendarModal } from '@/src/components/InsightsCalendarModal';
 import { SessionCard } from '@/src/components/SessionCard';
 import { SessionListSkeleton } from '@/src/components/Skeleton';
@@ -68,6 +68,7 @@ const HistoryRow = memo(function HistoryRow({ session, onOpen, onDelete }: Histo
 });
 
 export default function HistoryScreen() {
+  const bottomInset = useFloatingTabBarContentInset();
   const router = useRouter();
   const { colors, shadows } = useTheme();
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -261,7 +262,7 @@ export default function HistoryScreen() {
             />
           ) : null
         }
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[styles.container, { paddingBottom: bottomInset }]}
         keyboardShouldPersistTaps="handled"
         initialNumToRender={10}
         maxToRenderPerBatch={10}
@@ -293,7 +294,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: {
     padding: spacing.md,
-    paddingBottom: FLOATING_TAB_BAR_CONTENT_INSET,
   },
   title: { ...typography.pageTitle, letterSpacing: -0.5 },
   subtitle: { ...typography.body, marginTop: -spacing.sm },
