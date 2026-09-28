@@ -17,6 +17,12 @@ import {
   setAudioStoragePreference,
 } from '@/src/services/audio-storage-preference';
 import { resetOnboarding } from '@/src/services/onboarding';
+import {
+  loadEntitlements,
+  subscribeEntitlements,
+  type EntitlementState,
+} from '@/src/services/entitlements';
+import { SUBSCRIPTION_PLANS } from '@/src/data/pricing';
 import { FLOATING_TAB_BAR_CONTENT_INSET } from '@/src/components/FloatingTabBar';
 import { Icon, type AppIconName } from '@/src/components/ui/Icon';
 import { radii, spacing, typography, type AppearancePreference } from '@/src/theme';
@@ -134,6 +140,22 @@ export default function SettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
   const [deviceOnlyAudio, setDeviceOnlyAudio] = useState(false);
+  const [entitlements, setEntitlements] = useState<EntitlementState | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadEntitlements().then((state) => {
+      if (!cancelled) setEntitlements(state);
+    });
+    const unsubscribe = subscribeEntitlements(setEntitlements);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  const isPro = entitlements?.isPremium ?? false;
+  const proPlanLabel = SUBSCRIPTION_PLANS.find((plan) => plan.id === entitlements?.planId)?.label;
 
   useEffect(() => {
     let cancelled = false;
@@ -408,8 +430,8 @@ export default function SettingsScreen() {
       <SettingsGroup title="Subscription">
         <SettingsRow
           icon="star"
-          label="Smart Transcriber Pro"
-          value="Plans"
+          label={isPro ? 'Smart Transcriber Pro' : 'Free plan'}
+          value={isPro ? proPlanLabel ?? 'Active' : 'Upgrade'}
           onPress={() => router.push('/paywall' as Href)}
           last
         />
