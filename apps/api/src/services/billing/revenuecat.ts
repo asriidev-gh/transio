@@ -14,6 +14,9 @@ export interface RevenueCatEvent {
   expiration_at_ms?: number | null;
   event_timestamp_ms?: number;
   environment?: string;
+  /** TRANSFER only: the app user ids the purchase moved from and to. */
+  transferred_from?: string[];
+  transferred_to?: string[];
 }
 
 export interface SubscriptionUpdate {
@@ -45,6 +48,16 @@ const ACCESS_EVENTS = new Set([
   'TEMPORARY_ENTITLEMENT_GRANT',
 ]);
 
+function accountIds(ids: string[] | undefined): string[] {
+  const out: string[] = [];
+  for (const id of ids ?? []) {
+    if (typeof id !== 'string' || !UUID_PATTERN.test(id)) continue;
+    const lower = id.toLowerCase();
+    if (!out.includes(lower)) out.push(lower);
+  }
+  return out;
+}
+
 /** Our accounts use Supabase user ids as the RevenueCat app user id. Anonymous ids are skipped. */
 export function pickUserId(event: RevenueCatEvent): string | null {
   const candidates = [event.app_user_id, event.original_app_user_id, ...(event.aliases ?? [])];
@@ -56,7 +69,7 @@ export function pickUserId(event: RevenueCatEvent): string | null {
 
 /**
  * Returns the update to store, or null when the event should be ignored: test events,
- * transfers, other entitlements, anonymous users and event types that change nothing.
+ * transfers (see subscriptionTransferFromEvent), other entitlements, anonymous users and event types that change nothing.
  */
 export function subscriptionUpdateFromEvent(
   event: RevenueCatEvent | undefined,
@@ -87,6 +100,35 @@ export function subscriptionUpdateFromEvent(
     planId: event.new_product_id ?? event.product_id ?? null,
     expiresAt: expirationMs === null ? null : new Date(expirationMs).toISOString(),
     environment: event.environment ?? null,
+    eventMs:
+      typeof event.event_timestamp_ms === 'number' && Number.isFinite(event.event_timestamp_ms)
+        ? event.event_timestamp_ms
+        : now,
+  };
+}
+
+export interface SubscriptionTransfer {
+  fromUserIds: string[];
+  toUserIds: string[];
+  eventMs: number;
+}
+
+/**
+ * A restore on another account moves the purchase there (RevenueCat's default transfer rule).
+ * The event names both sides but carries no subscription details, so the caller copies the
+ * stored row. Returns null for other events or when either side has no account of ours.
+ */
+export function subscriptionTransferFromEvent(
+  event: RevenueCatEvent | undefined,
+  now: number = Date.now(),
+): SubscriptionTransfer | null {
+  if (!event || event.type !== 'TRANSFER') return null;
+  const fromUserIds = accountIds(event.transferred_from);
+  const toUserIds = accountIds(event.transferred_to).filter((id) => !fromUserIds.includes(id));
+  if (fromUserIds.length === 0 || toUserIds.length === 0) return null;
+  return {
+    fromUserIds,
+    toUserIds,
     eventMs:
       typeof event.event_timestamp_ms === 'number' && Number.isFinite(event.event_timestamp_ms)
         ? event.event_timestamp_ms

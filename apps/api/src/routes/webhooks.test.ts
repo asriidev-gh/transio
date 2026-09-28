@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import express from 'express';
 import { errorHandler } from '../middleware/error-handler.js';
+import type { StoredSubscription } from '../services/billing/repository.js';
 import type { SubscriptionUpdate } from '../services/billing/revenuecat.js';
 import { authorizationMatches, createWebhooksRouter } from './webhooks.js';
 import { request } from './test-helpers/request.js';
@@ -27,6 +28,7 @@ function body(type = 'INITIAL_PURCHASE') {
 function makeApp(options: {
   secret?: string;
   apply?: (update: SubscriptionUpdate) => Promise<boolean>;
+  read?: (userId: string) => Promise<StoredSubscription | null>;
   onSubscriptionChanged?: (userId: string, isPro: boolean) => Promise<void>;
 }) {
   const applied: SubscriptionUpdate[] = [];
@@ -44,6 +46,7 @@ function makeApp(options: {
           applied.push(update);
           return true;
         }),
+      read: options.read ?? (async () => null),
       onSubscriptionChanged:
         options.onSubscriptionChanged ??
         (async (userId, isPro) => {
@@ -166,5 +169,80 @@ describe('audio retention after a billing event', () => {
     });
 
     assert.equal(res.status, 200);
+  });
+});
+
+describe('purchase transferred to another account', () => {
+  const NEW_USER = '22222222-2222-4222-8222-222222222222';
+  const yearly: StoredSubscription = {
+    isActive: true,
+    planId: 'pro_yearly:yearly',
+    expiresAt: '2027-09-28T00:00:00.000Z',
+    environment: 'SANDBOX',
+  };
+
+  function transferBody(from: string[], to: string[]) {
+    return {
+      api_version: '1.0',
+      event: {
+        type: 'TRANSFER',
+        transferred_from: from,
+        transferred_to: to,
+        event_timestamp_ms: 1_800_000_000_000,
+        environment: 'SANDBOX',
+      },
+    };
+  }
+
+  it('moves the subscription to the new account and ends it on the old one', async () => {
+    const { app, applied, rescheduled } = makeApp({
+      read: async (userId) => (userId === USER ? yearly : null),
+    });
+
+    const res = await request(app).post(
+      '/webhooks/revenuecat',
+      transferBody([USER, '$RCAnonymousID:abc'], [NEW_USER]),
+      { Authorization: SECRET },
+    );
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.data, { applied: true });
+    assert.deepEqual(applied, [
+      { ...yearly, userId: NEW_USER, eventMs: 1_800_000_000_000 },
+      {
+        userId: USER,
+        isActive: false,
+        planId: null,
+        expiresAt: null,
+        environment: 'SANDBOX',
+        eventMs: 1_800_000_000_000,
+      },
+    ]);
+    assert.deepEqual(rescheduled, [
+      { userId: NEW_USER, isPro: true },
+      { userId: USER, isPro: false },
+    ]);
+  });
+
+  it('applies nothing when the old account has no stored subscription', async () => {
+    const { app, applied } = makeApp({});
+    const res = await request(app).post('/webhooks/revenuecat', transferBody([USER], [NEW_USER]), {
+      Authorization: SECRET,
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.data, { applied: false });
+    assert.equal(applied.length, 0);
+  });
+
+  it('ignores a transfer between ids that are not our accounts', async () => {
+    const { app, applied } = makeApp({ read: async () => yearly });
+    const res = await request(app).post(
+      '/webhooks/revenuecat',
+      transferBody(['$RCAnonymousID:abc'], [NEW_USER]),
+      { Authorization: SECRET },
+    );
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.body.data, { applied: false, reason: 'ignored' });
+    assert.equal(applied.length, 0);
   });
 });

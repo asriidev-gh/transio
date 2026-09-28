@@ -33,3 +33,30 @@ export function createSupabaseSubscriptionApplier(client: SupabaseClient): Subsc
     return data === true;
   };
 }
+
+/** The stored subscription for a user, without the event bookkeeping. */
+export type StoredSubscription = Pick<
+  SubscriptionUpdate,
+  'isActive' | 'planId' | 'expiresAt' | 'environment'
+>;
+
+export type SubscriptionReader = (userId: string) => Promise<StoredSubscription | null>;
+
+/** Read a user's subscription row. Errors are thrown so the webhook answers 500 and is retried. */
+export function createSupabaseSubscriptionReader(client: SupabaseClient): SubscriptionReader {
+  return async (userId) => {
+    const { data, error } = await client
+      .from('subscriptions')
+      .select('is_active, plan_id, expires_at, environment')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw new Error(`subscription lookup failed: ${error.message}`);
+    if (!data) return null;
+    return {
+      isActive: data.is_active === true,
+      planId: (data.plan_id as string | null) ?? null,
+      expiresAt: (data.expires_at as string | null) ?? null,
+      environment: (data.environment as string | null) ?? null,
+    };
+  };
+}
