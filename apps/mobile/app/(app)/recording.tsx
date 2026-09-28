@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import {
   AudioQuality,
   RecordingPresets,
@@ -69,6 +70,8 @@ import { consumeFeature } from '@/src/services/entitlements';
 import { ensureDefaultFolder } from '@/src/services/default-folder';
 import { getAudioStoragePreference } from '@/src/services/audio-storage-preference';
 import { rememberCustomSessionType } from '@/src/services/custom-session-types';
+
+const KEEP_AWAKE_TAG = 'smart-transcriber-recording';
 
 type PermissionState = 'checking' | 'granted' | 'denied' | 'unavailable';
 
@@ -557,6 +560,21 @@ export default function RecordingScreen() {
     const sub = AppState.addEventListener('change', onChange);
     return () => sub.remove();
   }, [recordError]);
+
+  // Keep the screen on for the whole recording, paused included, so the screen
+  // timeout never locks the phone and cuts live captions or the recording.
+  const keepScreenOn = isRecording || isPaused;
+  useEffect(() => {
+    if (!keepScreenOn) return;
+    void activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
+    return () => {
+      try {
+        deactivateKeepAwake(KEEP_AWAKE_TAG);
+      } catch {
+        // The tag may already be gone; nothing to release.
+      }
+    };
+  }, [keepScreenOn]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (event) => {
