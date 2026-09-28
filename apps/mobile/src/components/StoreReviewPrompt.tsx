@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSegments } from 'expo-router';
+import * as StoreReview from 'expo-store-review';
 import { Button } from '@/src/components/ui/Button';
 import { Icon } from '@/src/components/ui/Icon';
 import { APP_NAME } from '@/src/data/brand';
@@ -25,9 +26,20 @@ async function openPlayListing(): Promise<void> {
   }
 }
 
+/** Apple's own review sheet; iOS decides whether it actually appears. */
+async function requestAppleReview(): Promise<void> {
+  try {
+    if (await StoreReview.isAvailableAsync()) await StoreReview.requestReview();
+  } catch {
+    // No review sheet is fine; the prompt is only asked for once either way.
+  }
+}
+
 /**
  * One rating prompt on the second app open. Picking a star, or closing it,
- * means it does not come back.
+ * means it does not come back. Android shows the stars card that links to
+ * the Play listing (Google forbids asking before its in-app review sheet);
+ * iOS shows Apple's native sheet instead of a custom card.
  */
 export function StoreReviewPrompt() {
   const { colors, shadows } = useTheme();
@@ -37,7 +49,7 @@ export function StoreReviewPrompt() {
   const onRecording = segments.some((part) => part === 'recording');
 
   useEffect(() => {
-    if (Platform.OS !== 'android' || onRecording) return;
+    if ((Platform.OS !== 'android' && Platform.OS !== 'ios') || onRecording) return;
     let cancelled = false;
     void (async () => {
       const show = await tryClaimStoreReviewPrompt();
@@ -46,7 +58,9 @@ export function StoreReviewPrompt() {
         return;
       }
       await markStoreReviewPrompted();
-      if (!cancelled) setVisible(true);
+      if (cancelled) return;
+      if (Platform.OS === 'ios') await requestAppleReview();
+      else setVisible(true);
     })();
     return () => {
       cancelled = true;

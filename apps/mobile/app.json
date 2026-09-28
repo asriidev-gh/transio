@@ -2,7 +2,7 @@
   "expo": {
     "name": "Smart Transcriber",
     "slug": "sessionai",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "orientation": "portrait",
     "icon": "./assets/images/app-icon.png",
     "scheme": "sessionai",
@@ -11,7 +11,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.consorttech.smarttranscriber",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Smart Transcriber needs microphone access to record seminars, lectures, and group discussions."
+        "NSMicrophoneUsageDescription": "Smart Transcriber needs microphone access to record seminars, lectures, and group discussions.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -28,7 +29,7 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.POST_NOTIFICATIONS"
-              ]
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -42,7 +43,11 @@
         "expo-share-intent",
         {
           "disableIOS": true,
-          "androidIntentFilters": ["audio/*", "video/*", "text/*"]
+          "androidIntentFilters": [
+            "audio/*",
+            "video/*",
+            "text/*"
+          ]
         }
       ],
       [

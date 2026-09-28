@@ -115,7 +115,7 @@ Secrets only in `apps/api/.env`. Mobile uses `EXPO_PUBLIC_*` only.
 - API: typically Render (see `docs/production.md`)
 - Mobile: EAS project `sessionai` (account `asriidev`)
   - Channel **preview** for internal APKs + OTA
-  - Runtime version follows the app `version` in `app.json` (currently `0.2.0`). Bump it whenever a native dependency is added, so an update never reaches a build that lacks the native code
+  - Runtime version follows the app `version` in `app.json` (currently `0.2.1`). Bump it whenever a native dependency is added, so an update never reaches a build that lacks the native code
   - JS-only changes → `npm run update:preview`
   - Native changes (icon, splash, `expo-audio-stream-pcm`, permissions) → new EAS build
 
