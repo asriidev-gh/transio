@@ -86,7 +86,8 @@ export async function syncBillingUser(userId: string | null): Promise<void> {
     }
     if (currentUserId) {
       currentUserId = null;
-      await module.logOut();
+      // Signed out: Pro belonged to that account, so this device is no longer Pro.
+      await applyCustomerInfo(await module.logOut());
     }
   } catch {
     // Billing must never block sign-in. The next call retries.

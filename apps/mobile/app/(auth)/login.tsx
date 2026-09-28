@@ -7,12 +7,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardSafeScrollView } from '@/src/components/KeyboardSafeScrollView';
 import { useAuth } from '@/src/hooks/useAuth';
 import { AuthServiceError } from '@/src/services/auth';
-import { resetOnboarding } from '@/src/services/onboarding';
 import { validateAuthForm } from '@/src/utils/auth-errors';
 import { Button } from '@/src/components/ui/Button';
 import { BrandLogo } from '@/src/components/BrandLogo';
@@ -22,8 +21,10 @@ import { useTheme } from '@/src/theme/ThemeContext';
 import { confirmAction } from '@/src/utils/confirm';
 
 export default function LoginScreen() {
-  const { signIn, saveGuestAccount, isConfigured, isAnonymous, session } = useAuth();
+  const { signIn, signUp, saveGuestAccount, isConfigured, isAnonymous, session } = useAuth();
   const router = useRouter();
+  // Opened from the paywall because this device already has a guest account.
+  const { reason } = useLocalSearchParams<{ reason?: string }>();
   const { colors } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,13 +32,16 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   /** Guest opened login to attach email; can switch to “existing account” sign-in. */
   const [existingAccount, setExistingAccount] = useState(false);
+  /** Signed out: create a new email account instead of signing in. */
+  const [creating, setCreating] = useState(false);
+  const [notice, setNotice] = useState<string | null>(
+    reason === 'device'
+      ? 'This phone already has a guest account. Sign in or create an account with email to continue.'
+      : null,
+  );
 
   const savingGuest = isAnonymous && !existingAccount;
-
-  async function onCreateAccount() {
-    await resetOnboarding();
-    router.replace('/onboarding');
-  }
+  const creatingAccount = !session && creating;
 
   async function onSubmit() {
     const validationError = validateAuthForm(email, password);
@@ -51,6 +55,17 @@ export default function LoginScreen() {
     try {
       if (savingGuest) {
         await saveGuestAccount(email, password);
+        router.replace('/');
+        return;
+      }
+
+      if (creatingAccount) {
+        const { needsEmailConfirmation } = await signUp(email, password);
+        if (needsEmailConfirmation) {
+          setCreating(false);
+          setNotice('Check your email to confirm your account, then sign in here.');
+          return;
+        }
         router.replace('/');
         return;
       }
@@ -127,8 +142,8 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry
-              autoComplete={savingGuest ? 'new-password' : 'password'}
-              textContentType={savingGuest ? 'newPassword' : 'password'}
+              autoComplete={savingGuest || creatingAccount ? 'new-password' : 'password'}
+              textContentType={savingGuest || creatingAccount ? 'newPassword' : 'password'}
               placeholder="••••••••"
               placeholderTextColor={colors.tertiary}
               editable={!loading}
@@ -136,6 +151,12 @@ export default function LoginScreen() {
               onSubmitEditing={() => void onSubmit()}
             />
           </View>
+
+          {notice && !error ? (
+            <Text style={[styles.notice, { color: colors.inkMuted }]} accessibilityRole="alert">
+              {notice}
+            </Text>
+          ) : null}
 
           {error ? (
             <Text style={[styles.error, { color: colors.danger }]} accessibilityRole="alert">
@@ -148,15 +169,21 @@ export default function LoginScreen() {
               loading
                 ? savingGuest
                   ? 'Saving…'
-                  : 'Signing in…'
+                  : creatingAccount
+                    ? 'Creating account…'
+                    : 'Signing in…'
                 : savingGuest
                   ? 'Save account'
-                  : 'Continue with email'
+                  : creatingAccount
+                    ? 'Create account'
+                    : 'Continue with email'
             }
             onPress={() => void onSubmit()}
             disabled={loading || !isConfigured}
             loading={loading}
-            accessibilityLabel={savingGuest ? 'Save account' : 'Continue with email'}
+            accessibilityLabel={
+              savingGuest ? 'Save account' : creatingAccount ? 'Create account' : 'Continue with email'
+            }
           />
 
           {isAnonymous ? (
@@ -177,12 +204,17 @@ export default function LoginScreen() {
             </Pressable>
           ) : !session ? (
             <Pressable
-              onPress={() => void onCreateAccount()}
+              onPress={() => {
+                setCreating((v) => !v);
+                setError(null);
+              }}
               accessibilityRole="button"
-              accessibilityLabel="Create account"
+              accessibilityLabel={creating ? 'I already have an account' : 'Create account'}
               style={styles.linkHit}
             >
-              <Text style={[styles.link, { color: colors.ink }]}>Create account</Text>
+              <Text style={[styles.link, { color: colors.ink }]}>
+                {creating ? 'I already have an account' : 'Create account'}
+              </Text>
             </Pressable>
           ) : null}
 
@@ -254,6 +286,10 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   error: {
+    ...typography.body,
+    fontSize: 14,
+  },
+  notice: {
     ...typography.body,
     fontSize: 14,
   },

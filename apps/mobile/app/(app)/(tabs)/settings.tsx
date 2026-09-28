@@ -205,7 +205,7 @@ export default function SettingsScreen() {
       const ok = await confirmDestructive(
         'Sign out?',
         isAnonymous
-          ? 'This guest library stays in the cloud under this device session until you save an email. You’ll return to the paywall.'
+          ? 'A guest account can’t be signed back into. Save it with an email first, or this library is lost. A subscription can be moved to a new account with Restore purchases.'
           : 'You can sign back in anytime with the same account.',
         'Sign Out',
       );

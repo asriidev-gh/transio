@@ -13,6 +13,7 @@ import {
   type SubscriptionPlanId,
 } from '@/src/data/pricing';
 import { useAuth } from '@/src/hooks/useAuth';
+import { ApiClientError } from '@/src/services/api';
 import { getCurrentSession } from '@/src/services/auth';
 import {
   isBillingAvailable,
@@ -31,6 +32,11 @@ import {
 import { gradients, radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
 import { showAlert } from '@/src/utils/confirm';
+
+/** The server allows one guest account per device; a second one must use email instead. */
+function isDeviceClaimed(err: unknown): boolean {
+  return err instanceof ApiClientError && err.code === 'DEVICE_ALREADY_CLAIMED';
+}
 
 function parseFeature(raw: string | string[] | undefined): GatedFeature | null {
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -155,6 +161,11 @@ export default function PaywallScreen() {
     return FREE_TRIAL_COPY.body;
   }, [feature]);
 
+  /** Email sign-in or sign-up. `deviceClaimed` tells the login screen why it was opened. */
+  function openSignIn(deviceClaimed = false) {
+    router.push(deviceClaimed ? '/(auth)/login?reason=device' : '/(auth)/login');
+  }
+
   async function enterApp() {
     if (!session) {
       if (!isConfigured) {
@@ -178,6 +189,10 @@ export default function PaywallScreen() {
     try {
       await enterApp();
     } catch (err) {
+      if (isDeviceClaimed(err)) {
+        openSignIn(true);
+        return;
+      }
       setError(
         err instanceof Error
           ? err.message
@@ -244,6 +259,10 @@ export default function PaywallScreen() {
         );
       }
     } catch (err) {
+      if (isDeviceClaimed(err)) {
+        openSignIn(true);
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Could not restore purchases. Try again.');
     } finally {
       setBusy(false);
@@ -268,6 +287,10 @@ export default function PaywallScreen() {
       );
       await enterApp();
     } catch (err) {
+      if (isDeviceClaimed(err)) {
+        openSignIn(true);
+        return;
+      }
       setError(
         err instanceof Error
           ? err.message
@@ -410,6 +433,18 @@ export default function PaywallScreen() {
             <Text style={[styles.freeLinkText, { color: colors.ink }]}>
               {busy ? 'Starting…' : 'Not now'}
             </Text>
+          </Pressable>
+        ) : null}
+
+        {!session ? (
+          <Pressable
+            onPress={() => openSignIn()}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="Sign in with email"
+            style={styles.freeLink}
+          >
+            <Text style={[styles.freeLinkText, { color: colors.ink }]}>Sign in with email</Text>
           </Pressable>
         ) : null}
 
