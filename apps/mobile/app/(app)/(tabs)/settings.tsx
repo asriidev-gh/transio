@@ -202,11 +202,11 @@ export default function SettingsScreen() {
 
   function onSignOut() {
     void (async () => {
+      // Guests never reach this: the button is hidden for them, because there
+      // would be nothing to sign back in with.
       const ok = await confirmDestructive(
         'Sign out?',
-        isAnonymous
-          ? 'A guest account can’t be signed back into. Save it with an email first, or this library is lost. A subscription can be moved to a new account with Restore purchases.'
-          : 'You can sign back in anytime with the same account.',
+        'You can sign back in anytime with the same account.',
         'Sign Out',
       );
       if (!ok) return;
@@ -308,10 +308,15 @@ export default function SettingsScreen() {
             <SettingsRow
               icon="lock"
               label="Save account"
-              value="Keep this library"
+              value="Add an email"
               onPress={() => router.push('/(auth)/login')}
               last
             />
+            <Text style={[styles.hint, styles.notifHint, { color: colors.inkMuted }]}>
+              You are signed in as a guest. Add an email so this library can be
+              recovered on another phone, or use it to switch to an account you
+              already have.
+            </Text>
           </>
         ) : (
           <SettingsRow
@@ -496,26 +501,28 @@ export default function SettingsScreen() {
         </Text>
       ) : null}
 
-      <Pressable
-        onPress={onSignOut}
-        disabled={signingOut || deleting}
-        style={({ pressed }) => [
-          styles.signOut,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            opacity: signingOut ? 0.5 : pressed ? 0.85 : 1,
-          },
-          shadows.soft,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel="Sign out"
-      >
-        <Icon name="logout" size={20} color={colors.danger} variant="line" />
-        <Text style={[styles.signOutLabel, { color: colors.danger }]}>
-          {signingOut ? 'Signing out…' : 'Sign out'}
-        </Text>
-      </Pressable>
+      {!isAnonymous ? (
+        <Pressable
+          onPress={onSignOut}
+          disabled={signingOut || deleting}
+          style={({ pressed }) => [
+            styles.signOut,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              opacity: signingOut ? 0.5 : pressed ? 0.85 : 1,
+            },
+            shadows.soft,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+        >
+          <Icon name="logout" size={20} color={colors.danger} variant="line" />
+          <Text style={[styles.signOutLabel, { color: colors.danger }]}>
+            {signingOut ? 'Signing out…' : 'Sign out'}
+          </Text>
+        </Pressable>
+      ) : null}
 
       <Pressable
         onPress={onDeleteAccount}
