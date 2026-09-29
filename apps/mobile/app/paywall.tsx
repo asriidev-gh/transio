@@ -31,7 +31,7 @@ import {
 } from '@/src/services/entitlements';
 import { gradients, radii, spacing, typography } from '@/src/theme';
 import { useTheme } from '@/src/theme/ThemeContext';
-import { showAlert } from '@/src/utils/confirm';
+import { confirmAction, showAlert } from '@/src/utils/confirm';
 
 /** The server allows one guest account per device; a second one must use email instead. */
 function isDeviceClaimed(err: unknown): boolean {
@@ -244,6 +244,18 @@ export default function PaywallScreen() {
 
   async function onRestore() {
     if (busy) return;
+    if (!session && isConfigured) {
+      const signIn = await confirmAction(
+        'Sign in first?',
+        'Restoring without signing in puts the subscription on a new guest account, separate from any notes you already have. Sign in to keep them together.',
+        'Sign in',
+        { cancelLabel: 'Restore anyway' },
+      );
+      if (signIn) {
+        openSignIn();
+        return;
+      }
+    }
     setBusy(true);
     setError(null);
     try {
@@ -436,28 +448,43 @@ export default function PaywallScreen() {
           </Pressable>
         ) : null}
 
-        {!session ? (
-          <Pressable
-            onPress={() => openSignIn()}
-            disabled={busy}
-            accessibilityRole="button"
-            accessibilityLabel="Sign in with email"
-            style={styles.freeLink}
-          >
-            <Text style={[styles.freeLinkText, { color: colors.ink }]}>Sign in with email</Text>
-          </Pressable>
-        ) : null}
-
-        {billing && !isPremium ? (
-          <Pressable
-            onPress={() => void onRestore()}
-            disabled={busy}
-            accessibilityRole="button"
-            accessibilityLabel="Restore purchases"
-            style={styles.freeLink}
-          >
-            <Text style={[styles.freeLinkText, { color: colors.inkMuted }]}>Restore purchases</Text>
-          </Pressable>
+        {!session || (billing && !isPremium) ? (
+          <View style={styles.returningBlock}>
+            <Text style={[styles.returningLabel, { color: colors.inkMuted }]}>
+              Already subscribed?
+            </Text>
+            <View style={styles.returningRow}>
+              {!session ? (
+                <Pressable
+                  onPress={() => openSignIn()}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Sign in with email"
+                  hitSlop={8}
+                >
+                  <Text style={[styles.returningLink, { color: colors.brand }]}>
+                    Sign in with email
+                  </Text>
+                </Pressable>
+              ) : null}
+              {!session && billing && !isPremium ? (
+                <Text style={[styles.returningLabel, { color: colors.inkMuted }]}>·</Text>
+              ) : null}
+              {billing && !isPremium ? (
+                <Pressable
+                  onPress={() => void onRestore()}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Restore purchases"
+                  hitSlop={8}
+                >
+                  <Text style={[styles.returningLink, { color: colors.brand }]}>
+                    Restore purchases
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
         ) : null}
 
         <Text style={[styles.legal, { color: colors.inkMuted }]}>
@@ -567,6 +594,25 @@ const styles = StyleSheet.create({
   freeLinkText: {
     fontWeight: '600',
     fontSize: 15,
+  },
+  returningBlock: {
+    alignItems: 'center',
+    gap: 4,
+    paddingTop: spacing.sm,
+  },
+  returningLabel: {
+    fontSize: 13,
+  },
+  returningRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  returningLink: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   error: {
     ...typography.body,
