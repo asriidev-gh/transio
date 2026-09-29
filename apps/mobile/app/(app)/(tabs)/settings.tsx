@@ -3,6 +3,7 @@ import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import { useRouter, type Href } from 'expo-router';
+import * as Updates from 'expo-updates';
 import { useAuth } from '@/src/hooks/useAuth';
 import { clearLocalDataAfterDeletion, deleteMyAccount } from '@/src/services/account';
 import { ApiClientError } from '@/src/services/api';
@@ -36,6 +37,24 @@ const APPEARANCE_OPTIONS: Array<{ key: AppearancePreference; label: string }> = 
   { key: 'light', label: 'Light' },
   { key: 'dark', label: 'Dark' },
 ];
+
+/**
+ * Which JS bundle is actually running. The Version row describes the installed build, so it
+ * reads the same whether or not an over-the-air update has landed; this is what answers
+ * "did the update arrive, and on which channel?" without opening the EAS dashboard.
+ */
+function bundleLabel(): string {
+  try {
+    const bundle =
+      Updates.isEmbeddedLaunch || !Updates.updateId
+        ? 'Built in'
+        : Updates.updateId.replace(/-/g, '').slice(0, 8);
+    return Updates.channel ? `${bundle} · ${Updates.channel}` : bundle;
+  } catch {
+    // Updates are disabled in this build (Expo Go, or a dev client without a channel).
+    return 'Built in';
+  }
+}
 
 function notificationStatusLabel(permission: NotificationPermission): string {
   switch (permission) {
@@ -186,6 +205,8 @@ export default function SettingsScreen() {
   const appVersion = Constants.expoConfig?.version ?? '0.1.0';
   // The build number tells builds of the same version apart, e.g. which Play build is installed.
   const buildNumber = Application.nativeBuildVersion;
+  // Fixed for the life of the process: an update only takes effect on the next launch.
+  const [bundleId] = useState(bundleLabel);
 
   useEffect(() => {
     void getNotificationPermission().then(setNotifPermission);
@@ -487,6 +508,7 @@ export default function SettingsScreen() {
           last={false}
         />
         <SettingsRow icon="chart" label="Version" value={buildNumber ? `${appVersion} (${buildNumber})` : appVersion} last={false} />
+        <SettingsRow icon="download-outline" label="Update" value={bundleId} last={false} />
         <SettingsRow
           icon="bulb"
           label="Replay onboarding"

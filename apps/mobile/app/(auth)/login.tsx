@@ -24,7 +24,8 @@ export default function LoginScreen() {
   const { signIn, signUp, saveGuestAccount, isConfigured, isAnonymous, session } = useAuth();
   const router = useRouter();
   // Opened from the paywall because this device already has a guest account.
-  const { reason } = useLocalSearchParams<{ reason?: string }>();
+  // `mode=create` starts on sign-up: a stranded guest has no password to sign in with.
+  const { reason, mode } = useLocalSearchParams<{ reason?: string; mode?: string }>();
   const { colors } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,10 +34,10 @@ export default function LoginScreen() {
   /** Guest opened login to attach email; can switch to “existing account” sign-in. */
   const [existingAccount, setExistingAccount] = useState(false);
   /** Signed out: create a new email account instead of signing in. */
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(mode === 'create');
   const [notice, setNotice] = useState<string | null>(
     reason === 'device'
-      ? 'This phone already has a guest account. Sign in or create an account with email to continue.'
+      ? 'This phone already has a guest account, so it cannot start a second one. Create an account with email and restoring moves your subscription onto it. Notes from the old guest stay on that guest.'
       : null,
   );
 
@@ -102,12 +103,18 @@ export default function LoginScreen() {
           <View style={styles.brandBlock}>
             <BrandLogo size={248} />
             <Text style={[styles.headline, { color: colors.ink }]} accessibilityRole="header">
-              {savingGuest ? 'Save your account' : APP_TAGLINE}
+              {savingGuest
+                ? 'Save your account'
+                : creatingAccount
+                  ? 'Create your account'
+                  : APP_TAGLINE}
             </Text>
             <Text style={[styles.subtitle, { color: colors.inkMuted }]}>
               {savingGuest
                 ? 'Add email and password so you can restore this library on another device.'
-                : 'Record discussions, leave while we process, then ask and act.'}
+                : creatingAccount
+                  ? 'Email and a password. This is what your subscription and your notes attach to.'
+                  : 'Record discussions, leave while we process, then ask and act.'}
             </Text>
           </View>
 

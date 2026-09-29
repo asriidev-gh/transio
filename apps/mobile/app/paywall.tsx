@@ -161,9 +161,13 @@ export default function PaywallScreen() {
     return FREE_TRIAL_COPY.body;
   }, [feature]);
 
-  /** Email sign-in or sign-up. `deviceClaimed` tells the login screen why it was opened. */
+  /**
+   * Email sign-in or sign-up. `deviceClaimed` means this phone already has a guest account,
+   * so a second one is refused: open the form in create mode, because someone who subscribed
+   * as a guest has no password to sign in with.
+   */
   function openSignIn(deviceClaimed = false) {
-    router.push(deviceClaimed ? '/(auth)/login?reason=device' : '/(auth)/login');
+    router.push(deviceClaimed ? '/(auth)/login?reason=device&mode=create' : '/(auth)/login');
   }
 
   async function enterApp() {
@@ -245,13 +249,13 @@ export default function PaywallScreen() {
   async function onRestore() {
     if (busy) return;
     if (!session && isConfigured) {
-      const signIn = await confirmAction(
-        'Sign in first?',
-        'Restoring without signing in puts the subscription on a new guest account, separate from any notes you already have. Sign in to keep them together.',
-        'Sign in',
-        { cancelLabel: 'Restore anyway' },
+      const restoreNow = await confirmAction(
+        'Restore on this phone?',
+        'Already have an email account? Sign in first, so the subscription lands with the notes saved on it. If you were using this phone as a guest, just restore.',
+        'Restore',
+        { cancelLabel: 'Sign in first' },
       );
-      if (signIn) {
+      if (!restoreNow) {
         openSignIn();
         return;
       }
